@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/cart_provider.dart';
-import 'package:branch/return_provider.dart'; // Add this import
+import 'package:branch/return_provider.dart';
+import 'package:branch/stock_provider.dart'; // Add this import
 import 'package:branch/login_page.dart'; // Replace with your project name if different
 
 void main() {
@@ -10,6 +11,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (context) => CartProvider()),
         ChangeNotifierProvider(create: (context) => ReturnProvider()),
+        ChangeNotifierProvider(create: (context) => StockProvider()), // Add this provider
       ],
       child: const MyApp(),
     ),
