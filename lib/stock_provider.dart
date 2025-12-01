@@ -1,3 +1,4 @@
+// UPDATED StockProvider.dart — qty → requiredQty + deliveryDate support
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -6,10 +7,18 @@ import 'package:network_info_plus/network_info_plus.dart';
 
 class StockProvider extends ChangeNotifier {
   // ========== STEP SYSTEM ==========
-  String _step = "categories"; // categories → products
+  String _step = "categories";
   String get step => _step;
   set step(String value) {
     _step = value;
+    notifyListeners();
+  }
+
+  // ========== DELIVERY DATE ==========
+  DateTime? _deliveryDate;
+  DateTime? get deliveryDate => _deliveryDate;
+  set deliveryDate(DateTime? v) {
+    _deliveryDate = v;
     notifyListeners();
   }
 
@@ -20,7 +29,6 @@ class StockProvider extends ChangeNotifier {
   // ========== PRODUCT DATA ==========
   List<dynamic> _products = [];
   List<dynamic> _filteredProducts = [];
-
   List<dynamic> get products => _products;
   List<dynamic> get filteredProducts => _filteredProducts;
 
@@ -35,25 +43,28 @@ class StockProvider extends ChangeNotifier {
   String? _userRole;
   String? _companyId;
   String? _branchId;
-
   String? get userRole => _userRole;
   String? get companyId => _companyId;
   String? get branchId => _branchId;
 
-  // ========== FIELD MAPS BY PRODUCT ID ==========
-  final Map<String, int?> _quantities = {};
+  // ========== FIELD MAPS ==========
+  final Map<String, int?> _requiredQty = {};          // UPDATED
   final Map<String, int?> _inStock = {};
   final Map<String, bool> _selected = {};
-
-  final Map<String, TextEditingController> _qtyCtrl = {};
+  final Map<String, TextEditingController> _requiredCtrl = {}; // UPDATED
   final Map<String, TextEditingController> _stockCtrl = {};
+  final Map<String, String> _productNames = {};
+  final Map<String, double> _prices = {};
+
   final TextEditingController _searchCtrl = TextEditingController();
 
-  Map<String, int?> get quantities => _quantities;
+  Map<String, int?> get quantities => _requiredQty;      // alias
   Map<String, int?> get inStock => _inStock;
   Map<String, bool> get selected => _selected;
-  Map<String, TextEditingController> get qtyCtrl => _qtyCtrl;
+  Map<String, TextEditingController> get qtyCtrl => _requiredCtrl;
   Map<String, TextEditingController> get stockCtrl => _stockCtrl;
+  Map<String, String> get productNames => _productNames;
+  Map<String, double> get prices => _prices;
   TextEditingController get searchCtrl => _searchCtrl;
 
   // ========== CONSTRUCTOR ==========
@@ -65,7 +76,7 @@ class StockProvider extends ChangeNotifier {
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _qtyCtrl.forEach((_, c) => c.dispose());
+    _requiredCtrl.forEach((_, c) => c.dispose());
     _stockCtrl.forEach((_, c) => c.dispose());
     super.dispose();
   }
@@ -79,9 +90,11 @@ class StockProvider extends ChangeNotifier {
   bool _ipInRange(String ip, String range) {
     final parts = range.split("-");
     if (parts.length != 2) return false;
+
     final start = _ipToInt(parts[0].trim());
     final end = _ipToInt(parts[1].trim());
     final device = _ipToInt(ip);
+
     return device >= start && device <= end;
   }
 
@@ -117,7 +130,6 @@ class StockProvider extends ChangeNotifier {
       if (_userRole == "branch") {
         _branchId =
         user["branch"] is Map ? user["branch"]["id"] : user["branch"];
-
         final comp = user["branch"]["company"];
         _companyId = comp is Map ? comp["id"] : comp;
       }
@@ -145,6 +157,7 @@ class StockProvider extends ChangeNotifier {
 
     for (var b in docs) {
       final range = b["ipAddress"]?.toString().trim();
+
       if (range != null && (_ipInRange(ip, range) || ip == range)) {
         _branchId = b["id"];
 
@@ -160,7 +173,6 @@ class StockProvider extends ChangeNotifier {
 
   Future<List<String>> _matchingCompanies(String token, String? ip) async {
     if (ip == null) return [];
-
     List<String> out = [];
 
     final res = await http.get(
@@ -174,12 +186,10 @@ class StockProvider extends ChangeNotifier {
 
     for (var b in docs) {
       final range = b["ipAddress"]?.toString().trim();
-
       if (range != null && _ipInRange(ip, range)) {
         final comp = b["company"];
         final cid =
         comp is Map ? comp["id"] : comp?.toString();
-
         if (cid != null) out.add(cid);
       }
     }
@@ -194,6 +204,7 @@ class StockProvider extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
+
     if (token == null) return;
 
     if (_userRole == null) await _loadUserData(token);
@@ -238,6 +249,7 @@ class StockProvider extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
+
     if (token == null) return;
 
     final url =
@@ -254,15 +266,18 @@ class StockProvider extends ChangeNotifier {
       _products = docs;
       _filteredProducts = docs;
 
-      // Initialize maps by product ID
       for (var p in docs) {
         final id = p["id"];
 
-        _quantities.putIfAbsent(id, () => null);
+        _productNames[id] = p["name"] ?? "Unknown";
+        _prices[id] =
+            (p['defaultPriceDetails']?['price'] as num?)?.toDouble() ?? 0.0;
+
+        _requiredQty.putIfAbsent(id, () => null);
         _inStock.putIfAbsent(id, () => null);
         _selected.putIfAbsent(id, () => false);
 
-        _qtyCtrl.putIfAbsent(id, () => TextEditingController());
+        _requiredCtrl.putIfAbsent(id, () => TextEditingController());
         _stockCtrl.putIfAbsent(id, () => TextEditingController());
       }
     }
@@ -274,9 +289,9 @@ class StockProvider extends ChangeNotifier {
   // ========== FILTER PRODUCTS ==========
   void _filterProducts() {
     final q = _searchCtrl.text.toLowerCase();
-
     _filteredProducts = _products
-        .where((p) => p["name"].toString().toLowerCase().contains(q))
+        .where((p) =>
+        p["name"].toString().toLowerCase().contains(q))
         .toList();
 
     notifyListeners();
@@ -286,7 +301,15 @@ class StockProvider extends ChangeNotifier {
   Future<bool> submitStockOrder(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
+
     if (token == null) return false;
+
+    if (_deliveryDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select delivery date & time")),
+      );
+      return false;
+    }
 
     List<Map<String, dynamic>> items = [];
 
@@ -294,25 +317,26 @@ class StockProvider extends ChangeNotifier {
       if (entry.value) {
         final pid = entry.key;
 
-        if (_inStock[pid] != null && _quantities[pid] != null) {
-          items.add({
-            "product": pid,
-            "inStock": _inStock[pid],
-            "qty": _quantities[pid],
-          });
-        }
+        items.add({
+          "product": pid,
+          "inStock": _inStock[pid],
+          "requiredQty": _requiredQty[pid],
+        });
       }
     }
 
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No items selected")),
+        const SnackBar(
+          content: Text("No items selected"),
+        ),
       );
       return false;
     }
 
     final body = jsonEncode({
       "branch": _branchId,
+      "deliveryDate": _deliveryDate!.toIso8601String(),
       "items": items,
     });
 
@@ -330,24 +354,27 @@ class StockProvider extends ChangeNotifier {
         const SnackBar(content: Text("Stock Order Submitted Successfully!")),
       );
 
-      // RESET ALL
-      _quantities.clear();
+      // RESET
+      _requiredQty.clear();
       _inStock.clear();
       _selected.clear();
+      _productNames.clear();
+      _prices.clear();
 
-      _qtyCtrl.forEach((_, c) => c.dispose());
-      _qtyCtrl.clear();
-
+      _requiredCtrl.forEach((_, c) => c.dispose());
+      _requiredCtrl.clear();
       _stockCtrl.forEach((_, c) => c.dispose());
       _stockCtrl.clear();
+
+      _deliveryDate = null;
 
       _step = "categories";
       _selectedCategoryId = null;
       _selectedCategoryName = null;
 
       await _loadStockCategories();
-
       notifyListeners();
+
       return true;
     }
 
@@ -362,13 +389,14 @@ class StockProvider extends ChangeNotifier {
   Future<void> selectCategory(dynamic category) async {
     _selectedCategoryId = category["id"];
     _selectedCategoryName = category["name"];
-    _step = "products";
 
+    _step = "products";
     notifyListeners();
+
     await loadProducts();
   }
 
-  // ========== GO BACK TO CATEGORY ==========
+  // ========== GO BACK ==========
   void goBackToCategories() {
     _step = "categories";
     _selectedCategoryId = null;

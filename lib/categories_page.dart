@@ -1,4 +1,5 @@
 // lib/categories_page.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -15,13 +16,15 @@ import 'package:branch/cart_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 class CategoriesPage extends StatefulWidget {
-  final bool isPastryFilter;
-  final bool isStockFilter;
+  final bool isPastryFilter;     // For pastry billing (rarely used)
+  final bool isStockFilter;      // For stock orders
+  final bool isReturnOrder;      // ⭐ NEW — For Return Orders
 
   const CategoriesPage({
     super.key,
     this.isPastryFilter = false,
     this.isStockFilter = false,
+    this.isReturnOrder = false,
   });
 
   @override
@@ -57,8 +60,9 @@ class _CategoriesPageState extends State<CategoriesPage> {
         _userRole = user['role'];
 
         if (user['role'] == 'company') {
-          _companyId =
-          user['company'] is Map ? user['company']['id'] : user['company'];
+          _companyId = (user['company'] is Map)
+              ? user['company']['id']
+              : user['company'];
         } else if (user['role'] == 'branch') {
           final branch = user['branch'];
           if (branch != null && branch['company'] != null) {
@@ -68,7 +72,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
           }
         }
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   // ------------------ NETWORK HELPERS ------------------
@@ -82,8 +86,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
   }
 
   int _ipToInt(String ip) {
-    final parts = ip.split('.').map(int.parse).toList();
-    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
+    final p = ip.split('.').map(int.parse).toList();
+    return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
   }
 
   bool _ipInRange(String deviceIp, String range) {
@@ -108,8 +112,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
         final docs = jsonDecode(res.body)['docs'] ?? [];
 
         for (final b in docs) {
-          final range = b['ipAddress']?.toString();
-          if (range != null && _ipInRange(deviceIp, range)) {
+          final r = b['ipAddress']?.toString();
+          if (r != null && _ipInRange(deviceIp, r)) {
             final c = b['company'];
             final id = c is Map ? c['id'] : c?.toString();
             if (id != null) ids.add(id);
@@ -140,31 +144,38 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       if (_userRole == null) await _fetchUserData(token);
 
-      /// Which categories we want?
-      String filter = widget.isStockFilter || widget.isPastryFilter
-          ? "where[isStock][equals]=true"
-          : "where[isBilling][equals]=true";
+      /// TYPE OF CATEGORY
+      String filter;
 
+      if (widget.isReturnOrder) {
+        filter = "where[isStock][equals]=true"; // Same products used
+      } else if (widget.isStockFilter) {
+        filter = "where[isStock][equals]=true";
+      } else {
+        filter = "where[isBilling][equals]=true";
+      }
+
+      // Company filter
       if (_userRole != "superadmin") {
-        String? addFilter;
+        String? extra;
 
         if (_userRole == "waiter") {
           final ip = await _deviceIp();
           final matches = await _matchingCompanies(token, ip);
-
           if (matches.isNotEmpty) {
-            addFilter = "&where[company][in]=${matches.join(',')}";
+            extra = "&where[company][in]=${matches.join(',')}";
           }
         } else if (_companyId != null) {
-          addFilter = "&where[company][contains]=$_companyId";
+          extra = "&where[company][contains]=$_companyId";
         }
 
-        if (addFilter != null) filter += addFilter;
+        if (extra != null) filter += extra;
       }
 
       final res = await http.get(
         Uri.parse(
-            "https://admin.theblackforestcakes.com/api/categories?$filter&limit=100&depth=1"),
+          "https://admin.theblackforestcakes.com/api/categories?$filter&limit=100&depth=1",
+        ),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -180,7 +191,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
     setState(() => _isLoading = false);
   }
 
-  // ------------------ GLOBAL SCAN (Billing) ------------------
+  // ------------------ GLOBAL SCAN (Billing Only) ------------------
   Future<void> _handleScan(String scanResult) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -189,20 +200,19 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       final res = await http.get(
         Uri.parse(
-            "https://admin.theblackforestcakes.com/api/products?where[upc][equals]=$scanResult&limit=1&depth=1"),
+          "https://admin.theblackforestcakes.com/api/products?where[upc][equals]=$scanResult&limit=1&depth=1",
+        ),
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (res.statusCode == 200) {
         final product = jsonDecode(res.body)['docs']?[0];
         if (product != null) {
-          final cartProvider =
-          Provider.of<CartProvider>(context, listen: false);
-
+          final cart = Provider.of<CartProvider>(context, listen: false);
           double price =
               product['defaultPriceDetails']?['price']?.toDouble() ?? 0;
 
-          cartProvider.addOrUpdateItem(
+          cart.addOrUpdateItem(
             CartItem.fromProduct(product, 1, branchPrice: price),
           );
         }
@@ -213,18 +223,19 @@ class _CategoriesPageState extends State<CategoriesPage> {
   // ------------------ UI ------------------
   @override
   Widget build(BuildContext context) {
+    // PAGE TITLE + FOOTER TYPE
     String title;
     PageType pageType;
 
-    if (widget.isStockFilter) {
+    if (widget.isReturnOrder) {
       title = "Return Order Categories";
-      pageType = PageType.billsheet;
-    } else if (widget.isPastryFilter) {
+      pageType = PageType.returnorder;    // ⭐ FIXED
+    } else if (widget.isStockFilter) {
       title = "Stock Order Categories";
-      pageType = PageType.billsheet;
+      pageType = PageType.stock;          // ⭐ FIXED
     } else {
       title = "Billing Categories";
-      pageType = PageType.billing;
+      pageType = PageType.billing;        // Billing footer highlight
     }
 
     return CommonScaffold(
@@ -234,9 +245,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       body: RefreshIndicator(
         onRefresh: _fetchCategories,
         child: _isLoading
-            ? const Center(
-          child: CircularProgressIndicator(color: Colors.black),
-        )
+            ? const Center(child: CircularProgressIndicator(color: Colors.black))
             : _errorMessage.isNotEmpty
             ? Center(child: Text(_errorMessage))
             : _categories.isEmpty
@@ -246,117 +255,113 @@ class _CategoriesPageState extends State<CategoriesPage> {
             style: TextStyle(fontSize: 18),
           ),
         )
-            : LayoutBuilder(
-          builder: (context, constraints) {
-            final crossCount =
-            constraints.maxWidth > 600 ? 5 : 3;
+            : _buildGrid(),
+      ),
+    );
+  }
 
-            return GridView.builder(
-              padding: const EdgeInsets.all(10),
-              itemCount: _categories.length,
-              gridDelegate:
-              SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossCount,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.75,
-              ),
-              itemBuilder: (context, index) {
-                final category = _categories[index];
+  // ------------------ CATEGORY GRID ------------------
+  Widget _buildGrid() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cross = constraints.maxWidth > 600 ? 5 : 3;
 
-                String? img = category['image']?['url'];
+        return GridView.builder(
+          padding: const EdgeInsets.all(10),
+          itemCount: _categories.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cross,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.75,
+          ),
+          itemBuilder: (_, index) {
+            final c = _categories[index];
 
-                if (img != null && img.startsWith('/')) {
-                  img =
-                  "https://admin.theblackforestcakes.com$img";
+            String? img = c['image']?['url'];
+            if (img != null && img.startsWith('/')) {
+              img = "https://admin.theblackforestcakes.com$img";
+            }
+            img ??= "https://via.placeholder.com/150?text=No+Image";
+
+            return GestureDetector(
+              onTap: () {
+                Widget page;
+
+                if (widget.isReturnOrder) {
+                  page = ReturnOrderPage(
+                    categoryId: c['id'],
+                    categoryName: c['name'],
+                  );
+                } else if (widget.isStockFilter) {
+                  page = const StockOrderPage();
+                } else {
+                  page = ProductsPage(
+                    categoryId: c['id'],
+                    categoryName: c['name'],
+                  );
                 }
 
-                img ??=
-                "https://via.placeholder.com/150?text=No+Image";
-
-                return GestureDetector(
-                  onTap: () {
-                    Widget page;
-
-                    if (widget.isStockFilter) {
-                      // Return Order Page (unchanged)
-                      page = ReturnOrderPage(
-                        categoryId: category['id'],
-                        categoryName: category['name'],
-                      );
-                    } else if (widget.isPastryFilter) {
-                      // ⭐ FIXED — Now simply open StockOrderPage()
-                      page = const StockOrderPage();
-                    } else {
-                      // Billing page
-                      page = ProductsPage(
-                        categoryId: category['id'],
-                        categoryName: category['name'],
-                      );
-                    }
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => page,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.15),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          flex: 8,
-                          child: ClipRRect(
-                            borderRadius:
-                            const BorderRadius.vertical(
-                              top: Radius.circular(8),
-                            ),
-                            child: CachedNetworkImage(
-                              imageUrl: img!,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            width: double.infinity,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.vertical(
-                                bottom: Radius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              category['name'] ?? "Unknown",
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => page),
                 );
               },
+              child: _buildCard(c, img),
             );
           },
-        ),
+        );
+      },
+    );
+  }
+
+  // ------------------ CARD UI ------------------
+  Widget _buildCard(dynamic c, String img) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.15),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            flex: 8,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              child: CachedNetworkImage(
+                imageUrl: img,
+                fit: BoxFit.cover,
+                width: double.infinity,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(8),
+                ),
+              ),
+              child: Text(
+                c['name'] ?? "Unknown",
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

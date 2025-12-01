@@ -428,7 +428,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
   Widget build(BuildContext context) {
     return CommonScaffold(
       title: 'Return Order Products in ${widget.categoryName}',
-      pageType: PageType.billsheet,
+      pageType: PageType.returnorder,
       onScanCallback: _handleScan,
       body: Column(
         children: [

@@ -1,11 +1,10 @@
-// lib/common_scaffold.dart
-
 import 'dart:async';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart'; // Added for camera permission handling
 
 import 'package:branch/categories_page.dart';
 import 'package:branch/cart_page.dart';
@@ -21,8 +20,8 @@ enum PageType {
   cart,
   billsheet,
   editbill,
-  stock,           // NEW
-  returnorder      // NEW (optional for return_order.dart)
+  stock, // NEW
+  returnorder // NEW (optional for return_order.dart)
 }
 
 class CommonScaffold extends StatefulWidget {
@@ -91,17 +90,34 @@ class _CommonScaffoldState extends State<CommonScaffold> {
       return;
     }
 
-    final result = await showGeneralDialog<String>(
-      context: context,
-      barrierDismissible: true,
-      pageBuilder: (_, __, ___) => const ScannerDialog(),
-      barrierLabel: "Dismiss",
-      transitionBuilder: (context, anim, __, child) =>
-          FadeTransition(opacity: anim, child: child),
-    );
+    // Check and request camera permission
+    var status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+    }
 
-    if (result != null) {
-      widget.onScanCallback?.call(result);
+    if (status.isGranted) {
+      final result = await showGeneralDialog<String>(
+        context: context,
+        barrierDismissible: true,
+        pageBuilder: (_, __, ___) => const ScannerDialog(),
+        barrierLabel: "Dismiss",
+        transitionBuilder: (context, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      );
+
+      if (result != null) {
+        if (widget.onScanCallback != null) {
+          widget.onScanCallback!(result);
+        } else {
+          _showMessage("Scanned: $result"); // Default feedback if no callback
+        }
+      } else {
+        _showMessage("Scan cancelled");
+      }
+    } else {
+      _showMessage("Camera permission denied. Please enable it in settings.");
+      openAppSettings(); // Prompt user to open settings if denied
     }
   }
 
@@ -298,7 +314,10 @@ class ScannerDialog extends StatefulWidget {
 }
 
 class _ScannerDialogState extends State<ScannerDialog> {
-  final MobileScannerController controller = MobileScannerController();
+  final MobileScannerController controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates, // Added to prevent duplicate scans
+    // You can add torchEnabled: true if needed for low light
+  );
 
   @override
   void dispose() {
@@ -309,7 +328,7 @@ class _ScannerDialogState extends State<ScannerDialog> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan Barcode")),
+      appBar: AppBar(title: const Text("Scan QR/Barcode")), // Updated title to reflect both
       body: MobileScanner(
         controller: controller,
         onDetect: (capture) {

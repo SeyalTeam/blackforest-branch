@@ -1,4 +1,3 @@
-// lib/home.dart
 import 'package:flutter/material.dart';
 import 'common_scaffold.dart';
 import 'closingentry.dart';
@@ -6,7 +5,8 @@ import 'expense.dart';
 import 'categories_page.dart';
 import 'billsheet.dart';
 import 'qr_update_page.dart';
-import 'stock_order.dart';   // IMPORTANT
+import 'stock_order.dart';
+import 'stockorder_reports.dart'; // NEW IMPORT for stockorder_reports.dart
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,7 +22,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    for (int i = 0; i < 9; i++) {
+    // Updated: 8 cards in main grid + 3 in reports row (indices 0-7 for main, 8-10 for reports)
+    for (int i = 0; i < 11; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -39,15 +40,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // --------------------------- NAVIGATION --------------------------------
+
+  /// Billing
   void _openBilling() {
-    Navigator.pushAndRemoveUntil(
+    Navigator.push(
       context,
       _createRoute(const CategoriesPage()),
-          (route) => false,
     );
   }
 
-  /// ⭐ FIXED — Stock now navigates to StockOrderPage() only
+  /// Stock Order (existing, from stock_order.dart)
   void _openStock() {
     Navigator.push(
       context,
@@ -55,26 +58,31 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  /// ⭐ Return Order (Corrected)
+  /// DOES NOT HIGHLIGHT BILLSHEET
   void _openReturn() {
-    Navigator.pushAndRemoveUntil(
+    Navigator.push(
       context,
-      _createRoute(const CategoriesPage(isStockFilter: true)),
-          (route) => false,
+      _createRoute(const CategoriesPage(isReturnOrder: true)),
     );
   }
 
+  /// Bill Sheet
   void _openSheet() {
     Navigator.push(context, _createRoute(const BillSheetPage()));
   }
 
-  void _openClosing() =>
-      Navigator.push(context, _createRoute(const ClosingEntryPage()));
+  void _openClosing() {
+    Navigator.push(context, _createRoute(const ClosingEntryPage()));
+  }
 
-  void _openExpense() =>
-      Navigator.push(context, _createRoute(const ExpenseDetailsPage()));
+  void _openExpense() {
+    Navigator.push(context, _createRoute(const ExpenseDetailsPage()));
+  }
 
-  void _openQrUpdate() =>
-      Navigator.push(context, _createRoute(const QrUpdatePage()));
+  void _openQrUpdate() {
+    Navigator.push(context, _createRoute(const QrUpdatePage()));
+  }
 
   void _comingSoon() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -86,22 +94,35 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  // NEW: Open Stock Report (from stockorder_reports.dart)
+  void _openStockReport() {
+    Navigator.push(
+      context,
+      _createRoute(const StockOrdersPage()), // Assuming class name; adjust if different
+    );
+  }
+
+  /// Custom fade route
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-          FadeTransition(opacity: animation, child: child),
+      pageBuilder: (_, animation, __) => FadeTransition(
+        opacity: animation,
+        child: page,
+      ),
       transitionDuration: const Duration(milliseconds: 300),
     );
   }
 
+  // --------------------------- CARD UI --------------------------------
+
   Widget _buildCard(
       int index,
-      IconData icon,
+      IconData? icon, // Changed to nullable
       Color start,
       Color end,
       String label,
       VoidCallback onTap,
+      {double size = 140} // Use single size for square
       ) {
     return AnimatedBuilder(
       animation: _animations[index]!,
@@ -115,10 +136,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           },
           onTapCancel: () => _controllers[index]!.reverse(),
           child: Container(
-            width: 140,
-            height: 160,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(16), // Reduced for compactness
               gradient: LinearGradient(
                 colors: [start, end],
                 begin: Alignment.topLeft,
@@ -127,22 +148,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               boxShadow: [
                 BoxShadow(
                   color: start.withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  blurRadius: 12, // Reduced blur for compactness
+                  offset: const Offset(0, 6), // Reduced offset
                 ),
               ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 56, color: Colors.white),
-                const SizedBox(height: 16),
+                if (icon != null) ...[
+                  Icon(icon, size: 48, color: Colors.white), // Reduced icon size if present
+                  const SizedBox(height: 8), // Reduced spacing
+                ],
                 Text(
                   label,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontSize: 16, // Reduced font size for compactness
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -151,6 +176,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       ),
     );
   }
+
+  // --------------------------- MAIN UI --------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -174,44 +201,140 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   mainAxisSpacing: 24,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.1,
+                  childAspectRatio: 1.0, // Square
                   children: [
-                    _buildCard(0, Icons.receipt_long,
-                        const Color(0xFF00C9FF), const Color(0xFF92FE9D),
-                        'Billing', _openBilling),
-                    _buildCard(1, Icons.table_chart,
-                        const Color(0xFFFF6B6B), const Color(0xFFFF8E53),
-                        'Sheet', _openSheet),
-                    _buildCard(2, Icons.account_balance_wallet,
-                        const Color(0xFFFFD700), const Color(0xFFFFA500),
-                        'Closing', _openClosing),
-                    _buildCard(3, Icons.payments,
-                        const Color(0xFFE91E63), const Color(0xFFFF4081),
-                        'Expense', _openExpense),
+                    _buildCard(
+                      0,
+                      Icons.receipt_long,
+                      const Color(0xFF00C9FF),
+                      const Color(0xFF92FE9D),
+                      'Billing',
+                      _openBilling,
+                    ),
 
-                    /// ⭐ FIXED — correct stock navigation
-                    _buildCard(4, Icons.inventory_2,
-                        const Color(0xFF4FACFE), const Color(0xFF00F2FE),
-                        'Stock', _openStock),
+                    _buildCard(
+                      1,
+                      Icons.table_chart,
+                      const Color(0xFFFF6B6B),
+                      const Color(0xFFFF8E53),
+                      'Sheet',
+                      _openSheet,
+                    ),
 
-                    _buildCard(5, Icons.assignment_return,
-                        const Color(0xFFFF5E7E), const Color(0xFFFF9A9E),
-                        'Return', _openReturn),
-                    _buildCard(6, Icons.bar_chart,
-                        const Color(0xFF43E97B), const Color(0xFF38F9D7),
-                        'Reports', _comingSoon),
-                    _buildCard(7, Icons.shopping_cart,
-                        const Color(0xFFFA8BFF), const Color(0xFF8B6CFF),
-                        'Orders', _comingSoon),
-                    _buildCard(8, Icons.qr_code,
-                        const Color(0xFF7F00FF), const Color(0xFFE100FF),
-                        'QR Update', _openQrUpdate),
+                    _buildCard(
+                      2,
+                      Icons.account_balance_wallet,
+                      const Color(0xFFFFD700),
+                      const Color(0xFFFFA500),
+                      'Closing',
+                      _openClosing,
+                    ),
+
+                    _buildCard(
+                      3,
+                      Icons.payments,
+                      const Color(0xFFE91E63),
+                      const Color(0xFFFF4081),
+                      'Expense',
+                      _openExpense,
+                    ),
+
+                    _buildCard(
+                      4,
+                      Icons.inventory_2,
+                      const Color(0xFF4FACFE),
+                      const Color(0xFF00F2FE),
+                      'Stock',
+                      _openStock,
+                    ),
+
+                    /// ⭐ FIXED — Return opens return categories & no footer highlight
+                    _buildCard(
+                      5,
+                      Icons.assignment_return,
+                      const Color(0xFFFF5E7E),
+                      const Color(0xFFFF9A9E),
+                      'Return',
+                      _openReturn,
+                    ),
+
+                    // Removed Reports card
+
+                    _buildCard(
+                      6, // Shifted index (was 7)
+                      Icons.shopping_cart,
+                      const Color(0xFFFA8BFF),
+                      const Color(0xFF8B6CFF),
+                      'Orders',
+                      _comingSoon,
+                    ),
+
+                    _buildCard(
+                      7, // Shifted index (was 8)
+                      Icons.qr_code,
+                      const Color(0xFF7F00FF),
+                      const Color(0xFFE100FF),
+                      'QR Update',
+                      _openQrUpdate,
+                    ),
                   ],
                 );
               },
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 32), // Slightly reduced spacing
+
+            // NEW: Reports Row with 3 smaller cards in one row
+            const Text(
+              'Reports',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12), // Reduced spacing
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: _buildCard(
+                    8, // New index
+                    null, // No icon
+                    const Color(0xFF4FACFE),
+                    const Color(0xFF00F2FE),
+                    'Stock',
+                    _openStockReport,
+                    size: 100, // Reduced size for compact squares
+                  ),
+                ),
+                const SizedBox(width: 12), // Reduced spacing
+                Expanded(
+                  child: _buildCard(
+                    9, // New index
+                    null, // No icon
+                    const Color(0xFFFF5E7E),
+                    const Color(0xFFFF9A9E),
+                    'Return',
+                    _comingSoon, // Replace if needed
+                    size: 100,
+                  ),
+                ),
+                const SizedBox(width: 12), // Reduced spacing
+                Expanded(
+                  child: _buildCard(
+                    10, // New index
+                    null, // No icon
+                    const Color(0xFFFF6B6B),
+                    const Color(0xFFFF8E53),
+                    'Cakes',
+                    _comingSoon, // Replace if needed
+                    size: 100,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32), // Slightly reduced spacing
 
             Container(
               padding: const EdgeInsets.all(20),
@@ -235,13 +358,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _quickStat(String label, String value, Color color) => Column(
-    children: [
-      Text(value,
+  // Quick statistics UI
+  Widget _quickStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
           style: TextStyle(
-              fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-      const SizedBox(height: 4),
-      Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-    ],
-  );
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+      ],
+    );
+  }
 }
