@@ -1,6 +1,6 @@
 name: branch
 description: "blackforest_stockorder"
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
@@ -19,22 +19,27 @@ dependencies:
   esc_pos_printer: ^4.1.0
   esc_pos_utils: ^1.1.0
   network_info_plus: ^4.0.2
-  camera: ^0.10.6  # For live camera capture
-  permission_handler: ^11.3.1  # For requesting camera permissions
-  image: ^3.3.0  # For image compression
-  path_provider: ^2.1.3  # For temp file storage
+  camera: ^0.10.6 # For live camera capture
+  permission_handler: ^11.3.1 # For requesting camera permissions
+  image: ^3.3.0 # For image compression
+  path_provider: ^2.1.3 # For temp file storage
   intl: ^0.18.1
   qr_flutter: ^4.1.0
-
-
-
+  http_parser: ^4.0.2 # For multipart file uploads
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.11.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/bakery.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/bakery.png"
 
 flutter:
   uses-material-design: true
-
-

@@ -297,6 +297,25 @@ class StockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ========== HELPER METHODS FOR UI ==========
+  void toggleSelection(String productId, bool value) {
+    _selected[productId] = value;
+    notifyListeners();
+  }
+
+  void updateQuantity(String productId, int quantity) {
+    _requiredQty[productId] = quantity;
+    _selected[productId] = quantity > 0;
+    notifyListeners();
+  }
+
+  void updateInStock(String productId, int stock) {
+    _inStock[productId] = stock;
+    final req = _requiredQty[productId] ?? 0;
+    _selected[productId] = req > 0;
+    notifyListeners();
+  }
+
   // ========== SUBMIT STOCK ORDER ==========
   Future<bool> submitStockOrder(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();

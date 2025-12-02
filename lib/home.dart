@@ -6,7 +6,7 @@ import 'categories_page.dart';
 import 'billsheet.dart';
 import 'qr_update_page.dart';
 import 'stock_order.dart';
-import 'stockorder_reports.dart'; // NEW IMPORT for stockorder_reports.dart
+// REMOVED: import 'stockorder_reports.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,8 +22,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Updated: 8 cards in main grid + 3 in reports row (indices 0-7 for main, 8-10 for reports)
-    for (int i = 0; i < 11; i++) {
+    // Updated to 8 cards only
+    for (int i = 0; i < 8; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -42,24 +42,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // --------------------------- NAVIGATION --------------------------------
 
-  /// Billing
   void _openBilling() {
-    Navigator.push(
-      context,
-      _createRoute(const CategoriesPage()),
-    );
+    Navigator.push(context, _createRoute(const CategoriesPage()));
   }
 
-  /// Stock Order (existing, from stock_order.dart)
   void _openStock() {
-    Navigator.push(
-      context,
-      _createRoute(const StockOrderPage()),
-    );
+    Navigator.push(context, _createRoute(const StockOrderPage()));
   }
 
-  /// ⭐ Return Order (Corrected)
-  /// DOES NOT HIGHLIGHT BILLSHEET
   void _openReturn() {
     Navigator.push(
       context,
@@ -67,7 +57,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  /// Bill Sheet
   void _openSheet() {
     Navigator.push(context, _createRoute(const BillSheetPage()));
   }
@@ -94,15 +83,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // NEW: Open Stock Report (from stockorder_reports.dart)
-  void _openStockReport() {
-    Navigator.push(
-      context,
-      _createRoute(const StockOrdersPage()), // Assuming class name; adjust if different
-    );
-  }
-
-  /// Custom fade route
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
       pageBuilder: (_, animation, __) => FadeTransition(
@@ -117,13 +97,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Widget _buildCard(
       int index,
-      IconData? icon, // Changed to nullable
+      IconData? icon,
       Color start,
       Color end,
       String label,
       VoidCallback onTap,
-      {double size = 140} // Use single size for square
-      ) {
+      {double size = 140}) {
     return AnimatedBuilder(
       animation: _animations[index]!,
       builder: (context, _) => Transform.scale(
@@ -139,7 +118,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             width: size,
             height: size,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16), // Reduced for compactness
+              borderRadius: BorderRadius.circular(16),
               gradient: LinearGradient(
                 colors: [start, end],
                 begin: Alignment.topLeft,
@@ -148,8 +127,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               boxShadow: [
                 BoxShadow(
                   color: start.withOpacity(0.4),
-                  blurRadius: 12, // Reduced blur for compactness
-                  offset: const Offset(0, 6), // Reduced offset
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -157,14 +136,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 48, color: Colors.white), // Reduced icon size if present
-                  const SizedBox(height: 8), // Reduced spacing
+                  Icon(icon, size: 48, color: Colors.white),
+                  const SizedBox(height: 8),
                 ],
                 Text(
                   label,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16, // Reduced font size for compactness
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
@@ -201,7 +180,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   mainAxisSpacing: 24,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.0, // Square
+                  childAspectRatio: 1.0,
                   children: [
                     _buildCard(
                       0,
@@ -248,7 +227,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       _openStock,
                     ),
 
-                    /// ⭐ FIXED — Return opens return categories & no footer highlight
                     _buildCard(
                       5,
                       Icons.assignment_return,
@@ -258,10 +236,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       _openReturn,
                     ),
 
-                    // Removed Reports card
-
                     _buildCard(
-                      6, // Shifted index (was 7)
+                      6,
                       Icons.shopping_cart,
                       const Color(0xFFFA8BFF),
                       const Color(0xFF8B6CFF),
@@ -270,7 +246,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
 
                     _buildCard(
-                      7, // Shifted index (was 8)
+                      7,
                       Icons.qr_code,
                       const Color(0xFF7F00FF),
                       const Color(0xFFE100FF),
@@ -282,59 +258,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               },
             ),
 
-            const SizedBox(height: 32), // Slightly reduced spacing
+            const SizedBox(height: 32),
 
-            // NEW: Reports Row with 3 smaller cards in one row
-            const Text(
-              'Reports',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12), // Reduced spacing
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: _buildCard(
-                    8, // New index
-                    null, // No icon
-                    const Color(0xFF4FACFE),
-                    const Color(0xFF00F2FE),
-                    'Stock',
-                    _openStockReport,
-                    size: 100, // Reduced size for compact squares
-                  ),
-                ),
-                const SizedBox(width: 12), // Reduced spacing
-                Expanded(
-                  child: _buildCard(
-                    9, // New index
-                    null, // No icon
-                    const Color(0xFFFF5E7E),
-                    const Color(0xFFFF9A9E),
-                    'Return',
-                    _comingSoon, // Replace if needed
-                    size: 100,
-                  ),
-                ),
-                const SizedBox(width: 12), // Reduced spacing
-                Expanded(
-                  child: _buildCard(
-                    10, // New index
-                    null, // No icon
-                    const Color(0xFFFF6B6B),
-                    const Color(0xFFFF8E53),
-                    'Cakes',
-                    _comingSoon, // Replace if needed
-                    size: 100,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 32), // Slightly reduced spacing
+            // Reports section removed completely
 
             Container(
               padding: const EdgeInsets.all(20),
@@ -358,7 +284,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // Quick statistics UI
   Widget _quickStat(String label, String value, Color color) {
     return Column(
       children: [

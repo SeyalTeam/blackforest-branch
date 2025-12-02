@@ -10,13 +10,12 @@ class StockOrderPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<StockProvider>(
       builder: (context, sp, child) {
-        return WillPopScope(
-          onWillPop: () async {
-            if (sp.step == "products") {
+        return PopScope(
+          canPop: sp.step != "products",
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && sp.step == "products") {
               sp.goBackToCategories();
-              return false;
             }
-            return true;
           },
           child: CommonScaffold(
             title: sp.step == "categories"
@@ -80,24 +79,24 @@ class StockOrderPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.15),
+                        color: Colors.grey.withValues(alpha: 0.15),
                         blurRadius: 4,
                       )
                     ],
                   ),
                   child: Column(
                     children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(10)),
-                          child: Image.network(
-                            img!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(10)),
+                            child: Image.network(
+                              img,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
-                      ),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(8),
@@ -285,13 +284,12 @@ class StockOrderPage extends StatelessWidget {
                   : Colors.grey.shade100;
 
               return DataRow(
-                color: MaterialStateProperty.resolveWith<Color?>((_) => bg),
+                color: WidgetStateProperty.resolveWith<Color?>((_) => bg),
                 cells: [
                   DataCell(
                     GestureDetector(
                       onDoubleTap: () {
-                        sp.selected[pid] = false;
-                        sp.notifyListeners();
+                        sp.toggleSelection(pid, false);
                       },
                       child: SizedBox(
                         width: dialogWidth,
@@ -475,10 +473,7 @@ class StockOrderPage extends StatelessWidget {
                       label: "InStock",
                       controller: sp.stockCtrl[id]!,
                       onChanged: (v) {
-                        sp.inStock[id] = int.tryParse(v) ?? 0;
-                        final req = sp.quantities[id] ?? 0;
-                        sp.selected[id] = req > 0;
-                        sp.notifyListeners();
+                        sp.updateInStock(id, int.tryParse(v) ?? 0);
                       },
                     ),
                     const SizedBox(width: 10),
@@ -487,10 +482,7 @@ class StockOrderPage extends StatelessWidget {
                       label: "Required",
                       controller: sp.qtyCtrl[id]!,
                       onChanged: (v) {
-                        sp.quantities[id] = int.tryParse(v) ?? 0;
-                        final req = sp.quantities[id] ?? 0;
-                        sp.selected[id] = req > 0;
-                        sp.notifyListeners();
+                        sp.updateQuantity(id, int.tryParse(v) ?? 0);
                       },
                     ),
 
@@ -499,8 +491,7 @@ class StockOrderPage extends StatelessWidget {
                       child: Checkbox(
                         value: sp.selected[id],
                         onChanged: (v) {
-                          sp.selected[id] = v ?? false;
-                          sp.notifyListeners();
+                          sp.toggleSelection(id, v ?? false);
                         },
                       ),
                     ),

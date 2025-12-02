@@ -13,13 +13,11 @@ import 'package:network_info_plus/network_info_plus.dart';
 class IdleTimeoutWrapper extends StatefulWidget {
   final Widget child;
   final Duration timeout;
-
   const IdleTimeoutWrapper({
     super.key,
     required this.child,
     this.timeout = const Duration(hours: 6),
   });
-
   @override
   _IdleTimeoutWrapperState createState() => _IdleTimeoutWrapperState();
 }
@@ -95,7 +93,6 @@ class _IdleTimeoutWrapperState extends State<IdleTimeoutWrapper> with WidgetsBin
 // ---------------------------------------------------------
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -116,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ---------------------------------------------------------
-// CHECK EXISTING SESSION
+  // CHECK EXISTING SESSION
   // ---------------------------------------------------------
   Future<void> _checkExistingSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -147,9 +144,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ---------------------------------------------------------
-// IP ALERT POPUP
+  // IP ALERT POPUP (MODIFIED TO INCLUDE BRANCH NAME)
   // ---------------------------------------------------------
   Future<void> _showIpAlert(
+      String branchName,
       String deviceIp,
       String branchInfo,
       String? printerIp,
@@ -158,21 +156,22 @@ class _LoginPageState extends State<LoginPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text("IP Verification"),
+        title: const Text("Branch Verification"),
         content: Text(
-            "Device IP: $deviceIp\n$branchInfo\nPrinter IP: ${printerIp ?? 'Not Set'}"),
+          "Branch: $branchName\nDevice IP: $deviceIp\n$branchInfo\nPrinter IP: ${printerIp ?? 'Not Set'}",
+        ),
         actions: [
           TextButton(
             child: const Text("OK"),
             onPressed: () => Navigator.of(ctx).pop(),
-          )
+          ),
         ],
       ),
     );
   }
 
   // ---------------------------------------------------------
-// HELPER FUNCTIONS
+  // HELPER FUNCTIONS
   // ---------------------------------------------------------
   int _ipToInt(String ip) {
     final p = ip.split('.').map(int.parse).toList();
@@ -198,20 +197,23 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ---------------------------------------------------------
-// LOGIN FUNCTION - USERNAME ONLY → username@bf.com
+  // LOGIN FUNCTION - USERNAME ONLY → username@bf.com (MODIFIED FOR BRANCH NAME HANDLING)
   // ---------------------------------------------------------
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
     final info = NetworkInfo();
     String? deviceIp = await info.getWifiIP();
     String input = _emailController.text.trim();
     String finalEmail = input.contains("@") ? input : "$input@bf.com";
+
     if (!finalEmail.endsWith("@bf.com")) {
       _showError("Only @bf.com domain allowed");
       setState(() => _isLoading = false);
       return;
     }
+
     try {
       final response = await http.post(
         Uri.parse("https://admin.theblackforestcakes.com/api/users/login"),
@@ -221,6 +223,7 @@ class _LoginPageState extends State<LoginPage> {
           "password": _passwordController.text,
         }),
       );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final user = data["user"];
@@ -244,12 +247,14 @@ class _LoginPageState extends State<LoginPage> {
 
         String? branchIpRange;
         String? printerIp;
+        String branchName = "Unknown"; // Default if not fetched
+        String branchInfo = "No IP range set"; // Default for no fixed IP
+        String alertDeviceIp = deviceIp ?? "Unknown";
 
-        // ✔ Branch IP validation
+        // ✔ Fetch branch details if branchId exists
         if (branchId != null) {
           final bRes = await http.get(
-            Uri.parse(
-                "https://admin.theblackforestcakes.com/api/branches/$branchId"),
+            Uri.parse("https://admin.theblackforestcakes.com/api/branches/$branchId"),
             headers: {
               "Authorization": "Bearer ${data['token']}",
               "Content-Type": "application/json"
@@ -257,33 +262,42 @@ class _LoginPageState extends State<LoginPage> {
           );
           if (bRes.statusCode == 200) {
             final branch = jsonDecode(bRes.body);
+            branchName = branch["name"]?.toString().trim() ?? "Unknown"; // NEW: Fetch branch name
             branchIpRange = branch["ipAddress"]?.toString().trim();
             printerIp = branch["printerIp"]?.toString().trim();
-          }
-          if (branchIpRange != null && branchIpRange.isNotEmpty) {
-            if (deviceIp == null) {
-              _showError("Unable to fetch device IP");
-              setState(() => _isLoading = false);
-              return;
+
+            // ✔ Branch IP validation (only if range is set)
+            if (branchIpRange != null && branchIpRange.isNotEmpty) {
+              if (deviceIp == null) {
+                _showError("Unable to fetch device IP for validation");
+                setState(() => _isLoading = false);
+                return;
+              }
+              if (!_isIpInRange(deviceIp, branchIpRange)) {
+                _showError("IP mismatch: $deviceIp not allowed");
+                setState(() => _isLoading = false);
+                return;
+              }
+              branchInfo = "IP matched ($branchIpRange)"; // Update info for fixed IP
             }
-            if (!_isIpInRange(deviceIp, branchIpRange)) {
-              _showError("IP mismatch: $deviceIp not allowed");
-              setState(() => _isLoading = false);
-              return;
-            }
-            await _showIpAlert(
-                deviceIp,
-                "Branch IP matched",
-                printerIp);
           }
         }
 
-        // ✔ Save session
+        // NEW: Always show alert with branch name and status (fetches/displays branch even without fixed IP)
+        await _showIpAlert(
+          branchName,
+          alertDeviceIp,
+          branchInfo,
+          printerIp,
+        );
+
+        // ✔ Save session (NEW: Save branchName)
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("token", data["token"]);
         await prefs.setString("role", role);
         await prefs.setString("email", finalEmail);
         if (branchId != null) await prefs.setString("branchId", branchId);
+        await prefs.setString("branchName", branchName); // NEW: Save for later use
         if (deviceIp != null) await prefs.setString("lastLoginIp", deviceIp);
         if (printerIp != null) await prefs.setString("printerIp", printerIp);
 
@@ -306,7 +320,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ---------------------------------------------------------
-// PREMIUM UI
+  // PREMIUM UI (UNCHANGED)
   // ---------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -357,7 +371,7 @@ class _LoginPageState extends State<LoginPage> {
                     blurRadius: 22,
                     spreadRadius: 5,
                     offset: const Offset(0, 10),
-                  )
+                  ),
                 ],
               ),
               child: Form(
@@ -368,9 +382,10 @@ class _LoginPageState extends State<LoginPage> {
                     const Text(
                       "Welcome Team",
                       style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     const Text(
@@ -429,8 +444,9 @@ class _LoginPageState extends State<LoginPage> {
                             : const Text(
                           "Login",
                           style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
