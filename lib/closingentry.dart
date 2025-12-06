@@ -44,7 +44,19 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     for (var c in _denomControllers) {
       c.addListener(_updateCashFromDenoms);
     }
+    // Listeners for real-time summary updates
+    _systemSalesController.addListener(_updateUI);
+    _manualSalesController.addListener(_updateUI);
+    _onlineSalesController.addListener(_updateUI);
+    _expensesController.addListener(_updateUI); // Good to have just in case
+    _creditCardController.addListener(_updateUI);
+    _upiController.addListener(_updateUI);
+    
     _init();
+  }
+  
+  void _updateUI() {
+    if (mounted) setState(() {});
   }
 
   @override
