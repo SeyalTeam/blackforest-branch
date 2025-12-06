@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/stock_provider.dart';
-import 'package:branch/cart_page.dart';
 
 class StockOrderPage extends StatelessWidget {
   const StockOrderPage({super.key});
@@ -42,78 +41,82 @@ class StockOrderPage extends StatelessWidget {
       return const Center(child: Text("No categories found"));
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: sp.categories.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.75,
-      ),
-      itemBuilder: (_, i) {
-        final c = sp.categories[i];
-        String? img = c["image"]?["url"];
-        if (img != null && img.startsWith("/")) {
-          img = "https://admin.theblackforestcakes.com$img";
-        }
-        img ??= "https://via.placeholder.com/200?text=No+Image";
-
-        return GestureDetector(
-          onTap: () async {
-            await sp.selectCategory(c);
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                  blurRadius: 4,
-                )
-              ],
+    return Column(
+      children: [
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: sp.categories.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.75,
             ),
-            child: Column(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(10)),
-                    child: Image.network(
-                      img,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+            itemBuilder: (_, i) {
+              final c = sp.categories[i];
+              String? img = c["image"]?["url"];
+              if (img != null && img.startsWith("/")) {
+                img = "https://admin.theblackforestcakes.com$img";
+              }
+              img ??= "https://via.placeholder.com/200?text=No+Image";
+
+              return GestureDetector(
+                onTap: () async {
+                  await sp.selectCategory(c);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withValues(alpha: 0.15),
+                        blurRadius: 4,
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(10)),
+                            child: Image.network(
+                              img,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.vertical(
+                              bottom: Radius.circular(10)),
+                        ),
+                        child: Text(
+                          c["name"] ?? "",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    ],
                   ),
                 ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.vertical(
-                        bottom: Radius.circular(10)),
-                  ),
-                  child: Text(
-                    c["name"] ?? "",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                )
-              ],
-            ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
-
-
 
   // ========================== PRODUCT LIST ===========================
   Widget _buildProducts(BuildContext context, StockProvider sp) {

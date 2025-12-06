@@ -9,8 +9,8 @@ import 'package:permission_handler/permission_handler.dart'; // Added for camera
 import 'package:branch/categories_page.dart';
 import 'package:branch/cart_page.dart';
 import 'package:branch/cart_provider.dart';
-import 'package:branch/return_provider.dart'; // Added import for ReturnProvider
-import 'package:branch/stock_provider.dart'; // Added import for StockProvider
+import 'package:branch/stock_provider.dart';
+import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
 import 'package:branch/editbill.dart';
@@ -209,13 +209,12 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           right: 8,
                           top: 8,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                               color: Colors.red,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                            alignment: Alignment.center,
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                             child: Text(
                               '$count',
                               style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
@@ -246,15 +245,12 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           right: 8,
                           top: 8,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                                 color: Colors.red, borderRadius: BorderRadius.circular(10)),
-                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                            alignment: Alignment.center,
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
                             ),
                           ),
                         ),

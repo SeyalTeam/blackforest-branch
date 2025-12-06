@@ -1203,15 +1203,18 @@ class _ReturnCartItemCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 70,
-              height: 70,
-              color: Colors.white10,
-              child: imageProvider != null
-                  ? Image(image: imageProvider, fit: BoxFit.cover)
-                  : const Icon(Icons.broken_image, color: Colors.white24),
+          GestureDetector(
+            onTap: onRemove,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 70,
+                height: 70,
+                color: Colors.white10,
+                child: imageProvider != null
+                    ? Image(image: imageProvider, fit: BoxFit.cover)
+                    : const Icon(Icons.broken_image, color: Colors.white24),
+              ),
             ),
           ),
           const SizedBox(width: 12),
