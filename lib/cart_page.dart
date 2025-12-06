@@ -849,231 +849,277 @@ class _CartPageState extends State<CartPage> {
 
   // Stock Order Specific UI
   Widget _buildStockOrderInternal() {
-    // Set default date if null (Safe to do here as we are interacting with provider, but better in init. 
-    // We will assume init handles it or we show it. 
-    // Actually, setting it in build will cause rebuild loop if notifyListeners is called.
-    // So distinct check or post frame callback is needed.
-    // Let's rely on the separate initState update unless I combine them.
-    
     return CommonScaffold(
       title: 'Stock Order Cart',
       pageType: PageType.stock, // Correctly identify as Stock Page
-      body: Consumer<StockProvider>(
-        builder: (context, sp, _) {
-          final selectedEntries = sp.selected.entries.where((e) => e.value).toList();
+      body: Container(
+        color: _bg,
+        child: Consumer<StockProvider>(
+          builder: (context, sp, _) {
+            final selectedEntries = sp.selected.entries.where((e) => e.value).toList();
 
-          if (selectedEntries.isEmpty) {
-            return const Center(child: Text("No items in stock order"));
-          }
+            if (selectedEntries.isEmpty) {
+              return _buildEmptyState();
+            }
 
-          int totalReq = 0;
-          double totalAmount = 0.0;
-          
-          for(var entry in selectedEntries) {
-            final pid = entry.key;
-            final req = sp.quantities[pid] ?? 0;
-            final price = sp.prices[pid] ?? 0.0;
-            totalReq += req;
-            totalAmount += (req * price);
-          }
+            int totalReq = 0;
+            double totalAmount = 0.0;
+            
+            for(var entry in selectedEntries) {
+              final pid = entry.key;
+              final req = sp.quantities[pid] ?? 0;
+              final price = sp.prices[pid] ?? 0.0;
+              totalReq += req;
+              totalAmount += (req * price);
+            }
 
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: selectedEntries.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, index) {
-                    final entry = selectedEntries[index];
-                    final pid = entry.key;
-                    final name = sp.productNames[pid] ?? "Unknown";
-                    final req = sp.quantities[pid] ?? 0;
-                    final price = sp.prices[pid] ?? 0.0;
-                    final inStock = sp.inStock[pid] ?? 0; // Get In Stock
-                    final lineTotal = req * price;
-                    
-                    final ctrl = sp.qtyCtrl[pid];
-                    if (ctrl != null && ctrl.text != req.toString()) {
-                      ctrl.text = req.toString();
-                    }
+            return SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: selectedEntries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, index) {
+                        final entry = selectedEntries[index];
+                        final pid = entry.key;
+                        final name = sp.productNames[pid] ?? "Unknown";
+                        final req = sp.quantities[pid] ?? 0;
+                        final price = sp.prices[pid] ?? 0.0;
+                        final inStock = sp.inStock[pid] ?? 0; // Get In Stock
+                        final lineTotal = req * price;
+                        
+                        final ctrl = sp.qtyCtrl[pid];
+                        if (ctrl != null && ctrl.text != req.toString()) {
+                          ctrl.text = req.toString();
+                        }
 
-                    return Dismissible(
-                      key: Key(pid),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        padding: const EdgeInsets.only(right: 20),
-                        alignment: Alignment.centerRight,
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      onDismissed: (direction) {
-                        sp.toggleSelection(pid, false);
-                      },
-                      child: GestureDetector(
-                        onDoubleTap: () {
-                           sp.toggleSelection(pid, false);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-                            ]
+                        return Dismissible(
+                          key: Key(pid),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            padding: const EdgeInsets.only(right: 20),
+                            alignment: Alignment.centerRight,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.delete, color: Colors.white),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                    const SizedBox(height: 4),
-                                    Row(
+                          onDismissed: (direction) {
+                            sp.toggleSelection(pid, false);
+                          },
+                          child: GestureDetector(
+                            onDoubleTap: () {
+                               sp.toggleSelection(pid, false);
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: _card,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text("₹ ${price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                        const SizedBox(width: 8),
-                                        Text("|  In Stock: $inStock", style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                                        Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Text("₹ ${price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                            const SizedBox(width: 8),
+                                            Text("|  In Stock: $inStock", style: TextStyle(color: _accent, fontSize: 12, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  SizedBox(
-                                    width: 80,
-                                    height: 40,
-                                    child: TextField(
-                                      controller: ctrl,
-                                      keyboardType: TextInputType.number,
-                                      decoration: InputDecoration(
-                                        labelText: 'Req',
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                                      ),
-                                      onChanged: (val) {
-                                        final newQty = int.tryParse(val) ?? 0;
-                                        sp.updateQuantity(pid, newQty);
-                                      },
-                                    ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text("Total: ₹ ${lineTotal.toStringAsFixed(2)}", style: const TextStyle(fontSize: 12)),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      SizedBox(
+                                        width: 80,
+                                        height: 40,
+                                        child: TextField(
+                                          controller: ctrl,
+                                          keyboardType: TextInputType.number,
+                                          style: const TextStyle(color: Colors.white),
+                                          decoration: InputDecoration(
+                                            labelText: 'Req',
+                                            labelStyle: const TextStyle(color: Colors.white54),
+                                            filled: true,
+                                            fillColor: Colors.black12,
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                              borderSide: BorderSide(color: Colors.white24),
+                                            ),
+                                             enabledBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                              borderSide: BorderSide(color: Colors.white24),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                              borderSide: BorderSide(color: _accent),
+                                            ),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                          ),
+                                          onChanged: (val) {
+                                            final newQty = int.tryParse(val) ?? 0;
+                                            sp.updateQuantity(pid, newQty);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text("Total: ₹ ${lineTotal.toStringAsFixed(2)}", style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                                    ],
+                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))]
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        );
+                      },
+                    ),
+                  ),
+                  
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                     decoration: BoxDecoration(
+                      color: _bg, 
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "Total Items: ${selectedEntries.length}",
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Total Items: ${selectedEntries.length}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                            ),
+                            Text(
+                              "Total Amount: ₹ ${totalAmount.toStringAsFixed(2)}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                            ),
+                          ],
                         ),
-                        Text(
-                          "Total Amount: ₹ ${totalAmount.toStringAsFixed(2)}",
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
-                        ),
+                        const SizedBox(height: 12),
+                        
+                           GestureDetector(
+                            onTap: () async {
+                              final selectedDate = await showDatePicker(
+                                context: context,
+                                initialDate: sp.deliveryDate ?? DateTime.now(), 
+                                firstDate: DateTime(2024),
+                                lastDate: DateTime(2030),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: ColorScheme.dark(
+                                        primary: _accent,
+                                        onPrimary: Colors.white,
+                                        surface: _card,
+                                        onSurface: Colors.white,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (selectedDate == null) return;
+                
+                              final selectedTime = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay(hour: sp.deliveryDate?.hour ?? 9, minute: sp.deliveryDate?.minute ?? 0),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      timePickerTheme: TimePickerThemeData(
+                                        backgroundColor: _card,
+                                        hourMinuteTextColor: Colors.white,
+                                        dayPeriodTextColor: Colors.white70,
+                                        dialHandColor: _accent,
+                                        dialBackgroundColor: Colors.grey[800],
+                                      ),
+                                      colorScheme: ColorScheme.dark(
+                                        primary: _accent,
+                                        onPrimary: Colors.white,
+                                        surface: _card,
+                                        onSurface: Colors.white,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                
+                              final finalDate = DateTime(
+                                selectedDate.year,
+                                selectedDate.month,
+                                selectedDate.day,
+                                selectedTime?.hour ?? 0,
+                                selectedTime?.minute ?? 0,
+                              );
+                
+                              sp.deliveryDate = finalDate;
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _card,
+                                border: Border.all(color: Colors.white24),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.calendar_month, color: Colors.white70),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      sp.deliveryDate == null
+                                          ? "Select Delivery Date & Time"
+                                          : "${sp.deliveryDate!.day}/${sp.deliveryDate!.month}/${sp.deliveryDate!.year}   "
+                                          "${sp.deliveryDate!.hour.toString().padLeft(2, '0')}:"
+                                          "${sp.deliveryDate!.minute.toString().padLeft(2, '0')}",
+                                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: sp.deliveryDate != null ? () {
+                              sp.submitStockOrder(context);
+                            } : null,
+                            child: const Text("Confirm Stock Order", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        )
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    
-                       GestureDetector(
-                        onTap: () async {
-                          final selectedDate = await showDatePicker(
-                            context: context,
-                            initialDate: sp.deliveryDate ?? DateTime.now(), // Use current date if null for picker init
-                            firstDate: DateTime(2024),
-                            lastDate: DateTime(2030),
-                          );
-                          if (selectedDate == null) return;
-            
-                          final selectedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay(hour: sp.deliveryDate?.hour ?? 9, minute: sp.deliveryDate?.minute ?? 0),
-                          );
-            
-                          final finalDate = DateTime(
-                            selectedDate.year,
-                            selectedDate.month,
-                            selectedDate.day,
-                            selectedTime?.hour ?? 0,
-                            selectedTime?.minute ?? 0,
-                          );
-            
-                          sp.deliveryDate = finalDate;
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.calendar_month, color: Colors.black54),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  sp.deliveryDate == null
-                                      ? "Select Delivery Date & Time"
-                                      : "${sp.deliveryDate!.day}/${sp.deliveryDate!.month}/${sp.deliveryDate!.year}   "
-                                      "${sp.deliveryDate!.hour.toString().padLeft(2, '0')}:"
-                                      "${sp.deliveryDate!.minute.toString().padLeft(2, '0')}",
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: sp.deliveryDate != null ? () {
-                          sp.submitStockOrder(context);
-                        } : null,
-                        child: const Text("Confirm Stock Order", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  ],
-                ),
-              )
-            ],
-          );
-        },
+                  )
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
