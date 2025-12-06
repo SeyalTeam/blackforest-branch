@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:branch/cart_provider.dart';
+import 'package:branch/return_provider.dart';
+import 'package:branch/stock_provider.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/categories_page.dart';
 import 'package:http/http.dart' as http;
@@ -13,7 +15,9 @@ import 'package:esc_pos_printer/esc_pos_printer.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 
 class CartPage extends StatefulWidget {
-  const CartPage({super.key});
+  final bool isStockOrder;
+  final bool isReturnOrder;
+  const CartPage({super.key, this.isStockOrder = false, this.isReturnOrder = false});
 
   @override
   _CartPageState createState() => _CartPageState();
@@ -33,7 +37,25 @@ class _CartPageState extends State<CartPage> {
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    if (!widget.isStockOrder && !widget.isReturnOrder) {
+      _fetchUserData();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Access provider after context is available, but ensure it exists.
+        // Since we wrapped it in navigation, it should be there.
+        try {
+          final sp = Provider.of<StockProvider>(context, listen: false);
+          if (sp.deliveryDate == null) {
+            final now = DateTime.now();
+            final tomorrow = now.add(const Duration(days: 1));
+            // Default: Tomorrow 9:00 AM
+            sp.deliveryDate = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9, 0);
+          }
+        } catch (_) {
+          // Fallback or ignore if provider not found (should not happen in stock mode)
+        }
+      });
+    }
   }
 
   // -------------------------
@@ -64,7 +86,7 @@ class _CartPageState extends State<CartPage> {
           await _fetchWaiterBranch(token);
         }
 
-        setState(() {});
+        if (mounted) setState(() {});
         Provider.of<CartProvider>(context, listen: false).setBranchId(_branchId);
       }
     } catch (_) {}
@@ -669,6 +691,14 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isStockOrder) {
+      return _buildStockOrderInternal();
+    }
+    if (widget.isReturnOrder) {
+       return _buildReturnOrderInternal();
+    }
+    
+    // Original Billing UI
     return CommonScaffold(
       title: 'Cart',
       pageType: PageType.cart,
@@ -678,17 +708,14 @@ class _CartPageState extends State<CartPage> {
         child: Consumer<CartProvider>(
           builder: (context, cartProvider, child) {
             final items = cartProvider.cartItems;
-            // Calculate total items as sum of quantities (assuming double, but display as int if whole)
             final totalQuantity = cartProvider.cartItems.fold<double>(0, (sum, item) => sum + item.quantity);
             final totalItemsDisplay = totalQuantity % 1 == 0 ? totalQuantity.toInt().toString() : totalQuantity.toStringAsFixed(2);
 
             return SafeArea(
               child: Stack(
                 children: [
-                  // Main content
                   Column(
                     children: [
-                      // If empty show empty state else list
                       Expanded(
                         child: items.isEmpty
                             ? _buildEmptyState()
@@ -710,7 +737,6 @@ class _CartPageState extends State<CartPage> {
                       ),
                     ],
                   ),
-                  // Sticky bottom bar
                   Positioned(
                     left: 0,
                     right: 0,
@@ -728,7 +754,6 @@ class _CartPageState extends State<CartPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // UPDATED: Total with colors, space between amount and items, toggle switch on right
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -750,7 +775,7 @@ class _CartPageState extends State<CartPage> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  const SizedBox(width: 12), // Space between amount and items
+                                  const SizedBox(width: 12),
                                   Text(
                                     totalItemsDisplay,
                                     style: TextStyle(
@@ -778,10 +803,8 @@ class _CartPageState extends State<CartPage> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          // Payment chips row (full width)
                           _buildPaymentChips(),
                           const SizedBox(height: 16),
-                          // OK BILL button on separate row
                           SizedBox(
                             width: double.infinity,
                             height: 54,
@@ -799,29 +822,15 @@ class _CartPageState extends State<CartPage> {
                                   SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                   ),
                                   SizedBox(width: 10),
-                                  Text('Processing...', style: TextStyle(fontSize: 16)),
+                                  Text("Processing...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                                 ],
                               )
-                                  : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.receipt_long, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'OK BILL',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white, // FORCE WHITE TEXT
-                                    ),
-                                  ),
-                                ],
+                                  : const Text(
+                                "OK BILL",
+                                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
@@ -837,236 +846,412 @@ class _CartPageState extends State<CartPage> {
       ),
     );
   }
-}
 
-// -------------------------
-// ---------- SMALL WIDGETS ----------
-// -------------------------
+  // Stock Order Specific UI
+  Widget _buildStockOrderInternal() {
+    // Set default date if null (Safe to do here as we are interacting with provider, but better in init. 
+    // We will assume init handles it or we show it. 
+    // Actually, setting it in build will cause rebuild loop if notifyListeners is called.
+    // So distinct check or post frame callback is needed.
+    // Let's rely on the separate initState update unless I combine them.
+    
+    return CommonScaffold(
+      title: 'Stock Order Cart',
+      pageType: PageType.stock, // Correctly identify as Stock Page
+      body: Consumer<StockProvider>(
+        builder: (context, sp, _) {
+          final selectedEntries = sp.selected.entries.where((e) => e.value).toList();
 
-class _CartItemCard extends StatefulWidget {
-  final CartItem item;
-  final VoidCallback onRemove;
-  final Function(double) onQuantityChange;
-  final Color cardColor;
-  final Color accent;
+          if (selectedEntries.isEmpty) {
+            return const Center(child: Text("No items in stock order"));
+          }
 
-  const _CartItemCard({
-    Key? key,
-    required this.item,
-    required this.onRemove,
-    required this.onQuantityChange,
-    required this.cardColor,
-    required this.accent,
-  }) : super(key: key);
+          int totalReq = 0;
+          double totalAmount = 0.0;
+          
+          for(var entry in selectedEntries) {
+            final pid = entry.key;
+            final req = sp.quantities[pid] ?? 0;
+            final price = sp.prices[pid] ?? 0.0;
+            totalReq += req;
+            totalAmount += (req * price);
+          }
 
-  @override
-  _CartItemCardState createState() => _CartItemCardState();
-}
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: selectedEntries.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, index) {
+                    final entry = selectedEntries[index];
+                    final pid = entry.key;
+                    final name = sp.productNames[pid] ?? "Unknown";
+                    final req = sp.quantities[pid] ?? 0;
+                    final price = sp.prices[pid] ?? 0.0;
+                    final inStock = sp.inStock[pid] ?? 0; // Get In Stock
+                    final lineTotal = req * price;
+                    
+                    final ctrl = sp.qtyCtrl[pid];
+                    if (ctrl != null && ctrl.text != req.toString()) {
+                      ctrl.text = req.toString();
+                    }
 
-class _CartItemCardState extends State<_CartItemCard> {
-  late TextEditingController _qtyController;
-  late double _step;
-
-  String _qtyDisplay(double qty) {
-    if (qty % 1 == 0) return qty.toInt().toString();
-    return qty.toStringAsFixed(2);
-  }
-
-  double _calculateStep(double qty) {
-    if (qty == 0) return 0.25; // Default step
-    int a = (qty * 100).round().abs();
-    int b = 100;
-    int g = _gcd(a, b);
-    return g / 100.0;
-  }
-
-  int _gcd(int a, int b) {
-    while (b != 0) {
-      int t = b;
-      b = a % b;
-      a = t;
-    }
-    return a;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _qtyController = TextEditingController(text: _qtyDisplay(widget.item.quantity));
-    _step = _calculateStep(widget.item.quantity);
-  }
-
-  @override
-  void didUpdateWidget(covariant _CartItemCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.quantity != widget.item.quantity) {
-      _qtyController.text = _qtyDisplay(widget.item.quantity);
-      _step = _calculateStep(widget.item.quantity);
-    }
-  }
-
-  @override
-  void dispose() {
-    _qtyController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: widget.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          )
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            // 🟦 IMAGE → Tap to REMOVE
-            GestureDetector(
-              onTap: widget.onRemove,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: widget.item.imageUrl != null
-                    ? CachedNetworkImage(
-                  imageUrl: widget.item.imageUrl!,
-                  width: 68,
-                  height: 68,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => SizedBox(
-                    width: 68,
-                    height: 68,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: widget.accent,
+                    return Dismissible(
+                      key: Key(pid),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        padding: const EdgeInsets.only(right: 20),
+                        alignment: Alignment.centerRight,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.delete, color: Colors.white),
                       ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 68,
-                    height: 68,
-                    color: Colors.grey[800],
-                    child: Icon(Icons.image_not_supported, color: Colors.grey[600]),
-                  ),
-                )
-                    : Container(
-                  width: 68,
-                  height: 68,
-                  color: Colors.grey[800],
-                  child: Icon(Icons.image_not_supported, color: Colors.grey[600]),
+                      onDismissed: (direction) {
+                        sp.toggleSelection(pid, false);
+                      },
+                      child: GestureDetector(
+                        onDoubleTap: () {
+                           sp.toggleSelection(pid, false);
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                            ]
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Text("₹ ${price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                        const SizedBox(width: 8),
+                                        Text("|  In Stock: $inStock", style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  SizedBox(
+                                    width: 80,
+                                    height: 40,
+                                    child: TextField(
+                                      controller: ctrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        labelText: 'Req',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                                      ),
+                                      onChanged: (val) {
+                                        final newQty = int.tryParse(val) ?? 0;
+                                        sp.updateQuantity(pid, newQty);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text("Total: ₹ ${lineTotal.toStringAsFixed(2)}", style: const TextStyle(fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // 🟦 Name + Price + Subtotal
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.item.name,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+              
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))]
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Total Items: ${selectedEntries.length}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          "Total Amount: ₹ ${totalAmount.toStringAsFixed(2)}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                        ),
+                      ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 12),
+                    
+                       GestureDetector(
+                        onTap: () async {
+                          final selectedDate = await showDatePicker(
+                            context: context,
+                            initialDate: sp.deliveryDate ?? DateTime.now(), // Use current date if null for picker init
+                            firstDate: DateTime(2024),
+                            lastDate: DateTime(2030),
+                          );
+                          if (selectedDate == null) return;
+            
+                          final selectedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: sp.deliveryDate?.hour ?? 9, minute: sp.deliveryDate?.minute ?? 0),
+                          );
+            
+                          final finalDate = DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            selectedTime?.hour ?? 0,
+                            selectedTime?.minute ?? 0,
+                          );
+            
+                          sp.deliveryDate = finalDate;
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_month, color: Colors.black54),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  sp.deliveryDate == null
+                                      ? "Select Delivery Date & Time"
+                                      : "${sp.deliveryDate!.day}/${sp.deliveryDate!.month}/${sp.deliveryDate!.year}   "
+                                      "${sp.deliveryDate!.hour.toString().padLeft(2, '0')}:"
+                                      "${sp.deliveryDate!.minute.toString().padLeft(2, '0')}",
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: sp.deliveryDate != null ? () {
+                          sp.submitStockOrder(context);
+                        } : null,
+                        child: const Text("Confirm Stock Order", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Return Order Specific UI
+  Widget _buildReturnOrderInternal() {
+     return CommonScaffold(
+      title: 'Return Cart',
+      pageType: PageType.returnorder,
+      onScanCallback: _handleScan,
+      body: Container(
+        color: _bg,
+        child: Consumer<ReturnProvider>(
+          builder: (context, provider, child) {
+            final items = provider.returnItems;
+            
+            return SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: items.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              return _ReturnCartItemCard(
+                                key: ValueKey(item.id),
+                                item: item,
+                                cardColor: _card,
+                                accent: _accent,
+                                onRemove: () => provider.removeItem(item.id),
+                                onQuantityChange: (q) => provider.updateQuantity(item.id, q),
+                                provider: provider,
+                              );
+                            },
+                          ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '₹${widget.item.price.toStringAsFixed(2)} each',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Subtotal: ₹${(widget.item.price * widget.item.quantity).toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _bg, 
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                         Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total:',
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '₹${provider.total.toStringAsFixed(2)}',
+                                style: const TextStyle(color: Colors.green, fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: items.isNotEmpty ? () => provider.submitReturn(context, _branchId) : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Confirm Return', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-            // 🟦 Quantity controls with input field
-            Column(
-              children: [
-                _QuantityButton(
-                  icon: Icons.add_circle_outline,
-                  onTap: () => widget.onQuantityChange((widget.item.quantity + _step).clamp(0.0, double.infinity)),
-                  accent: widget.accent,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: SizedBox(
-                    width: 50,
-                    child: TextField(
-                      controller: _qtyController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        border: InputBorder.none,
-                      ),
-                      onSubmitted: (value) {
-                        double newQty = double.tryParse(value) ?? widget.item.quantity;
-                        newQty = newQty.clamp(0.0, double.infinity);
-                        widget.onQuantityChange(newQty);
-                        // Step will be updated in didUpdateWidget
-                      },
-                    ),
-                  ),
-                ),
-                _QuantityButton(
-                  icon: Icons.remove_circle_outline,
-                  onTap: () => widget.onQuantityChange((widget.item.quantity - _step).clamp(0.0, double.infinity)),
-                  accent: widget.accent,
-                ),
-              ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _QuantityButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
+class _ReturnCartItemCard extends StatelessWidget {
+  final ReturnItem item;
+  final Color cardColor;
   final Color accent;
+  final VoidCallback onRemove;
+  final Function(double) onQuantityChange;
+  final ReturnProvider provider;
 
-  const _QuantityButton({Key? key, required this.icon, required this.onTap, required this.accent}) : super(key: key);
+  const _ReturnCartItemCard({
+    required Key key,
+    required this.item,
+    required this.cardColor,
+    required this.accent,
+    required this.onRemove,
+    required this.onQuantityChange,
+    required this.provider,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withOpacity(0.04)),
-        ),
-        child: Icon(icon, color: accent, size: 22),
+    ImageProvider? imageProvider;
+    final tempFile = provider.getTempPhoto(item.id);
+    final url = provider.getPhotoUrl(item.id);
+
+    if (tempFile != null && tempFile.existsSync()) {
+      imageProvider = FileImage(tempFile);
+    } else if (url != null) {
+      imageProvider = CachedNetworkImageProvider(url);
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 70,
+              height: 70,
+              color: Colors.white10,
+              child: imageProvider != null
+                  ? Image(image: imageProvider, fit: BoxFit.cover)
+                  : const Icon(Icons.broken_image, color: Colors.white24),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${item.price.toStringAsFixed(2)} each',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Subtotal: ₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            children: [
+               _QtyBtn(icon: Icons.add, onTap: () => onQuantityChange(item.quantity + 1), accent: accent),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  item.quantity % 1 == 0 ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              _QtyBtn(icon: Icons.remove, onTap: () => onQuantityChange(item.quantity - 1), accent: accent),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1082,7 +1267,6 @@ class _PaymentChip extends StatelessWidget {
   final double width;
 
   const _PaymentChip({
-    Key? key,
     required this.label,
     required this.icon,
     required this.selected,
@@ -1090,38 +1274,163 @@ class _PaymentChip extends StatelessWidget {
     required this.accent,
     required this.chipBg,
     required this.width,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: width, // 🔥 FIXED WIDTH
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? accent.withOpacity(0.18) : chipBg,
+          color: selected ? accent : chipBg,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? accent : Colors.transparent,
+            color: selected ? accent : Colors.white12,
+            width: 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: selected ? accent : Colors.white70),
-            const SizedBox(width: 6),
+            Icon(
+              icon,
+              color: selected ? Colors.white : Colors.white70,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
-                color: selected ? accent : Colors.white70,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CartItemCard extends StatelessWidget {
+  final CartItem item;
+  final Color cardColor;
+  final Color accent;
+  final VoidCallback onRemove;
+  final Function(double) onQuantityChange;
+
+  const _CartItemCard({
+    required Key key,
+    required this.item,
+    required this.cardColor,
+    required this.accent,
+    required this.onRemove,
+    required this.onQuantityChange,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // IMAGE (Tap to Remove)
+          GestureDetector(
+            onTap: onRemove,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: item.imageUrl != null
+                  ? CachedNetworkImage(
+                imageUrl: item.imageUrl!,
+                width: 70,
+                height: 70,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(color: Colors.white10),
+                errorWidget: (context, url, error) => Container(color: Colors.white10, child: const Icon(Icons.broken_image, color: Colors.white24)),
+              )
+                  : Container(
+                width: 70,
+                height: 70,
+                color: Colors.white10,
+                child: const Icon(Icons.fastfood, color: Colors.white24),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // INFO
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${item.price.toStringAsFixed(2)} each',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Subtotal: ₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          // QTY CONTROLS
+          Column(
+            children: [
+              _QtyBtn(icon: Icons.add, onTap: () => onQuantityChange(item.quantity + 1), accent: accent),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  item.quantity % 1 == 0 ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(1),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              _QtyBtn(icon: Icons.remove, onTap: () => onQuantityChange(item.quantity - 1), accent: accent),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QtyBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color accent;
+
+  const _QtyBtn({required this.icon, required this.onTap, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 20, 
+        height: 20, 
+        decoration: BoxDecoration(
+          color: accent,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, color: Colors.white, size: 14),
       ),
     );
   }

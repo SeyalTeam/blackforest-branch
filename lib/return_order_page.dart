@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:branch/common_scaffold.dart';
+import 'package:branch/cart_page.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/return_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -432,23 +433,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       onScanCallback: _handleScan,
       body: Column(
         children: [
-          Consumer<ReturnProvider>(
-            builder: (context, provider, child) {
-              return Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: provider.returnItems.isNotEmpty ? _submitReturnOrders : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: const Text('Confirm Return Order'),
-                ),
-              );
-            },
-          ),
+          // Button removed as per request to use Cart Icon in header
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Colors.black))

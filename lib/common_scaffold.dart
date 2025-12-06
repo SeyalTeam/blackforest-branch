@@ -9,6 +9,8 @@ import 'package:permission_handler/permission_handler.dart'; // Added for camera
 import 'package:branch/categories_page.dart';
 import 'package:branch/cart_page.dart';
 import 'package:branch/cart_provider.dart';
+import 'package:branch/return_provider.dart'; // Added import for ReturnProvider
+import 'package:branch/stock_provider.dart'; // Added import for StockProvider
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
 import 'package:branch/editbill.dart';
@@ -143,37 +145,123 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           iconTheme: const IconThemeData(color: Colors.black),
           actionsIconTheme: const IconThemeData(color: Colors.black),
           actions: [
-            Consumer<CartProvider>(
-              builder: (_, cartProvider, __) {
-                final int count = cartProvider.cartItems.length;
-                return Stack(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.shopping_cart_outlined),
-                      onPressed: () {
-                        _resetTimer();
-                        Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const CartPage()));
-                      },
-                    ),
-                    if (count > 0)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                              color: Colors.red, borderRadius: BorderRadius.circular(10)),
-                          child: Text(
-                            '$count',
-                            style: const TextStyle(color: Colors.white, fontSize: 10),
+            if (widget.pageType == PageType.stock)
+              Consumer<StockProvider>(
+                builder: (_, sp, __) {
+                  final int count = sp.selected.values.where((v) => v == true).length;
+                  return Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        onPressed: () {
+                          _resetTimer();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChangeNotifierProvider.value(
+                                value: sp,
+                                child: const CartPage(isStockOrder: true),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                                color: Colors.blue, borderRadius: BorderRadius.circular(10)), // Blue badge for stock? Or Keep Red. Let's keep Red but maybe distinct.
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
+                    ],
+                  );
+                },
+              )
+            else if (widget.pageType == PageType.returnorder)
+              Consumer<ReturnProvider>(
+                builder: (_, rp, __) {
+                  final int count = rp.returnItems.length;
+                  return Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        onPressed: () {
+                          _resetTimer();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CartPage(isReturnOrder: true),
+                            ),
+                          );
+                        },
                       ),
-                  ],
-                );
-              },
-            ),
+                      if (count > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              )
+            else
+              Consumer<CartProvider>(
+                builder: (_, cartProvider, __) {
+                  final int count = cartProvider.cartItems.length;
+                  return Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        onPressed: () {
+                          _resetTimer();
+                          Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => const CartPage()));
+                        },
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
           ],
         ),
 
