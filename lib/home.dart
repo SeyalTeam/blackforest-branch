@@ -6,7 +6,8 @@ import 'categories_page.dart';
 import 'billsheet.dart';
 import 'qr_update_page.dart';
 import 'stock_order.dart';
-// REMOVED: import 'stockorder_reports.dart';
+import 'stock_order.dart';
+import 'stockorder_report.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,8 +23,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Updated to 8 cards only
-    for (int i = 0; i < 8; i++) {
+    // Updated to 9 cards
+    for (int i = 0; i < 9; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -71,6 +72,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _openQrUpdate() {
     Navigator.push(context, _createRoute(const QrUpdatePage()));
+  }
+
+  void _openStockReport() {
+    Navigator.push(context, _createRoute(const StockOrderReportPage()));
   }
 
   void _comingSoon() {
@@ -252,6 +257,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       const Color(0xFFE100FF),
                       'QR Update',
                       _openQrUpdate,
+                    ),
+
+                    _buildCard(
+                      8,
+                      Icons.assignment,
+                      const Color(0xFFFF9966),
+                      const Color(0xFFFF5E62),
+                      'Stock Report',
+                      _openStockReport,
                     ),
                   ],
                 );

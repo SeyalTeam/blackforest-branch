@@ -2,6 +2,25 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:branch/common_scaffold.dart';
+
+class _ExpenseItem {
+  String? source;
+  final TextEditingController reason;
+  final TextEditingController amount;
+
+  _ExpenseItem({
+    this.source,
+    TextEditingController? reason,
+    TextEditingController? amount,
+  })  : reason = reason ?? TextEditingController(),
+        amount = amount ?? TextEditingController();
+
+  void dispose() {
+    reason.dispose();
+    amount.dispose();
+  }
+}
 
 class ExpenseDetailsPage extends StatefulWidget {
   const ExpenseDetailsPage({Key? key}) : super(key: key);
@@ -12,8 +31,10 @@ class ExpenseDetailsPage extends StatefulWidget {
 
 class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
   final _formKey = GlobalKey<FormState>();
-  List<Map<String, dynamic>> _expenseDetails = [];
-  final _totalExpensesController = TextEditingController();
+  final List<_ExpenseItem> _expenseItems = [];
+  final _totalExpensesController = TextEditingController(); // Only for display
+  DateTime _selectedDate = DateTime.now();
+
   final List<String> _expenseSources = [
     'MAINTENANCE',
     'TRANSPORT',
@@ -28,6 +49,7 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     'OC PRODUCTS',
     'OTHERS'
   ];
+
   bool _isSubmitting = false;
   bool _loadingBranch = true;
   String? _branchId;
@@ -50,61 +72,88 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
   void _addExpenseDetail() {
     setState(() {
-      final amountController = TextEditingController();
-      amountController.addListener(_updateTotalExpenses);
-      _expenseDetails.add({
-        'source': null,
-        'reason': TextEditingController(),
-        'amount': amountController,
-      });
+      final newItem = _ExpenseItem();
+      newItem.amount.addListener(_updateTotalExpenses);
+      _expenseItems.add(newItem);
     });
   }
 
   void _removeExpenseDetail(int index) {
     setState(() {
-      _expenseDetails[index]['amount'].removeListener(_updateTotalExpenses);
-      _expenseDetails[index]['reason'].dispose();
-      _expenseDetails[index]['amount'].dispose();
-      _expenseDetails.removeAt(index);
+      _expenseItems[index].amount.removeListener(_updateTotalExpenses);
+      _expenseItems[index].dispose();
+      _expenseItems.removeAt(index);
       _updateTotalExpenses();
     });
   }
 
   void _updateTotalExpenses() {
-    double total = _expenseDetails.fold(
+    double total = _expenseItems.fold(
       0.0,
-          (sum, exp) => sum + (double.tryParse(exp['amount'].text) ?? 0.0),
+      (sum, item) {
+        final val = double.tryParse(item.amount.text);
+        return sum + (val ?? 0.0);
+      },
     );
     _totalExpensesController.text = total.toStringAsFixed(2);
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please correct errors in the form.')),
+      );
+      return;
+    }
+    if (_expenseItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one expense.')),
+      );
+      return;
+    }
     if (_branchId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Branch not found. Please log in again.')),
       );
       return;
     }
+
     setState(() => _isSubmitting = true);
+
     final expenseData = {
       'branch': _branchId,
-      'details': _expenseDetails.map((e) {
+      'details': _expenseItems.map((e) {
         return {
-          'source': e['source'],
-          'reason': e['reason'].text,
-          'amount': double.tryParse(e['amount'].text) ?? 0.0,
+          'source': e.source,
+          'reason': e.reason.text.trim(),
+          'amount': double.tryParse(e.amount.text) ?? 0.0,
         };
       }).toList(),
       'total': double.tryParse(_totalExpensesController.text) ?? 0.0,
-      'date': DateTime.now().toIso8601String(),
+      'date': _selectedDate.toIso8601String(),
     };
+
     try {
       final response = await http.post(
         Uri.parse('https://admin.theblackforestcakes.com/api/expenses'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(expenseData),
       );
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -112,14 +161,11 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
             backgroundColor: Colors.green,
           ),
         );
-        setState(() {
-          _expenseDetails.clear();
-          _totalExpensesController.clear();
-        });
+        _resetForm();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to submit: ${response.body}'),
+            content: Text('Failed to submit: ${response.statusCode} - ${response.body}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -132,257 +178,255 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
         ),
       );
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _resetForm() {
+    setState(() {
+      for (var item in _expenseItems) {
+        item.dispose();
+      }
+      _expenseItems.clear();
+      _updateTotalExpenses();
+      _selectedDate = DateTime.now();
+    });
+  }
+
+  @override
+  void dispose() {
+    _totalExpensesController.dispose();
+    for (var item in _expenseItems) {
+      item.amount.removeListener(_updateTotalExpenses);
+      item.dispose();
+    }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
     if (_loadingBranch) {
-      return const Scaffold(
+      return const CommonScaffold(
+        title: 'Expense Details',
+        pageType: PageType.expense,
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Expense Details',
-          style: TextStyle(color: Colors.white),
-        ),
-        elevation: 0,
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-            onPressed: () {
-              // Toggle theme if needed, but assuming theme is handled elsewhere
-            },
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+
+    return CommonScaffold(
+      title: 'Expense Details',
+      pageType: PageType.expense,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Header Card
             Card(
               elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Text(
-                      'Total Expenses',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Expenses',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '₹${_totalExpensesController.text.isEmpty ? "0.00" : _totalExpensesController.text}',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueAccent,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '₹${_totalExpensesController.text}',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.primaryColor,
-                      ),
-                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _branchName ?? 'Branch',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        InkWell(
+                          onTap: () => _selectDate(context),
+                          child: Row(
+                            children: [
+                              Text(
+                                "${_selectedDate.toLocal()}".split(' ')[0],
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.calendar_today, size: 16),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Expense Details - ${_branchName ?? "Branch"}',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            
+            // Expense List Form
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  if (_expenseItems.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        "No expenses added yet.\nTap 'Add Expense' to begin.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ..._expenseItems.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    return _buildExpenseCard(index, item);
+                  }).toList(),
+                ],
               ),
             ),
+
             const SizedBox(height: 16),
-            Expanded(
-              child: Form(
-                key: _formKey,
-                child: ListView.builder(
-                  itemCount: _expenseDetails.length,
-                  itemBuilder: (context, index) {
-                    var expense = _expenseDetails[index];
-                    return Dismissible(
-                      key: UniqueKey(),
-                      direction: DismissDirection.endToStart,
-                      onDismissed: (direction) {
-                        _removeExpenseDetail(index);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Expense ${index + 1} removed'),
-                            action: SnackBarAction(
-                              label: 'Undo',
-                              onPressed: () {
-                                // Implement undo if desired
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                      background: Container(
-                        color: Colors.red,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20.0),
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      child: Card(
-                        margin: const EdgeInsets.only(bottom: 16.0),
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Expense ${index + 1}',
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.red),
-                                    onPressed: () =>
-                                        _removeExpenseDetail(index),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              DropdownButtonFormField<String>(
-                                value: expense['source'],
-                                items: _expenseSources.map((source) {
-                                  return DropdownMenuItem<String>(
-                                    value: source,
-                                    child: Text(source),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    expense['source'] = value;
-                                  });
-                                },
-                                decoration: InputDecoration(
-                                  labelText: 'Source',
-                                  prefixIcon: const Icon(Icons.category),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[100],
-                                ),
-                                validator: (value) => value == null
-                                    ? 'Please select a source'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: expense['reason'],
-                                decoration: InputDecoration(
-                                  labelText: 'Reason',
-                                  prefixIcon: const Icon(Icons.description),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[100],
-                                ),
-                                validator: (value) => value!.isEmpty
-                                    ? 'Please enter a reason'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: expense['amount'],
-                                decoration: InputDecoration(
-                                  labelText: 'Amount',
-                                  prefixText: '₹',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[100],
-                                ),
-                                keyboardType: const TextInputType
-                                    .numberWithOptions(decimal: true),
-                                validator: (value) => value!.isEmpty
-                                    ? 'Please enter an amount'
-                                    : null,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            
+            // Add Button
             ElevatedButton.icon(
               onPressed: _addExpenseDetail,
               icon: const Icon(Icons.add),
               label: const Text('Add Expense'),
               style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
+            
+            // Submit Button
             ElevatedButton.icon(
               onPressed: _isSubmitting ? null : _submitForm,
               icon: _isSubmitting
                   ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-                  : const Icon(Icons.send),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check),
               label: Text(_isSubmitting ? 'Submitting...' : 'Submit Expenses'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.purple,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
-            const SizedBox(height: 16), // Extra padding at bottom
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _totalExpensesController.dispose();
-    for (var expense in _expenseDetails) {
-      expense['amount'].removeListener(_updateTotalExpenses);
-      expense['reason'].dispose();
-      expense['amount'].dispose();
-    }
-    super.dispose();
+  Widget _buildExpenseCard(int index, _ExpenseItem item) {
+    return Dismissible(
+      key: ObjectKey(item),
+      direction: DismissDirection.endToStart,
+      onDismissed: (direction) => _removeExpenseDetail(index),
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Expense #${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _removeExpenseDetail(index),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Source Dropdown
+              DropdownButtonFormField<String>(
+                value: item.source,
+                items: _expenseSources.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                onChanged: (val) => setState(() => item.source = val),
+                decoration: InputDecoration(
+                  labelText: 'Source',
+                  prefixIcon: const Icon(Icons.category_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                validator: (val) => val == null ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              
+              // Reason Input
+              TextFormField(
+                controller: item.reason,
+                decoration: InputDecoration(
+                  labelText: 'Reason',
+                  prefixIcon: const Icon(Icons.description_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              
+              // Amount Input
+              TextFormField(
+                controller: item.amount,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Amount',
+                  prefixText: '₹ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                validator: (val) {
+                  if (val == null || val.isEmpty) return 'Required';
+                  final num = double.tryParse(val);
+                  if (num == null) return 'Invalid number';
+                  if (num <= 0) return 'Must be > 0';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

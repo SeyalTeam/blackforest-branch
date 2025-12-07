@@ -22,8 +22,9 @@ enum PageType {
   cart,
   billsheet,
   editbill,
-  stock, // NEW
-  returnorder // NEW (optional for return_order.dart)
+  stock,
+  returnorder,
+  expense, // NEW
 }
 
 class CommonScaffold extends StatefulWidget {
@@ -248,9 +249,11 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                                 color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                             child: Text(
                               '$count',
                               style: const TextStyle(color: Colors.white, fontSize: 10),
+                              textAlign: TextAlign.center,
                             ),
                           ),
                         ),

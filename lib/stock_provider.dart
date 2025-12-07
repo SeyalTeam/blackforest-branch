@@ -32,6 +32,10 @@ class StockProvider extends ChangeNotifier {
   List<dynamic> get products => _products;
   List<dynamic> get filteredProducts => _filteredProducts;
 
+  // ========== REPORT DATA ==========
+  List<dynamic> _stockReports = [];
+  List<dynamic> get stockReports => _stockReports;
+
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
@@ -427,5 +431,77 @@ class StockProvider extends ChangeNotifier {
     _searchCtrl.clear();
 
     notifyListeners();
+  }
+
+  // ========== REPORT LOGIC ==========
+
+  Future<void> fetchStockReports({DateTime? date}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+      if (token == null) return;
+
+      if (_userRole == null) await _loadUserData(token);
+
+      // Default to today if no date provided
+      final now = date ?? DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+
+      String query = "where[createdAt][greater_than_equal]=$startOfDay&where[createdAt][less_than_equal]=$endOfDay";
+
+      if (_branchId != null) {
+        query += "&where[branch][equals]=$_branchId";
+      }
+
+      final res = await http.get(
+        Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders?$query&limit=100&depth=2"),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (res.statusCode == 200) {
+        _stockReports = jsonDecode(res.body)["docs"] ?? [];
+      } else {
+        _stockReports = [];
+      }
+    } catch (e) {
+      print("Error fetching reports: $e");
+      _stockReports = [];
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<bool> updateStockOrderReceipt(String orderId, List<Map<String, dynamic>> items) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+      if (token == null) return false;
+
+      print("Updating stock order $orderId with items: ${jsonEncode(items)}");
+      
+      final res = await http.patch(
+        Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders/$orderId"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"items": items}),
+      );
+
+      print("Response status: ${res.statusCode}");
+      print("Response body: ${res.body}");
+
+      if (res.statusCode == 200) {
+        return true;
+      }
+    } catch (e) {
+      print("Error updating receipt: $e");
+    }
+    return false;
   }
 }
