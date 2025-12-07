@@ -15,8 +15,6 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
   DateTime _selectedDate = DateTime.now();
   // Map to track local edits: OrderID -> { ProductID -> ReceivedQty }
   final Map<String, Map<String, TextEditingController>> _controllers = {};
-  // Map to track status: OrderID -> { ProductID -> Status ("pending" | "approved") }
-  final Map<String, Map<String, String>> _statusControllers = {};
 
   @override
   void initState() {
@@ -49,7 +47,6 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       setState(() {
         _selectedDate = picked;
         _controllers.clear();
-        _statusControllers.clear();
       });
       _fetchData();
     }
@@ -62,7 +59,6 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
         controller.dispose();
       }
     }
-    _statusControllers.clear();
     super.dispose();
   }
 
@@ -156,21 +152,9 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       _controllers[orderId] = {};
       for (var item in items) {
         final pid = _getProductId(item);
-        // Default received to sending (or 0 if sending missing)
-        // User requested: "Snt count only need to show in Rec"
-        var recv = item["receivedQty"];
-        if (recv == 0 || recv == null) recv = item["sendingQty"];
-        final initialVal = (recv ?? 0).toString();
+        // Default received to sending (or required if sending missing), or 0
+        final initialVal = (item["receivedQty"] ?? item["sendingQty"] ?? item["requiredQty"] ?? 0).toString();
         _controllers[orderId]![pid] = TextEditingController(text: initialVal);
-      }
-    }
-
-    if (!_statusControllers.containsKey(orderId)) {
-      _statusControllers[orderId] = {};
-      for (var item in items) {
-        final pid = _getProductId(item);
-        // Default to item status or 'pending'
-        _statusControllers[orderId]![pid] = item["status"] ?? "pending";
       }
     }
 
@@ -200,20 +184,20 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
               children: [
                 Expanded(
                   child: Text(
-                    "${order['invoiceNumber'] ?? 'No Invoice #'}".toUpperCase(),
+                    "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(order["status"]).withOpacity(0.1),
+                    color: Colors.green.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _getStatusColor(order["status"])),
+                    border: Border.all(color: Colors.green),
                   ),
-                  child: Text(
-                    (order["status"] ?? "pending").toString().toUpperCase(),
-                    style: TextStyle(color: _getStatusColor(order["status"]), fontWeight: FontWeight.bold, fontSize: 12),
+                  child: const Text(
+                    "Received", // Assuming status is handled elsewhere or implicitly
+                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -248,73 +232,62 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
              final reqQty = item["requiredQty"] ?? 0;
              final sentQty = item["sendingQty"] ?? 0;
 
-             final isApproved = _statusControllers[orderId]![pid] == "approved";
-             
-             return GestureDetector(
-               onTap: () {
-                   setState(() {
-                      final current = _statusControllers[orderId]![pid];
-                      _statusControllers[orderId]![pid] = (current == "approved") ? "pending" : "approved";
-                   });
-               },
-               child: Container(
-                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                 decoration: BoxDecoration(
-                   color: isApproved ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.1),
-                   border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-                 ),
-                 child: Row(
-                   children: [
-                     // Product Name & Price
-                     Expanded(
-                       flex: 3,
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           Text(productName, style: const TextStyle(fontSize: 14)),
-                           Text("₹$price", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                         ],
+             return Container(
+               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+               decoration: BoxDecoration(
+                 border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+               ),
+               child: Row(
+                 children: [
+                   // Product Name & Price
+                   Expanded(
+                     flex: 3,
+                     child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         Text(productName, style: const TextStyle(fontSize: 14)),
+                         Text("₹$price", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                       ],
+                     ),
+                   ),
+                   // Required Qty
+                   Expanded(
+                     flex: 1,
+                     child: Center(child: Text(reqQty.toString(), style: const TextStyle(fontSize: 14))),
+                   ),
+                   // Sent Qty
+                   Expanded(
+                     flex: 1,
+                     child: Center(child: Text(sentQty.toString(), style: const TextStyle(fontSize: 14))),
+                   ),
+                   // Received Qty (Editable)
+                   Expanded(
+                     flex: 1,
+                     child: Container(
+                       height: 36,
+                       padding: const EdgeInsets.symmetric(horizontal: 4),
+                       decoration: BoxDecoration(
+                         borderRadius: BorderRadius.circular(8),
+                         border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                         color: Colors.blue.withOpacity(0.05),
+                       ),
+                       child: TextField(
+                         controller: controller,
+                         keyboardType: TextInputType.number,
+                         textAlign: TextAlign.center,
+                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                         decoration: const InputDecoration(
+                           border: InputBorder.none,
+                           contentPadding: EdgeInsets.only(bottom: 12),
+                         ),
+                         onChanged: (v) {
+                           // Trigger rebuild to update totals
+                           setState(() {}); 
+                         },
                        ),
                      ),
-                     // Required Qty
-                     Expanded(
-                       flex: 1,
-                       child: Center(child: Text(reqQty.toString(), style: const TextStyle(fontSize: 14))),
-                     ),
-                     // Sent Qty
-                     Expanded(
-                       flex: 1,
-                       child: Center(child: Text(sentQty.toString(), style: const TextStyle(fontSize: 14))),
-                     ),
-                     // Received Qty (Editable)
-                     Expanded(
-                       flex: 1,
-                       child: Container(
-                         height: 36,
-                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                         decoration: BoxDecoration(
-                           borderRadius: BorderRadius.circular(8),
-                           border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                           color: Colors.white.withOpacity(0.5),
-                         ),
-                         child: TextField(
-                           controller: controller,
-                           keyboardType: TextInputType.number,
-                           textAlign: TextAlign.center,
-                           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                           decoration: const InputDecoration(
-                             border: InputBorder.none,
-                             contentPadding: EdgeInsets.only(bottom: 12),
-                           ),
-                           onChanged: (v) {
-                             // Trigger rebuild to update totals
-                             setState(() {}); 
-                           },
-                         ),
-                        ),
-                      ),
-                   ],
-                 ),
+                   ),
+                 ],
                ),
              );
           }).toList(),
@@ -386,20 +359,6 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     return 0.0;
   }
 
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case 'received':
-      case 'approved':
-        return Colors.green;
-      case 'cancelled':
-      case 'rejected':
-        return Colors.red;
-      case 'pending':
-      default:
-        return Colors.orange;
-    }
-  }
-
   Future<void> _saveChanges(BuildContext context, String orderId, List<dynamic> originalItems, StockProvider sp) async {
     final orderCtrls = _controllers[orderId];
     if (orderCtrls == null) return;
@@ -411,10 +370,13 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       final qty = int.tryParse(orderCtrls[pid]?.text ?? "0") ?? 0;
       
       // Construct item object to send back
+      // NOTE: We might need to send back other fields depending on API strictness
+      // For now, I'll clone the original item and update receivedQty
       Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
       newItem["receivedQty"] = qty;
+      
+      // Ensure specific fields are cleaned up if necessary (e.g. if product is object, API might expect ID)
       newItem["product"] = pid; 
-      newItem["status"] = _statusControllers[orderId]![pid];
 
       updatedItems.add(newItem);
     }

@@ -482,8 +482,6 @@ class StockProvider extends ChangeNotifier {
       final token = prefs.getString("token");
       if (token == null) return false;
 
-      print("Updating stock order $orderId with items: ${jsonEncode(items)}");
-      
       final res = await http.patch(
         Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders/$orderId"),
         headers: {
@@ -492,9 +490,6 @@ class StockProvider extends ChangeNotifier {
         },
         body: jsonEncode({"items": items}),
       );
-
-      print("Response status: ${res.statusCode}");
-      print("Response body: ${res.body}");
 
       if (res.statusCode == 200) {
         return true;
