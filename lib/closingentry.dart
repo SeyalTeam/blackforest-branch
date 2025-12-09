@@ -549,16 +549,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
                   return const SizedBox.shrink();
                 }),
                 const Divider(height: 20),
-                // ---------------------------------------------
-                // NEW — Stock Sending
-                // ---------------------------------------------
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Stock Sending', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('₹${_stockOrderController.text}')
-                    ]),
-                const SizedBox(height: 12),
+
                 Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

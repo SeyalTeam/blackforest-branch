@@ -24,8 +24,8 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     });
   }
 
-  void _fetchData() {
-    Provider.of<StockProvider>(context, listen: false).fetchStockReports(date: _selectedDate);
+  Future<void> _fetchData() async {
+    await Provider.of<StockProvider>(context, listen: false).fetchStockReports(date: _selectedDate);
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -74,19 +74,31 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
           }
 
           if (sp.stockReports.isEmpty) {
-            return _buildEmptyState();
+            return RefreshIndicator(
+              onRefresh: _fetchData,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                  _buildEmptyState(),
+                ],
+              ),
+            );
           }
 
           return Column(
             children: [
               _buildDateHeader(),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: sp.stockReports.length,
-                  itemBuilder: (context, index) {
-                    return _buildOrderCard(context, sp.stockReports[index], sp);
-                  },
+                child: RefreshIndicator(
+                  onRefresh: _fetchData,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: sp.stockReports.length,
+                    itemBuilder: (context, index) {
+                      return _buildOrderCard(context, sp.stockReports[index], sp);
+                    },
+                  ),
                 ),
               ),
             ],
@@ -125,20 +137,15 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
   Widget _buildDateHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      width: double.infinity,
       color: Colors.grey[100],
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Date: ${DateFormat('dd MMM yyyy').format(_selectedDate)}",
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          TextButton.icon(
-            onPressed: () => _selectDate(context),
-            icon: const Icon(Icons.calendar_today, size: 18),
-            label: const Text("Filter"),
-          ),
-        ],
+      child: GestureDetector(
+        onTap: () => _selectDate(context),
+        child: Text(
+          "Date: ${DateFormat('dd MMM yyyy').format(_selectedDate)}",
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepPurple),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
