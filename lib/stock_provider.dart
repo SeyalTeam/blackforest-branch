@@ -499,4 +499,16 @@ class StockProvider extends ChangeNotifier {
     }
     return false;
   }
+
+  void updateOrderLocally(String orderId, List<dynamic> updatedItems) {
+    // Find the order index
+    final index = _stockReports.indexWhere((o) => o["id"] == orderId);
+    if (index != -1) {
+      // Create a new map to ensure change detection (though items list ref change might be enough)
+      final newOrder = Map<String, dynamic>.from(_stockReports[index]);
+      newOrder["items"] = updatedItems;
+      _stockReports[index] = newOrder;
+      notifyListeners();
+    }
+  }
 }
