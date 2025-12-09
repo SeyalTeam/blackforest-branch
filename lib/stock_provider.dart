@@ -321,30 +321,35 @@ class StockProvider extends ChangeNotifier {
   }
 
   // ========== SUBMIT STOCK ORDER ==========
-  Future<bool> submitStockOrder(BuildContext context) async {
+  Future<Map<String, dynamic>?> submitStockOrder(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
 
-    if (token == null) return false;
+    if (token == null) return null;
 
     if (_deliveryDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select delivery date & time")),
       );
-      return false;
+      return null;
     }
 
     List<Map<String, dynamic>> items = [];
 
+    // Create a temporary map to hold names and prices for injection later
+    Map<String, String> tempNames = {};
+    Map<String, double> tempPrices = {};
+
     for (var entry in _selected.entries) {
       if (entry.value) {
         final pid = entry.key;
-
         items.add({
           "product": pid,
           "inStock": _inStock[pid],
           "requiredQty": _requiredQty[pid],
         });
+        tempNames[pid] = _productNames[pid] ?? "Item";
+        tempPrices[pid] = _prices[pid] ?? 0.0;
       }
     }
 
@@ -354,7 +359,7 @@ class StockProvider extends ChangeNotifier {
           content: Text("No items selected"),
         ),
       );
-      return false;
+      return null;
     }
 
     final body = jsonEncode({
@@ -373,6 +378,35 @@ class StockProvider extends ChangeNotifier {
     );
 
     if (res.statusCode == 200 || res.statusCode == 201) {
+      final jsonResponse = jsonDecode(res.body);
+      // Payload CMS often wraps creation response in a 'doc' key
+      Map<String, dynamic> orderDoc = jsonResponse['doc'] != null
+          ? Map<String, dynamic>.from(jsonResponse['doc'])
+          : Map<String, dynamic>.from(jsonResponse);
+
+      // Inject names and prices into the response structure so the printer can use them
+      if (orderDoc['items'] != null && orderDoc['items'] is List) {
+        List<dynamic> respItems = orderDoc['items'];
+        for (var i = 0; i < respItems.length; i++) {
+          var item = respItems[i];
+          String? pid;
+          if (item['product'] is Map) {
+            pid = item['product']['id'];
+          } else {
+            pid = item['product'];
+          }
+          
+          if (pid != null) {
+             // Create a new map to avoid modifying a locked map if any
+             Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+             if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
+             if (tempPrices.containsKey(pid)) newItem['price'] = tempPrices[pid];
+             respItems[i] = newItem;
+          }
+        }
+        orderDoc['items'] = respItems;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Stock Order Submitted Successfully!")),
       );
@@ -398,14 +432,14 @@ class StockProvider extends ChangeNotifier {
       await _loadStockCategories();
       notifyListeners();
 
-      return true;
+      return orderDoc; // Return the confirmed order data with names
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Failed: ${res.statusCode}")),
     );
 
-    return false;
+    return null;
   }
 
   // ========== SELECT CATEGORY ==========

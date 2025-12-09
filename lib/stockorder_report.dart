@@ -186,6 +186,17 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       totalQty += qty;
       totalAmount += (qty * price);
     }
+    
+    // Delivery Date Formatting
+    String deliveryText = "";
+    if (order["deliveryDate"] != null) {
+      try {
+        final dt = DateTime.parse(order["deliveryDate"]);
+        deliveryText = DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+      } catch (e) {
+        deliveryText = "";
+      }
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 24),
@@ -197,11 +208,24 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      if (deliveryText.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          "Delivery: $deliveryText",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 Container(

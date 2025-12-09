@@ -332,7 +332,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
            // The CartPage saves: 'product': item.id, 'name': item.name... 
            // So 'name' might be directly on the item object.
            
-           String itemName = item['name'] ?? (item['product'] is Map ? item['product']['name'] : 'Item');
+           String rawName = item['name'] ?? (item['product'] is Map ? item['product']['name'] : 'Item');
+           // Remove standard Rupee symbol if present, or any non-ascii if needed.
+           // For now, just replacing known issue char.
+           String itemName = rawName.replaceAll('₹', 'Rs. ');
            double quantity = (item['quantity'] ?? 0).toDouble();
            double price = (item['unitPrice'] ?? 0).toDouble();
            double subtotal = (item['subtotal'] ?? 0).toDouble();

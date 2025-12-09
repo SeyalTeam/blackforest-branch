@@ -579,7 +579,7 @@ class _CartPageState extends State<CartPage> {
         for (var item in cartProvider.cartItems) {
           final qtyStr = item.quantity % 1 == 0 ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2);
           printer.row([
-            PosColumn(text: item.name, width: 5),
+            PosColumn(text: item.name.replaceAll('₹', 'Rs. '), width: 5),
             PosColumn(text: qtyStr, width: 2, styles: const PosStyles(align: PosAlign.center)),
             PosColumn(text: item.price.toStringAsFixed(2), width: 2, styles: const PosStyles(align: PosAlign.right)),
             PosColumn(
@@ -1106,8 +1106,11 @@ class _CartPageState extends State<CartPage> {
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            onPressed: sp.deliveryDate != null ? () {
-                              sp.submitStockOrder(context);
+                            onPressed: sp.deliveryDate != null ? () async {
+                              final orderData = await sp.submitStockOrder(context);
+                              if (orderData != null && mounted) {
+                                await _printStockOrderReceipt(orderData);
+                              }
                             } : null,
                             child: const Text("Confirm Stock Order", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           ),
@@ -1122,6 +1125,167 @@ class _CartPageState extends State<CartPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _printStockOrderReceipt(Map<String, dynamic> orderData) async {
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    String? printerIp = cartProvider.printerIp;
+    int printerPort = cartProvider.printerPort;
+    String? printerProtocol = cartProvider.printerProtocol;
+
+    // Retry fetching if missing (especially in Stock mode where CartProvider might be fresh)
+    // Also fetch if _branchName is missing (which is just a local state var not in CartProvider)
+    if (printerIp == null || _branchName == null) {
+      // Determine branch ID
+      String? targetBranchId = _branchId;
+      
+      // If no local branchId (or we need to rely on provider), check StockProvider
+      // Usually prefs has branchId, but let's be safe.
+      if (widget.isStockOrder) {
+        final sp = Provider.of<StockProvider>(context, listen: false);
+        if (targetBranchId == null || targetBranchId.isEmpty) {
+           targetBranchId = sp.branchId;
+        }
+      }
+
+      if (targetBranchId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('token');
+        if (token != null) {
+          await _fetchBranchDetails(token, targetBranchId);
+          // Refetch from provider after update
+          final cpUpdated = Provider.of<CartProvider>(context, listen: false);
+          printerIp = cpUpdated.printerIp;
+          printerPort = cpUpdated.printerPort;
+          printerProtocol = cpUpdated.printerProtocol;
+        }
+      }
+    }
+
+    if (printerIp == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No printer configured for this branch')),
+      );
+      return;
+    }
+
+    try {
+      const PaperSize paper = PaperSize.mm80;
+      final profile = await CapabilityProfile.load();
+      final printer = NetworkPrinter(paper, profile);
+
+      final PosPrintResult res = await printer.connect(printerIp, port: printerPort);
+
+      if (res == PosPrintResult.success) {
+        DateTime now = DateTime.now();
+        String date = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        String time = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+
+        // Header
+        printer.text(_companyName ?? 'BLACK FOREST CAKES', styles: const PosStyles(align: PosAlign.center, bold: true));
+        printer.text('Branch: ${_branchName ?? _branchId}', styles: const PosStyles(align: PosAlign.center));
+        
+        // Use order ID or generated reference if available
+        String orderRef = orderData['invoiceNumber'] ?? orderData['id'] ?? 'N/A';
+        // Only shorten if it looks like a raw Mongo ID (24 chars hex) and NOT an invoice number
+        if (orderData['invoiceNumber'] == null && orderRef.length == 24) {
+             orderRef = orderRef.substring(orderRef.length - 6);
+        }
+        
+        printer.hr(ch: '=');
+        printer.text('STOCK ORDER #$orderRef', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+        printer.text('Date: $date $time', styles: const PosStyles(align: PosAlign.center));
+
+        // Delivery Date back in Header
+        if (orderData['deliveryDate'] != null) {
+          DateTime dDate = DateTime.parse(orderData['deliveryDate']);
+          // Format: 10/12/2025 9:00 AM
+          String day = dDate.day.toString().padLeft(2, '0');
+          String month = dDate.month.toString().padLeft(2, '0');
+          String year = dDate.year.toString();
+          
+          int hour = dDate.hour;
+          String ampm = 'AM';
+          if (hour >= 12) {
+            ampm = 'PM';
+            if (hour > 12) hour -= 12;
+          }
+          if (hour == 0) hour = 12;
+          
+          String minute = dDate.minute.toString().padLeft(2, '0');
+          String dDateStr = '$day/$month/$year $hour:$minute $ampm';
+          
+          printer.text('Delivery: $dDateStr', styles: const PosStyles(align: PosAlign.center));
+        }
+        
+        printer.hr(ch: '=');
+
+        // Items Header
+        printer.row([
+          PosColumn(text: 'Item', width: 6, styles: const PosStyles(bold: true)),
+          PosColumn(text: 'Stock', width: 3, styles: const PosStyles(bold: true, align: PosAlign.center)),
+          PosColumn(text: 'Req', width: 3, styles: const PosStyles(bold: true, align: PosAlign.center)),
+        ]);
+        printer.hr(ch: '-');
+
+        // Items Logic
+        final List<dynamic> items = orderData['items'] ?? [];
+        double totalAmountOfReq = 0.0;
+        
+        for (var item in items) {
+           String name = "Item";
+           if (item['product'] is Map) {
+             name = item['product']['name'] ?? "Item";
+           } else if (item['product'] is String) {
+              name = item['name'] ?? 'Product'; 
+           }
+           
+           final int inStock = item['inStock'] ?? 0;
+           final int req = item['requiredQty'] ?? 0;
+           
+           // Calculate total amount if price is available
+           // Note: item['price'] was injected in StockProvider
+           final double price = (item['price'] is num) ? (item['price'] as num).toDouble() : 0.0;
+           totalAmountOfReq += (req * price);
+           
+           printer.row([
+            PosColumn(text: name.replaceAll('₹', 'Rs. '), width: 6, styles: const PosStyles(bold: true)),
+            PosColumn(text: inStock.toString(), width: 3, styles: const PosStyles(align: PosAlign.center, bold: true)),
+            PosColumn(text: req.toString(), width: 3, styles: const PosStyles(align: PosAlign.center, bold: true)),
+          ]);
+        }
+        
+        printer.hr(ch: '-');
+        
+        printer.hr(ch: '-');
+        printer.row([
+          PosColumn(text: 'Total Items:', width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+          PosColumn(text: items.length.toString(), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        ]);
+        printer.row([
+          PosColumn(text: 'Total Amount:', width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+          PosColumn(text: 'Rs.${totalAmountOfReq.toStringAsFixed(2)}', width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        ]);
+        
+        // Removed Delivery Date from Footer
+
+        printer.hr(ch: '=');
+        printer.text('Printed at branch: ${_branchName ?? "Unknown"}', styles: const PosStyles(align: PosAlign.center));
+        printer.feed(2);
+        printer.cut();
+        printer.disconnect();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receipt printed successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Printer connection failed: ${res.msg}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print failed: $e')));
+    }
   }
 
   // Return Order Specific UI
