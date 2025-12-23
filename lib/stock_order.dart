@@ -174,7 +174,7 @@ class StockOrderPage extends StatelessWidget {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            "₹ ${sp.prices[id] ?? 0}",
+                            "₹ ${sp.prices[id] ?? 0} ${p['defaultPriceDetails']?['quantity'] ?? ''}${p['defaultPriceDetails']?['unit'] ?? ''}",
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.grey,
@@ -188,7 +188,7 @@ class StockOrderPage extends StatelessWidget {
                       label: "InStock",
                       controller: sp.stockCtrl[id]!,
                       onChanged: (v) {
-                        sp.updateInStock(id, int.tryParse(v) ?? 0);
+                        sp.updateInStock(id, double.tryParse(v) ?? 0.0);
                       },
                     ),
                     const SizedBox(width: 10),
@@ -197,7 +197,7 @@ class StockOrderPage extends StatelessWidget {
                       label: "Required",
                       controller: sp.qtyCtrl[id]!,
                       onChanged: (v) {
-                        sp.updateQuantity(id, int.tryParse(v) ?? 0);
+                        sp.updateQuantity(id, double.tryParse(v) ?? 0.0);
                       },
                     ),
 
@@ -244,7 +244,7 @@ class StockOrderPage extends StatelessWidget {
           child: TextField(
             controller: controller,
             textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
               border: InputBorder.none,
               isCollapsed: true,

@@ -16,9 +16,26 @@ class StockProvider extends ChangeNotifier {
 
   // ========== DELIVERY DATE ==========
   DateTime? _deliveryDate;
+  bool _isSameDay = false;
+
   DateTime? get deliveryDate => _deliveryDate;
+  bool get isSameDay => _isSameDay;
+
   set deliveryDate(DateTime? v) {
     _deliveryDate = v;
+    _isSameDay = false; // Reset same-day flag if a specific date is manually set
+    notifyListeners();
+  }
+
+  void toggleSameDay() {
+    _isSameDay = !_isSameDay;
+    if (_isSameDay) {
+      _deliveryDate = null; // Clear manual date if same-day is toggled on
+    } else {
+      // Default back to Tomorrow 10:00 AM if same-day is toggled off
+      final now = DateTime.now();
+      _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+    }
     notifyListeners();
   }
 
@@ -52,29 +69,37 @@ class StockProvider extends ChangeNotifier {
   String? get branchId => _branchId;
 
   // ========== FIELD MAPS ==========
-  final Map<String, int?> _requiredQty = {};          // UPDATED
-  final Map<String, int?> _inStock = {};
+  final Map<String, double?> _requiredQty = {};          // UPDATED
+  final Map<String, double?> _inStock = {};
   final Map<String, bool> _selected = {};
   final Map<String, TextEditingController> _requiredCtrl = {}; // UPDATED
   final Map<String, TextEditingController> _stockCtrl = {};
   final Map<String, String> _productNames = {};
   final Map<String, double> _prices = {};
+  final Map<String, String> _units = {};
+  final Map<String, double> _baseQuantities = {};
 
   final TextEditingController _searchCtrl = TextEditingController();
 
-  Map<String, int?> get quantities => _requiredQty;      // alias
-  Map<String, int?> get inStock => _inStock;
+  Map<String, double?> get quantities => _requiredQty;      // alias
+  Map<String, double?> get inStock => _inStock;
   Map<String, bool> get selected => _selected;
   Map<String, TextEditingController> get qtyCtrl => _requiredCtrl;
   Map<String, TextEditingController> get stockCtrl => _stockCtrl;
   Map<String, String> get productNames => _productNames;
   Map<String, double> get prices => _prices;
+  Map<String, String> get units => _units;
+  Map<String, double> get baseQuantities => _baseQuantities;
   TextEditingController get searchCtrl => _searchCtrl;
 
   // ========== CONSTRUCTOR ==========
   StockProvider() {
     _loadStockCategories();
     _searchCtrl.addListener(_filterProducts);
+    
+    // Default to tomorrow 10:00 AM
+    final now = DateTime.now();
+    _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
   }
 
   @override
@@ -276,6 +301,9 @@ class StockProvider extends ChangeNotifier {
         _productNames[id] = p["name"] ?? "Unknown";
         _prices[id] =
             (p['defaultPriceDetails']?['price'] as num?)?.toDouble() ?? 0.0;
+        _units[id] = "${p['defaultPriceDetails']?['quantity'] ?? ''}${p['defaultPriceDetails']?['unit'] ?? ''}";
+        _baseQuantities[id] = (p['defaultPriceDetails']?['quantity'] as num?)?.toDouble() ?? 1.0;
+        if (_baseQuantities[id] == 0) _baseQuantities[id] = 1.0;
 
         _requiredQty.putIfAbsent(id, () => null);
         _inStock.putIfAbsent(id, () => null);
@@ -307,13 +335,13 @@ class StockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateQuantity(String productId, int quantity) {
+  void updateQuantity(String productId, double quantity) {
     _requiredQty[productId] = quantity;
     _selected[productId] = quantity > 0;
     notifyListeners();
   }
 
-  void updateInStock(String productId, int stock) {
+  void updateInStock(String productId, double stock) {
     _inStock[productId] = stock;
     final req = _requiredQty[productId] ?? 0;
     _selected[productId] = req > 0;
@@ -327,11 +355,28 @@ class StockProvider extends ChangeNotifier {
 
     if (token == null) return null;
 
+    final DateTime now = DateTime.now();
+
+    if (_isSameDay) {
+      _deliveryDate = now.add(const Duration(hours: 2));
+    }
+
     if (_deliveryDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select delivery date & time")),
       );
       return null;
+    }
+
+    // Validation
+    if (!_isSameDay) {
+      final DateTime minTime = now.add(const Duration(hours: 2));
+      if (_deliveryDate!.isBefore(minTime)) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Delivery time must be at least 2 hours from now")),
+        );
+        return null;
+      }
     }
 
     List<Map<String, dynamic>> items = [];
@@ -401,6 +446,7 @@ class StockProvider extends ChangeNotifier {
              Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
              if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
              if (tempPrices.containsKey(pid)) newItem['price'] = tempPrices[pid];
+             if (pid != null) newItem['baseQuantity'] = _baseQuantities[pid] ?? 1.0;
              respItems[i] = newItem;
           }
         }
@@ -423,7 +469,9 @@ class StockProvider extends ChangeNotifier {
       _stockCtrl.forEach((_, c) => c.dispose());
       _stockCtrl.clear();
 
-      _deliveryDate = null;
+      _isSameDay = false;
+      final now = DateTime.now();
+      _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
 
       _step = "categories";
       _selectedCategoryId = null;

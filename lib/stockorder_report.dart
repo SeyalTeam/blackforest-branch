@@ -166,7 +166,7 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     }
 
     // Calculate totals
-    int totalQty = 0;
+    double totalQty = 0;
     double totalAmount = 0;
 
     for (var item in items) {
@@ -174,11 +174,11 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       final isReceived = item["status"] == "received";
       
       // If received, use the actual value from item. If not, use controller value.
-      int qty = 0;
+      double qty = 0;
       if (isReceived) {
-        qty = (item["receivedQty"] ?? 0) as int;
+        qty = (item["receivedQty"] as num?)?.toDouble() ?? 0;
       } else {
-        qty = int.tryParse(_controllers[orderId]![pid]?.text ?? "0") ?? 0;
+        qty = double.tryParse(_controllers[orderId]![pid]?.text ?? "0") ?? 0;
       }
 
       final price = _getProductPrice(item);
@@ -214,9 +214,63 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Builder(
+                            builder: (context) {
+                              bool isLive = false;
+                              if (order["deliveryDate"] != null && order["createdAt"] != null) {
+                                try {
+                                  final deliveryDate = DateTime.parse(order["deliveryDate"]);
+                                  final createdAt = DateTime.parse(order["createdAt"]);
+                                  isLive = deliveryDate.year == createdAt.year &&
+                                           deliveryDate.month == createdAt.month &&
+                                           deliveryDate.day == createdAt.day;
+                                } catch (_) {}
+                              }
+                              
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isLive ? Colors.red : Colors.blue,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  isLive ? "Live" : "Stock",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(order["status"]).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: _getStatusColor(order["status"])),
+                            ),
+                            child: Text(
+                              (order["status"] ?? "Unknown").toUpperCase(),
+                              style: TextStyle(
+                                color: _getStatusColor(order["status"]), 
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 10
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (deliveryText.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -226,18 +280,6 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
                         ),
                       ],
                     ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(order["status"]).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _getStatusColor(order["status"])),
-                  ),
-                  child: Text(
-                    order["status"] ?? "Unknown",
-                    style: TextStyle(color: _getStatusColor(order["status"]), fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -268,10 +310,18 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
              final product = item["product"];
              final productName = (product is Map ? product["name"] : "Unknown Product");
              final price = _getProductPrice(item);
+             
+             String priceDetails = "";
+             if (product is Map) {
+                final d = product['defaultPriceDetails'];
+                if (d != null) {
+                   priceDetails = "${d['quantity'] ?? ''}${d['unit'] ?? ''}";
+                }
+             }
 
-             final reqQty = item["requiredQty"] ?? 0;
-             final sentQty = item["sendingQty"] ?? 0;
-             final recQty = item["receivedQty"] ?? 0;
+             final reqQty = (item["requiredQty"] as num?)?.toDouble() ?? 0;
+             final sentQty = (item["sendingQty"] as num?)?.toDouble() ?? 0;
+             final recQty = (item["receivedQty"] as num?)?.toDouble() ?? 0;
              
              final isReceived = item["status"] == "received";
 
@@ -294,7 +344,10 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
                            Text(productName, style: const TextStyle(fontSize: 14)),
                            Row(
                              children: [
-                               Text("₹$price", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                Text(
+                                  "₹$price $priceDetails",
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
                                if (item["status"] != null) ...[
                                  const SizedBox(width: 8),
                                  Text(
@@ -346,7 +399,7 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
                              ),
                              child: TextField(
                                controller: controller,
-                               keyboardType: TextInputType.number,
+                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                textAlign: TextAlign.center,
                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                                decoration: const InputDecoration(
@@ -448,7 +501,7 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
 
       if (isTarget) {
          // Get value from controller
-         final qty = int.tryParse(orderCtrls[pid]?.text ?? "0") ?? 0;
+         final qty = double.tryParse(orderCtrls[pid]?.text ?? "0") ?? 0;
          
          // Update both
          localItem["receivedQty"] = qty;

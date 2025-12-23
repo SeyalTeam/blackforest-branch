@@ -862,15 +862,16 @@ class _CartPageState extends State<CartPage> {
               return _buildEmptyState();
             }
 
-            int totalReq = 0;
+            double totalReq = 0.0;
             double totalAmount = 0.0;
             
             for(var entry in selectedEntries) {
               final pid = entry.key;
               final req = sp.quantities[pid] ?? 0;
               final price = sp.prices[pid] ?? 0.0;
+              final baseQty = sp.baseQuantities[pid] ?? 1.0;
               totalReq += req;
-              totalAmount += (req * price);
+              totalAmount += ((req / baseQty) * price);
             }
 
             return SafeArea(
@@ -887,8 +888,9 @@ class _CartPageState extends State<CartPage> {
                         final name = sp.productNames[pid] ?? "Unknown";
                         final req = sp.quantities[pid] ?? 0;
                         final price = sp.prices[pid] ?? 0.0;
+                        final baseQty = sp.baseQuantities[pid] ?? 1.0;
                         final inStock = sp.inStock[pid] ?? 0; // Get In Stock
-                        final lineTotal = req * price;
+                        final lineTotal = (req / baseQty) * price;
                         
                         final ctrl = sp.qtyCtrl[pid];
                         if (ctrl != null && ctrl.text != req.toString()) {
@@ -931,7 +933,7 @@ class _CartPageState extends State<CartPage> {
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            Text("₹ ${price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                            Text("₹ ${price.toStringAsFixed(2)} ${sp.units[pid] ?? ''}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
                                             const SizedBox(width: 8),
                                             Text("|  In Stock: $inStock", style: TextStyle(color: _accent, fontSize: 12, fontWeight: FontWeight.bold)),
                                           ],
@@ -947,7 +949,7 @@ class _CartPageState extends State<CartPage> {
                                         height: 40,
                                         child: TextField(
                                           controller: ctrl,
-                                          keyboardType: TextInputType.number,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                           style: const TextStyle(color: Colors.white),
                                           decoration: InputDecoration(
                                             labelText: 'Req',
@@ -969,7 +971,7 @@ class _CartPageState extends State<CartPage> {
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                                           ),
                                           onChanged: (val) {
-                                            final newQty = int.tryParse(val) ?? 0;
+                                            final newQty = double.tryParse(val) ?? 0.0;
                                             sp.updateQuantity(pid, newQty);
                                           },
                                         ),
@@ -1011,89 +1013,157 @@ class _CartPageState extends State<CartPage> {
                         ),
                         const SizedBox(height: 12),
                         
-                           GestureDetector(
-                            onTap: () async {
-                              final selectedDate = await showDatePicker(
-                                context: context,
-                                initialDate: sp.deliveryDate ?? DateTime.now(), 
-                                firstDate: DateTime(2024),
-                                lastDate: DateTime(2030),
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      colorScheme: ColorScheme.dark(
-                                        primary: _accent,
-                                        onPrimary: Colors.white,
-                                        surface: _card,
-                                        onSurface: Colors.white,
-                                      ),
-                                    ),
-                                    child: child!,
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2, // Take more space for date/time
+                              child: GestureDetector(
+                                onTap: () async {
+                                  final selectedDate = await showDatePicker(
+                                    context: context,
+                                    initialDate: sp.deliveryDate ?? DateTime.now().add(const Duration(days: 1)),
+                                    firstDate: DateTime.now(), // Allow today for manual correction
+                                    lastDate: DateTime(2030),
+                                    builder: (context, child) {
+                                      return Theme(
+                                        data: Theme.of(context).copyWith(
+                                          colorScheme: ColorScheme.dark(
+                                            primary: _accent,
+                                            onPrimary: Colors.white,
+                                            surface: _card,
+                                            onSurface: Colors.white,
+                                          ),
+                                        ),
+                                        child: child!,
+                                      );
+                                    },
                                   );
-                                },
-                              );
-                              if (selectedDate == null) return;
-                
-                              final selectedTime = await showTimePicker(
-                                context: context,
-                                initialTime: TimeOfDay(hour: sp.deliveryDate?.hour ?? 9, minute: sp.deliveryDate?.minute ?? 0),
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      timePickerTheme: TimePickerThemeData(
-                                        backgroundColor: _card,
-                                        hourMinuteTextColor: Colors.white,
-                                        dayPeriodTextColor: Colors.white70,
-                                        dialHandColor: _accent,
-                                        dialBackgroundColor: Colors.grey[800],
-                                      ),
-                                      colorScheme: ColorScheme.dark(
-                                        primary: _accent,
-                                        onPrimary: Colors.white,
-                                        surface: _card,
-                                        onSurface: Colors.white,
-                                      ),
-                                    ),
-                                    child: child!,
+
+                                  if (selectedDate == null) return;
+
+                                  final selectedTime = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay.fromDateTime(sp.deliveryDate ?? DateTime.now().add(const Duration(days: 1))),
+                                    builder: (context, child) {
+                                      return Theme(
+                                        data: Theme.of(context).copyWith(
+                                          timePickerTheme: TimePickerThemeData(
+                                            backgroundColor: _card,
+                                            hourMinuteTextColor: Colors.white,
+                                            dayPeriodTextColor: Colors.white70,
+                                            dialHandColor: _accent,
+                                            dialBackgroundColor: Colors.grey[800],
+                                          ),
+                                          colorScheme: ColorScheme.dark(
+                                            primary: _accent,
+                                            onPrimary: Colors.white,
+                                            surface: _card,
+                                            onSurface: Colors.white,
+                                          ),
+                                        ),
+                                        child: child!,
+                                      );
+                                    },
                                   );
+                    
+                                  if (selectedTime == null) return;
+                    
+                                  final finalDate = DateTime(
+                                    selectedDate.year,
+                                    selectedDate.month,
+                                    selectedDate.day,
+                                    selectedTime.hour,
+                                    selectedTime.minute,
+                                  );
+                                  
+                                  // Validation only if date is today
+                                  final DateTime now = DateTime.now();
+                                  final today = DateTime(now.year, now.month, now.day);
+                                  final selectedDay = DateTime(finalDate.year, finalDate.month, finalDate.day);
+                                  
+                                  if (selectedDay.isAtSameMomentAs(today)) {
+                                     final minDeliveryTime = now.add(const Duration(hours: 2));
+                                     if (finalDate.isBefore(minDeliveryTime)) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("Delivery time must be at least 2 hours after ordering time")),
+                                        );
+                                        return;
+                                     }
+                                  }
+                    
+                                  sp.deliveryDate = finalDate;
                                 },
-                              );
-                
-                              final finalDate = DateTime(
-                                selectedDate.year,
-                                selectedDate.month,
-                                selectedDate.day,
-                                selectedTime?.hour ?? 0,
-                                selectedTime?.minute ?? 0,
-                              );
-                
-                              sp.deliveryDate = finalDate;
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: _card,
-                                border: Border.all(color: Colors.white24),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.calendar_month, color: Colors.white70),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      sp.deliveryDate == null
-                                          ? "Select Delivery Date & Time"
-                                          : "${sp.deliveryDate!.day}/${sp.deliveryDate!.month}/${sp.deliveryDate!.year}   "
-                                          "${sp.deliveryDate!.hour.toString().padLeft(2, '0')}:"
-                                          "${sp.deliveryDate!.minute.toString().padLeft(2, '0')}",
-                                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                                    ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: _card,
+                                    border: Border.all(color: Colors.white24, width: 0.5),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                ],
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.calendar_month, color: _accent, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          sp.isSameDay
+                                              ? "Same Day Delivery"
+                                              : (sp.deliveryDate == null
+                                                  ? "Select Date & Time"
+                                                  : "${sp.deliveryDate!.day}/${sp.deliveryDate!.month}/${sp.deliveryDate!.year}  "
+                                                    "${sp.deliveryDate!.hour.toString().padLeft(2, '0')}:"
+                                                    "${sp.deliveryDate!.minute.toString().padLeft(2, '0')}"),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                               onTap: () {
+                                 sp.toggleSameDay();
+                                 if (sp.isSameDay) {
+                                   ScaffoldMessenger.of(context).showSnackBar(
+                                     const SnackBar(content: Text("Same Day Delivery selected (time will calculate on confirm)")),
+                                   );
+                                 } else {
+                                   ScaffoldMessenger.of(context).showSnackBar(
+                                     const SnackBar(content: Text("Reset to Tomorrow's Delivery")),
+                                   );
+                                 }
+                               },
+                               child: Consumer<StockProvider>(
+                                 builder: (context, sp, _) {
+                                   final isSelected = sp.isSameDay;
+
+                                   return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Colors.green.withOpacity(0.1) : _card,
+                                      border: Border.all(
+                                        color: isSelected ? Colors.green : _accent.withOpacity(0.5), 
+                                        width: isSelected ? 2 : 1
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      boxShadow: isSelected ? [
+                                        BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 8, spreadRadius: 1),
+                                      ] : null,
+                                    ),
+                                    child: Icon(
+                                      Icons.store, 
+                                      color: isSelected ? Colors.greenAccent : Colors.orangeAccent, 
+                                      size: 24
+                                    ),
+                                  );
+                                 },
+                               ),
+                            ),
+                          ],
+                        ),
                         
                         const SizedBox(height: 12),
                         
@@ -1106,7 +1176,7 @@ class _CartPageState extends State<CartPage> {
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            onPressed: sp.deliveryDate != null ? () async {
+                            onPressed: (sp.deliveryDate != null || sp.isSameDay) ? () async {
                               final orderData = await sp.submitStockOrder(context);
                               if (orderData != null && mounted) {
                                 await _printStockOrderReceipt(orderData);
@@ -1246,7 +1316,8 @@ class _CartPageState extends State<CartPage> {
            // Calculate total amount if price is available
            // Note: item['price'] was injected in StockProvider
            final double price = (item['price'] is num) ? (item['price'] as num).toDouble() : 0.0;
-           totalAmountOfReq += (req * price);
+           final double baseQty = (item['baseQuantity'] is num) ? (item['baseQuantity'] as num).toDouble() : 1.0;
+           totalAmountOfReq += ((req / baseQty) * price);
            
            printer.row([
             PosColumn(text: name.replaceAll('₹', 'Rs. '), width: 6, styles: const PosStyles(bold: true)),

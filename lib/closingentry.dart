@@ -37,6 +37,8 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   static const String _manualAllowedBranch = '690e326cea6f468d6fe462e6';
   static const String _apiHost = 'admin.theblackforestcakes.com';
 
+  bool _hasError = false; // Block UI if initialization fails
+
   @override
   void initState() {
     super.initState();
@@ -87,7 +89,11 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   }
 
   Future<void> _init() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
     _branchId = prefs.getString('branchId');
@@ -103,13 +109,31 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     if (_branchId == _manualAllowedBranch) {
       _systemSalesController.text = '';
     }
-    await Future.wait([
-      _fetchIncrementalSystemSales(),
-      _fetchIncrementalExpenses(),
-      _fetchIncrementalReturns(),
-      _fetchIncrementalStockOrders(), // NEW
-    ]);
-    setState(() => _isLoading = false);
+
+    try {
+      // Must succeed strictly
+      await Future.wait([
+        _fetchIncrementalSystemSales(),
+        _fetchIncrementalExpenses(),
+        _fetchIncrementalReturns(),
+        _fetchIncrementalStockOrders(), // NEW
+      ]);
+    } catch (e) {
+      debugPrint('Initialization error: $e');
+      if (mounted) {
+        setState(() => _hasError = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load data: $e. Please check your connection and retry.'),
+            duration: const Duration(seconds: 10),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(label: 'Retry', onPressed: _init, textColor: Colors.white),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<DateTime?> _fetchLastClosingToday() async {
@@ -131,11 +155,15 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
             return DateTime.parse(createdAt).toUtc();
           }
         }
+        return null; // Success, but no previous closing found today
+      } else {
+        // Critical: If API fails, throw error. Do NOT assume no closing exists.
+        throw Exception('Failed to fetch last closing: ${res.statusCode}');
       }
     } catch (e) {
       debugPrint('fetchLastClosingToday error: $e');
+      rethrow; // Propagate error to block submission
     }
-    return null;
   }
 
   Future<void> _fetchIncrementalSystemSales() async {
@@ -374,6 +402,39 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    
+    if (_hasError) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Closing Entry Error')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 60, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text(
+                'Failed to verify previous closing status.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'To prevent sales double-counting, you cannot proceed without a stable connection.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _init,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry Connection'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
     final totalSales = (double.tryParse(_manualSalesController.text) ?? 0.0) +
         (double.tryParse(_onlineSalesController.text) ?? 0.0);
     final totalPayments = (double.tryParse(_creditCardController.text) ?? 0.0) +
