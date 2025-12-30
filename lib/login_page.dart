@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/categories_page.dart';
+import 'package:branch/api_config.dart';
 import 'package:branch/home.dart'; // ADDED
 import 'package:network_info_plus/network_info_plus.dart';
 
@@ -121,8 +122,8 @@ class _LoginPageState extends State<LoginPage> {
     if (token != null) {
       try {
         final res = await http.get(
-          Uri.parse("https://admin.theblackforestcakes.com/api/users/me"),
-          headers: {"Authorization": "Bearer $token"},
+          Uri.parse("${ApiConfig.baseUrl}/users/me"),
+          headers: ApiConfig.getHeaders(token),
         );
         if (res.statusCode == 200) {
           if (mounted) {
@@ -216,8 +217,8 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final response = await http.post(
-        Uri.parse("https://admin.theblackforestcakes.com/api/users/login"),
-        headers: {"Content-Type": "application/json"},
+        Uri.parse("${ApiConfig.baseUrl}/users/login"),
+        headers: ApiConfig.getHeaders(null),
         body: jsonEncode({
           "email": finalEmail,
           "password": _passwordController.text,
@@ -230,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
         final role = user["role"];
 
         // ✔ Allow ONLY branch users
-        const allowedRoles = ["branch"];
+        const allowedRoles = ["branch", "superadmin"];
         if (!allowedRoles.contains(role)) {
           _showError("Access denied: only branch users allowed.");
           setState(() => _isLoading = false);
@@ -254,11 +255,8 @@ class _LoginPageState extends State<LoginPage> {
         // ✔ Fetch branch details if branchId exists
         if (branchId != null) {
           final bRes = await http.get(
-            Uri.parse("https://admin.theblackforestcakes.com/api/branches/$branchId"),
-            headers: {
-              "Authorization": "Bearer ${data['token']}",
-              "Content-Type": "application/json"
-            },
+            Uri.parse("${ApiConfig.baseUrl}/branches/$branchId"),
+            headers: ApiConfig.getHeaders(data['token']),
           );
           if (bRes.statusCode == 200) {
             final branch = jsonDecode(bRes.body);
@@ -267,7 +265,7 @@ class _LoginPageState extends State<LoginPage> {
             printerIp = branch["printerIp"]?.toString().trim();
 
             // ✔ Branch IP validation (only if range is set)
-            if (branchIpRange != null && branchIpRange.isNotEmpty) {
+            if (branchIpRange != null && branchIpRange.isNotEmpty && role != 'superadmin') {
               if (deviceIp == null) {
                 _showError("Unable to fetch device IP for validation");
                 setState(() => _isLoading = false);

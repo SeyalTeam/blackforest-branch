@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/cart_provider.dart';
+import 'package:branch/api_config.dart';
 
 class ProductsPage extends StatefulWidget {
   final String categoryId;
@@ -38,8 +39,8 @@ class _ProductsPageState extends State<ProductsPage> {
   Future<void> _fetchUserData(String token) async {
     try {
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/users/me?depth=2'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/users/me?depth=2'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -93,8 +94,8 @@ class _ProductsPageState extends State<ProductsPage> {
     if (deviceIp == null) return;
     try {
       final allBranchesResponse = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/branches?depth=1'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/branches?depth=1'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (allBranchesResponse.statusCode == 200) {
         final branchesData = jsonDecode(allBranchesResponse.body);
@@ -135,10 +136,10 @@ class _ProductsPageState extends State<ProductsPage> {
         await _fetchUserData(token);
       }
       // Updated: Fetch all products in the category without restricting to branch overrides
-      String url = 'https://admin.theblackforestcakes.com/api/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
+      String url = '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
       final response = await http.get(
         Uri.parse(url),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -305,7 +306,7 @@ class _ProductsPageState extends State<ProductsPage> {
                   product['images'][0]['image']['url'] != null) {
                 imageUrl = product['images'][0]['image']['url'];
                 if (imageUrl != null && imageUrl.startsWith('/')) {
-                  imageUrl = 'https://admin.theblackforestcakes.com$imageUrl';
+                  imageUrl = '${ApiConfig.domain}$imageUrl';
                 }
               }
               imageUrl ??= 'https://via.placeholder.com/150?text=No+Image';
@@ -371,6 +372,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                     imageUrl: imageUrl!,
                                     fit: BoxFit.cover,
                                     width: double.infinity,
+                                    httpHeaders: ApiConfig.getHeaders(null),
                                     placeholder: (context, url) =>
                                     const Center(child: CircularProgressIndicator()),
                                     errorWidget: (context, url, error) => const Center(

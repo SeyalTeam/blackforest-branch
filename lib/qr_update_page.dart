@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:branch/common_scaffold.dart';
 import 'qr_products_page.dart';
+import 'package:branch/api_config.dart';
 
 class QrUpdatePage extends StatefulWidget {
   const QrUpdatePage({super.key});
@@ -32,7 +33,8 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
     try {
       final response = await http.get(
         Uri.parse(
-            "https://admin.theblackforestcakes.com/api/categories?where[isBilling][equals]=true&limit=200&depth=1"),
+            "${ApiConfig.baseUrl}/categories?where[isBilling][equals]=true&limit=200&depth=1"),
+        headers: ApiConfig.getHeaders(null),
       );
 
       if (response.statusCode == 200) {
@@ -61,7 +63,7 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
           category["image"]["url"] != null) {
         String url = category["image"]["url"];
         if (url.startsWith("/")) {
-          return "https://admin.theblackforestcakes.com$url";
+          return "${ApiConfig.domain}$url";
         }
         return url;
       }
@@ -137,6 +139,7 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
                             imageUrl: imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
+                            httpHeaders: ApiConfig.getHeaders(null),
                             placeholder: (context, url) =>
                             const Center(
                                 child:

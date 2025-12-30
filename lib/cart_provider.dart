@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:branch/api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,7 +26,7 @@ class CartItem {
     if (product['images'] != null && product['images'].isNotEmpty && product['images'][0]['image'] != null && product['images'][0]['image']['url'] != null) {
       imageUrl = product['images'][0]['image']['url'];
       if (imageUrl != null && imageUrl.startsWith('/')) {
-        imageUrl = 'https://admin.theblackforestcakes.com$imageUrl';
+        imageUrl = '${ApiConfig.domain}$imageUrl';
       }
     }
 
@@ -169,11 +170,8 @@ class CartProvider extends ChangeNotifier {
       });
 
       final response = await http.post(
-        Uri.parse('https://admin.theblackforestcakes.com/api/billings'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('${ApiConfig.baseUrl}/billings'),
+        headers: ApiConfig.getHeaders(token),
         body: body,
       );
 
@@ -194,5 +192,15 @@ class CartProvider extends ChangeNotifier {
       );
       return null;
     }
+  }
+  // Clear all data on logout
+  void clearData() {
+    _cartItems.clear();
+    _branchId = null;
+    _printerIp = null;
+    _printerPort = 9100;
+    _printerProtocol = 'esc_pos';
+    notifyListeners();
+    _saveCart(); // Optional: do we want to clear persisted cart on logout? Usually yes for security/privacy.
   }
 }

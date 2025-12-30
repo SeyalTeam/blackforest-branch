@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/common_scaffold.dart';
+import 'package:branch/api_config.dart';
 
 class _ExpenseItem {
   String? source;
@@ -149,8 +150,8 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://admin.theblackforestcakes.com/api/expenses'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse('${ApiConfig.baseUrl}/expenses'),
+        headers: ApiConfig.getHeaders(null),
         body: jsonEncode(expenseData),
       );
 

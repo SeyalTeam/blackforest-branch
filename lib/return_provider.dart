@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:branch/api_config.dart';
 
 class ReturnItem {
   final String id;
@@ -26,6 +27,8 @@ class ReturnProvider extends ChangeNotifier {
   Map<String, String> _productPhotos = {}; // productId: mediaId
   Map<String, File?> _tempPhotos = {}; // Temp file
   Map<String, String> _photoUrls = {}; // URL cache
+  bool _isSubmitting = false;
+  bool get isSubmitting => _isSubmitting;
 
   List<ReturnItem> get returnItems => List.unmodifiable(_items);
   double get total => _items.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -135,8 +138,8 @@ class ReturnProvider extends ChangeNotifier {
       final token = prefs.getString('token');
       if (token == null) return null;
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/media/$mediaId?depth=0'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/media/$mediaId?depth=0'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -155,9 +158,10 @@ class ReturnProvider extends ChangeNotifier {
       if (token == null) return null;
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://admin.theblackforestcakes.com/api/media?prefix=returnorder'),
+        Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
       );
       request.headers['Authorization'] = 'Bearer $token';
+      request.headers['x-api-key'] = ApiConfig.apiKey;
       request.fields['alt'] = altText;
       request.files.add(http.MultipartFile(
         'file',
@@ -214,6 +218,8 @@ class ReturnProvider extends ChangeNotifier {
   }
 
   Future<void> submitReturn(BuildContext context, String? branchId) async {
+    if (_isSubmitting) return;
+    
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No items selected for return')),
@@ -229,6 +235,10 @@ class ReturnProvider extends ChangeNotifier {
         return;
       }
     }
+
+    _isSubmitting = true;
+    notifyListeners();
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
@@ -255,11 +265,8 @@ class ReturnProvider extends ChangeNotifier {
         'notes': '',
       };
       final response = await http.post(
-        Uri.parse('https://admin.theblackforestcakes.com/api/return-orders'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        Uri.parse('${ApiConfig.baseUrl}/return-orders'),
+        headers: ApiConfig.getHeaders(token),
         body: jsonEncode(returnData),
       );
       if (response.statusCode == 201) {
@@ -276,6 +283,15 @@ class ReturnProvider extends ChangeNotifier {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Network error: Check your internet')),
       );
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
     }
+  }
+  // Clear all data on logout
+  void clearData() {
+    clearReturns(); // Clears items and photos
+    _branchId = null;
+    notifyListeners();
   }
 }

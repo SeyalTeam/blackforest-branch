@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:branch/api_config.dart';
 
 class StockProvider extends ChangeNotifier {
   // ========== STEP SYSTEM ==========
@@ -23,19 +24,33 @@ class StockProvider extends ChangeNotifier {
 
   set deliveryDate(DateTime? v) {
     _deliveryDate = v;
-    _isSameDay = false; // Reset same-day flag if a specific date is manually set
     notifyListeners();
   }
 
   void toggleSameDay() {
     _isSameDay = !_isSameDay;
+    final now = DateTime.now();
     if (_isSameDay) {
-      _deliveryDate = null; // Clear manual date if same-day is toggled on
+      // No more 2-hour restriction for branch orders
+      _deliveryDate = now;
     } else {
       // Default back to Tomorrow 10:00 AM if same-day is toggled off
-      final now = DateTime.now();
       _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
     }
+    notifyListeners();
+  }
+
+  // Explicit setters for UI buttons
+  void setStockMode() {
+    _isSameDay = false;
+    final now = DateTime.now();
+    _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+    notifyListeners();
+  }
+
+  void setLiveMode() {
+    _isSameDay = true;
+    _deliveryDate = DateTime.now();
     notifyListeners();
   }
 
@@ -61,12 +76,22 @@ class StockProvider extends ChangeNotifier {
   String? get selectedCategoryId => _selectedCategoryId;
   String? get selectedCategoryName => _selectedCategoryName;
 
+  bool _isSubmitting = false;
+  bool get isSubmitting => _isSubmitting;
+
   String? _userRole;
   String? _companyId;
   String? _branchId;
   String? get userRole => _userRole;
   String? get companyId => _companyId;
-  String? get branchId => _branchId;
+  String? get branchId => _overrideBranchId ?? _branchId; // UPDATED: Return override if set
+
+  // ========== SUPERADMIN BRANCH SELECTION ==========
+  List<dynamic> _availableBranches = [];
+  String? _overrideBranchId;
+
+  List<dynamic> get availableBranches => _availableBranches;
+  String? get overrideBranchId => _overrideBranchId;
 
   // ========== FIELD MAPS ==========
   final Map<String, double?> _requiredQty = {};          // UPDATED
@@ -140,8 +165,8 @@ class StockProvider extends ChangeNotifier {
   Future<void> _loadUserData(String token) async {
     try {
       final res = await http.get(
-        Uri.parse("https://admin.theblackforestcakes.com/api/users/me?depth=2"),
-        headers: {"Authorization": "Bearer $token"},
+        Uri.parse("${ApiConfig.baseUrl}/users/me?depth=2"),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode != 200) return;
@@ -167,6 +192,10 @@ class StockProvider extends ChangeNotifier {
         await _detectWaiterBranch(token);
       }
 
+      if (_userRole == "superadmin") {
+         await fetchBranches(token);
+      }
+
       notifyListeners();
     } catch (_) {}
   }
@@ -176,8 +205,8 @@ class StockProvider extends ChangeNotifier {
     if (ip == null) return;
 
     final res = await http.get(
-      Uri.parse("https://admin.theblackforestcakes.com/api/branches?depth=1"),
-      headers: {"Authorization": "Bearer $token"},
+      Uri.parse("${ApiConfig.baseUrl}/branches?depth=1"),
+      headers: ApiConfig.getHeaders(token),
     );
 
     if (res.statusCode != 200) return;
@@ -205,8 +234,8 @@ class StockProvider extends ChangeNotifier {
     List<String> out = [];
 
     final res = await http.get(
-      Uri.parse("https://admin.theblackforestcakes.com/api/branches?depth=1"),
-      headers: {"Authorization": "Bearer $token"},
+      Uri.parse("${ApiConfig.baseUrl}/branches?depth=1"),
+      headers: ApiConfig.getHeaders(token),
     );
 
     if (res.statusCode != 200) return [];
@@ -224,6 +253,29 @@ class StockProvider extends ChangeNotifier {
     }
 
     return out;
+  }
+
+  // ========== FETCH BRANCHES (SUPERADMIN) ==========
+  Future<void> fetchBranches(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/branches?depth=1&limit=100"),
+        headers: ApiConfig.getHeaders(token),
+      );
+      if (res.statusCode == 200) {
+        _availableBranches = jsonDecode(res.body)["docs"] ?? [];
+      }
+    } catch (_) {}
+  }
+
+  // ========== SET OVERRIDE BRANCH ==========
+  Future<void> setOverrideBranch(String? branchId) async {
+    _overrideBranchId = branchId;
+    notifyListeners();
+    // Reload products to apply new branch pricing if a category is selected
+    if (_selectedCategoryId != null) {
+      await loadProducts();
+    }
   }
 
   // ========== LOAD STOCK CATEGORIES ==========
@@ -255,11 +307,11 @@ class StockProvider extends ChangeNotifier {
       }
     }
 
-    final res = await http.get(
-      Uri.parse(
-          "https://admin.theblackforestcakes.com/api/categories?$query&limit=100&depth=1"),
-      headers: {"Authorization": "Bearer $token"},
-    );
+      final res = await http.get(
+        Uri.parse(
+          "${ApiConfig.baseUrl}/categories?$query&limit=100&depth=1"),
+        headers: ApiConfig.getHeaders(token),
+      );
 
     if (res.statusCode == 200) {
       _categories = jsonDecode(res.body)["docs"] ?? [];
@@ -282,11 +334,11 @@ class StockProvider extends ChangeNotifier {
     if (token == null) return;
 
     final url =
-        "https://admin.theblackforestcakes.com/api/products?where[category][equals]=$_selectedCategoryId&limit=200&depth=1";
+        "${ApiConfig.baseUrl}/products?where[category][equals]=$_selectedCategoryId&limit=200&depth=1";
 
     final res = await http.get(
       Uri.parse(url),
-      headers: {"Authorization": "Bearer $token"},
+      headers: ApiConfig.getHeaders(token),
     );
 
     if (res.statusCode == 200) {
@@ -298,11 +350,26 @@ class StockProvider extends ChangeNotifier {
       for (var p in docs) {
         final id = p["id"];
 
+        // APPLY BRANCH OVERRIDES
+        dynamic priceDetails = p['defaultPriceDetails'];
+        final currentBranch = _overrideBranchId ?? _branchId;
+        
+        if (currentBranch != null && p['branchOverrides'] != null) {
+          for (var override in p['branchOverrides']) {
+             var b = override['branch'];
+             String bId = b is Map ? b['id'] ?? b['_id'] : b;
+             if (bId == currentBranch) {
+               priceDetails = override;
+               break;
+             }
+          }
+        }
+
         _productNames[id] = p["name"] ?? "Unknown";
         _prices[id] =
-            (p['defaultPriceDetails']?['price'] as num?)?.toDouble() ?? 0.0;
-        _units[id] = "${p['defaultPriceDetails']?['quantity'] ?? ''}${p['defaultPriceDetails']?['unit'] ?? ''}";
-        _baseQuantities[id] = (p['defaultPriceDetails']?['quantity'] as num?)?.toDouble() ?? 1.0;
+            (priceDetails['price'] as num?)?.toDouble() ?? 0.0;
+        _units[id] = "${priceDetails['quantity'] ?? ''}${priceDetails['unit'] ?? ''}";
+        _baseQuantities[id] = (priceDetails['quantity'] as num?)?.toDouble() ?? 1.0;
         if (_baseQuantities[id] == 0) _baseQuantities[id] = 1.0;
 
         _requiredQty.putIfAbsent(id, () => null);
@@ -350,142 +417,159 @@ class StockProvider extends ChangeNotifier {
 
   // ========== SUBMIT STOCK ORDER ==========
   Future<Map<String, dynamic>?> submitStockOrder(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("token");
+    if (_isSubmitting) return null;
+    _isSubmitting = true;
+    notifyListeners();
 
-    if (token == null) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
 
-    final DateTime now = DateTime.now();
+      if (token == null) return null;
 
-    if (_isSameDay) {
-      _deliveryDate = now.add(const Duration(hours: 2));
-    }
+      final DateTime now = DateTime.now();
 
-    if (_deliveryDate == null) {
+      if (_isSameDay) {
+        // If same-day is active, force the date to Today, but keep the selected time
+        final selectedTime = _deliveryDate ?? now;
+        _deliveryDate = DateTime(now.year, now.month, now.day, selectedTime.hour, selectedTime.minute);
+      }
+
+      if (_deliveryDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select delivery date & time")),
       );
       return null;
     }
 
-    // Validation
-    if (!_isSameDay) {
-      final DateTime minTime = now.add(const Duration(hours: 2));
-      if (_deliveryDate!.isBefore(minTime)) {
-         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Delivery time must be at least 2 hours from now")),
-        );
-        return null;
-      }
-    }
-
-    List<Map<String, dynamic>> items = [];
-
-    // Create a temporary map to hold names and prices for injection later
-    Map<String, String> tempNames = {};
-    Map<String, double> tempPrices = {};
-
-    for (var entry in _selected.entries) {
-      if (entry.value) {
-        final pid = entry.key;
-        items.add({
-          "product": pid,
-          "inStock": _inStock[pid],
-          "requiredQty": _requiredQty[pid],
-        });
-        tempNames[pid] = _productNames[pid] ?? "Item";
-        tempPrices[pid] = _prices[pid] ?? 0.0;
-      }
-    }
-
-    if (items.isEmpty) {
+    // NEW: Prevent past date/time (allow 1 min buffer for network/latency)
+    if (_deliveryDate!.isBefore(now.subtract(const Duration(minutes: 1)))) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("No items selected"),
+          content: Text("Cannot place order for a past date or time"),
+          backgroundColor: Colors.redAccent,
         ),
       );
       return null;
     }
 
-    final body = jsonEncode({
-      "branch": _branchId,
-      "deliveryDate": _deliveryDate!.toIso8601String(),
-      "items": items,
-    });
+    // Validation (Removed 2-hour restriction globally)
+      List<Map<String, dynamic>> items = [];
 
-    final res = await http.post(
-      Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders"),
-      headers: {
-        "Authorization": "Bearer $token",
-        "Content-Type": "application/json",
-      },
-      body: body,
-    );
+      // Create a temporary map to hold names and prices for injection later
+      Map<String, String> tempNames = {};
+      Map<String, double> tempPrices = {};
 
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      final jsonResponse = jsonDecode(res.body);
-      // Payload CMS often wraps creation response in a 'doc' key
-      Map<String, dynamic> orderDoc = jsonResponse['doc'] != null
-          ? Map<String, dynamic>.from(jsonResponse['doc'])
-          : Map<String, dynamic>.from(jsonResponse);
-
-      // Inject names and prices into the response structure so the printer can use them
-      if (orderDoc['items'] != null && orderDoc['items'] is List) {
-        List<dynamic> respItems = orderDoc['items'];
-        for (var i = 0; i < respItems.length; i++) {
-          var item = respItems[i];
-          String? pid;
-          if (item['product'] is Map) {
-            pid = item['product']['id'];
-          } else {
-            pid = item['product'];
-          }
-          
-          if (pid != null) {
-             // Create a new map to avoid modifying a locked map if any
-             Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
-             if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
-             if (tempPrices.containsKey(pid)) newItem['price'] = tempPrices[pid];
-             if (pid != null) newItem['baseQuantity'] = _baseQuantities[pid] ?? 1.0;
-             respItems[i] = newItem;
-          }
+      for (var entry in _selected.entries) {
+        if (entry.value) {
+          final pid = entry.key;
+          items.add({
+            "product": pid,
+            "inStock": _inStock[pid],
+            "requiredQty": _requiredQty[pid],
+          });
+          tempNames[pid] = _productNames[pid] ?? "Item";
+          tempPrices[pid] = _prices[pid] ?? 0.0;
         }
-        orderDoc['items'] = respItems;
+      }
+
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No items selected"),
+          ),
+        );
+        return null;
+      }
+
+      final body = jsonEncode({
+        "branch": branchId,
+        "deliveryDate": _deliveryDate!.toUtc().toIso8601String(),
+        "items": items,
+      });
+
+      final res = await http.post(
+        Uri.parse("${ApiConfig.baseUrl}/stock-orders"),
+        headers: ApiConfig.getHeaders(token),
+        body: body,
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final jsonResponse = jsonDecode(res.body);
+        // Payload CMS often wraps creation response in a 'doc' key
+        Map<String, dynamic> orderDoc = jsonResponse['doc'] != null
+            ? Map<String, dynamic>.from(jsonResponse['doc'])
+            : Map<String, dynamic>.from(jsonResponse);
+
+        // Inject names and prices into the response structure so the printer can use them
+        if (orderDoc['items'] != null && orderDoc['items'] is List) {
+          List<dynamic> respItems = orderDoc['items'];
+          for (var i = 0; i < respItems.length; i++) {
+            var item = respItems[i];
+            String? pid;
+            if (item['product'] is Map) {
+              pid = item['product']['id'];
+            } else {
+              pid = item['product'];
+            }
+            
+            if (pid != null) {
+               // Create a new map to avoid modifying a locked map if any
+               Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+               if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
+               if (tempPrices.containsKey(pid)) newItem['price'] = tempPrices[pid];
+               if (pid != null) newItem['baseQuantity'] = _baseQuantities[pid] ?? 1.0;
+               respItems[i] = newItem;
+            }
+          }
+          orderDoc['items'] = respItems;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Stock Order Submitted Successfully!")),
+        );
+
+        // RESET
+        _requiredQty.clear();
+        _inStock.clear();
+        _selected.clear();
+        _productNames.clear();
+        _prices.clear();
+
+        _requiredCtrl.forEach((_, c) => c.dispose());
+        _requiredCtrl.clear();
+        _stockCtrl.forEach((_, c) => c.dispose());
+        _stockCtrl.clear();
+
+        _isSameDay = false;
+        final now = DateTime.now();
+        _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+
+        _step = "categories";
+        _selectedCategoryId = null;
+        _selectedCategoryName = null;
+
+        _products = [];
+        _filteredProducts = [];
+        _overrideBranchId = null; // NEW: Reset branch selection
+
+        await _loadStockCategories();
+        notifyListeners();
+
+        return orderDoc; // Return the confirmed order data with names
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Stock Order Submitted Successfully!")),
+        SnackBar(content: Text("Failed: ${res.statusCode}")),
       );
-
-      // RESET
-      _requiredQty.clear();
-      _inStock.clear();
-      _selected.clear();
-      _productNames.clear();
-      _prices.clear();
-
-      _requiredCtrl.forEach((_, c) => c.dispose());
-      _requiredCtrl.clear();
-      _stockCtrl.forEach((_, c) => c.dispose());
-      _stockCtrl.clear();
-
-      _isSameDay = false;
-      final now = DateTime.now();
-      _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
-
-      _step = "categories";
-      _selectedCategoryId = null;
-      _selectedCategoryName = null;
-
-      await _loadStockCategories();
+    } catch (e) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    } finally {
+      _isSubmitting = false;
       notifyListeners();
-
-      return orderDoc; // Return the confirmed order data with names
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Failed: ${res.statusCode}")),
-    );
 
     return null;
   }
@@ -533,15 +617,15 @@ class StockProvider extends ChangeNotifier {
       final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
       final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
 
-      String query = "where[createdAt][greater_than_equal]=$startOfDay&where[createdAt][less_than_equal]=$endOfDay";
+      String query = "where[deliveryDate][greater_than_equal]=$startOfDay&where[deliveryDate][less_than_equal]=$endOfDay";
 
       if (_branchId != null) {
         query += "&where[branch][equals]=$_branchId";
       }
 
       final res = await http.get(
-        Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders?$query&limit=100&depth=2"),
-        headers: {"Authorization": "Bearer $token"},
+        Uri.parse("${ApiConfig.baseUrl}/stock-orders?$query&limit=100&depth=2"),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode == 200) {
@@ -565,15 +649,12 @@ class StockProvider extends ChangeNotifier {
       if (token == null) return false;
 
       final res = await http.patch(
-        Uri.parse("https://admin.theblackforestcakes.com/api/stock-orders/$orderId"),
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json",
-        },
+        Uri.parse("${ApiConfig.baseUrl}/stock-orders/$orderId"),
+        headers: ApiConfig.getHeaders(token),
         body: jsonEncode({"items": items}),
       );
 
-      if (res.statusCode == 200) {
+      if (res.statusCode == 200 || res.statusCode == 202) {
         return true;
       }
     } catch (e) {
@@ -592,5 +673,21 @@ class StockProvider extends ChangeNotifier {
       _stockReports[index] = newOrder;
       notifyListeners();
     }
+  }
+
+  // Clear all data on logout
+  void clearData() {
+    _branchId = null;
+    _companyId = null;
+    _userRole = null;
+    _categories = [];
+    _products = [];
+    _stockReports = [];
+    _availableBranches = [];
+    _selectedCategoryId = null;
+    _overrideBranchId = null; // Replaced _selectedBranchId with _overrideBranchId
+    _deliveryDate = null; // Replaced _selectedDate with _deliveryDate (if this is what was intended)
+    // Removed _userName and _lastStockGridLoad as they don't exist
+    notifyListeners();
   }
 }

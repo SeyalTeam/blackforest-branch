@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:branch/api_config.dart';
 
 class ClosingEntryPage extends StatefulWidget {
   const ClosingEntryPage({Key? key}) : super(key: key);
@@ -35,7 +36,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   String? _branchId;
   String? _token;
   static const String _manualAllowedBranch = '690e326cea6f468d6fe462e6';
-  static const String _apiHost = 'admin.theblackforestcakes.com';
+
 
   bool _hasError = false; // Block UI if initialization fails
 
@@ -112,11 +113,20 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
 
     try {
       // Must succeed strictly
+      // Must succeed strictly
+      final lastClosing = await _fetchLastClosingToday();
+      
+      // If no closing today, start from 00:00:00 today
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day).toUtc();
+      // Use lastClosing if available and it's after startOfToday (just safety), else startOfToday
+      final startTime = lastClosing ?? startOfToday;
+
       await Future.wait([
-        _fetchIncrementalSystemSales(),
-        _fetchIncrementalExpenses(),
-        _fetchIncrementalReturns(),
-        _fetchIncrementalStockOrders(), // NEW
+        _fetchIncrementalSystemSales(startTime),
+        _fetchIncrementalExpenses(startTime),
+        _fetchIncrementalReturns(startTime),
+        _fetchIncrementalStockOrders(startTime), // NEW
       ]);
     } catch (e) {
       debugPrint('Initialization error: $e');
@@ -139,13 +149,16 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   Future<DateTime?> _fetchLastClosingToday() async {
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      /*
       final uri = Uri.https(_apiHost, '/api/closing-entries', {
         'where[branch][equals]': _branchId!,
         'where[date][equals]': today,
         'limit': '1',
         'sort': '-createdAt',
       });
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $_token'});
+      */
+      final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries?where[branch][equals]=$_branchId&where[date][equals]=$today&limit=1&sort=-createdAt');
+      final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
         final docs = json['docs'] as List<dynamic>? ?? [];
@@ -166,35 +179,29 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     }
   }
 
-  Future<void> _fetchIncrementalSystemSales() async {
+  Future<void> _fetchIncrementalSystemSales(DateTime startTime) async {
     setState(() => _isFetchingSales = true);
     try {
-      final lastClosing = await _fetchLastClosingToday();
+      final dateFilter = startTime.toIso8601String();
+      /*
       final uri = Uri.https(_apiHost, '/api/billings', {
         'where[branch][equals]': _branchId!,
+        'where[createdAt][greater_than]': dateFilter,
         'limit': '2000',
         'depth': '0',
       });
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $_token'});
+      */
+      final uri = Uri.parse('${ApiConfig.baseUrl}/billings?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Billing fetch failed: ${res.statusCode}');
         return;
       }
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
-      final now = DateTime.now().toUtc();
       for (final bill in docs) {
-        final createdAtStr = bill['createdAt'];
-        if (createdAtStr == null) continue;
-        final createdAt = DateTime.parse(createdAtStr).toUtc();
-        if (createdAt.year != now.year || createdAt.month != now.month || createdAt.day != now.day) {
-          continue;
-        }
-        final include = lastClosing == null || createdAt.isAfter(lastClosing);
-        if (include) {
           final amount = bill['grandTotal'] ?? bill['total'] ?? bill['netAmount'] ?? bill['totalAmount'] ?? bill['amount'];
           if (amount is num) total += amount.toDouble();
-        }
       }
       if (_branchId != _manualAllowedBranch) {
         _systemSalesController.text = total.toStringAsFixed(2);
@@ -205,31 +212,25 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     setState(() => _isFetchingSales = false);
   }
 
-  Future<void> _fetchIncrementalExpenses() async {
+  Future<void> _fetchIncrementalExpenses(DateTime startTime) async {
     setState(() => _isFetchingExpenses = true);
     try {
-      final lastClosing = await _fetchLastClosingToday();
+      final dateFilter = startTime.toIso8601String();
+      /*
       final uri = Uri.https(_apiHost, '/api/expenses', {
         'where[branch][equals]': _branchId!,
+        'where[createdAt][greater_than]': dateFilter,
         'limit': '2000',
         'depth': '0',
       });
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $_token'});
+      */
+      final uri = Uri.parse('${ApiConfig.baseUrl}/expenses?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) return;
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
-      final now = DateTime.now().toUtc();
       for (final exp in docs) {
-        final createdAtStr = exp['createdAt'];
-        if (createdAtStr == null) continue;
-        final createdAt = DateTime.parse(createdAtStr).toUtc();
-        if (createdAt.year != now.year || createdAt.month != now.month || createdAt.day != now.day) {
-          continue;
-        }
-        final include = lastClosing == null || createdAt.isAfter(lastClosing);
-        if (include) {
           total += (exp['total'] ?? 0).toDouble();
-        }
       }
       _expensesController.text = total.toStringAsFixed(2);
     } catch (e) {
@@ -238,32 +239,28 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     setState(() => _isFetchingExpenses = false);
   }
 
-  Future<void> _fetchIncrementalReturns() async {
+  Future<void> _fetchIncrementalReturns(DateTime startTime) async {
     setState(() => _isFetchingReturns = true);
     try {
-      final lastClosing = await _fetchLastClosingToday();
+      final dateFilter = startTime.toIso8601String();
+      /*
       final uri = Uri.https(_apiHost, '/api/return-orders', {
         'where[branch][equals]': _branchId!,
+        'where[createdAt][greater_than]': dateFilter,
         'limit': '2000',
         'depth': '0',
       });
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $_token'});
+      */
+      final uri = Uri.parse('${ApiConfig.baseUrl}/return-orders?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Returns fetch failed: ${res.statusCode}');
         return;
       }
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
-      final now = DateTime.now().toUtc();
       for (final order in docs) {
-        final createdAtStr = order['createdAt'];
-        if (createdAtStr == null) continue;
-        final createdAt = DateTime.parse(createdAtStr).toUtc();
-        if (createdAt.year != now.year || createdAt.month != now.month || createdAt.day != now.day) {
-          continue;
-        }
-        final include = lastClosing == null || createdAt.isAfter(lastClosing);
-        if (include && order['status'] == 'returned') {
+        if (order['status'] == 'returned') {
           total += (order['totalAmount'] ?? 0).toDouble();
         }
       }
@@ -277,23 +274,45 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   // -------------------------------------------------------
   // NEW: CORRECT INCREMENTAL STOCK BASED ON ITEM.sendingDate
   // -------------------------------------------------------
-  Future<void> _fetchIncrementalStockOrders() async {
+  Future<void> _fetchIncrementalStockOrders(DateTime startTime) async {
     setState(() => _isFetchingStockOrders = true);
     try {
-      final lastClosing = await _fetchLastClosingToday();
-      final uri = Uri.https(_apiHost, '/api/stock-orders', {
-        'where[branch][equals]': _branchId!,
-        'limit': '2000',
-        'depth': '0',
-      });
-      final res = await http.get(uri, headers: {'Authorization': 'Bearer $_token'});
+      // Stock orders are trickier because they loop through items which have sendingDate.
+      // But usually we filter by order creation or update. 
+      // The previous logic filtered items by sendingDate > lastClosing.
+      // Let's filter orders modified/created after sendingDate.
+      // However, the payload is traversing stock-orders. 
+      // Let's stick to the same logic but filter stock-orders by updated/createdAt to reduce payload?
+      // Or just filter all active stock orders?
+      // Since 'sendingDate' is on item level, and we want items sent TODAY > lastClosing.
+      
+      // Optimization: Fetch stock orders where 'updatedAt' > startTime (approx) or just fetch for today.
+      final dateFilter = startTime.toIso8601String();
+      
+      // Fetching stock orders created/updated recently?
+      // Actually stock orders might be created earlier but items sent today.
+      // So filtering by 'items.sendingDate' would be ideal but Payload doesn't support deep nested queries easily on arrays sometimes.
+      // Safe bet: Filter stock orders updated today? Or just last 100 which is better than 2000.
+      
+      // Let's keep it simpler but optimized: Filter orders created OR updated today?
+      // The previous logic iterated all 2000.
+      // Let's try to filter by `updatedAt` > today start?
+      // If a stock order was created yesterday but an item sent today, updatedAt would be today.
+      
+      // Let's use startOfToday for the query to be safe, then filter items strictly by startTime.
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/stock-orders?where[branch][equals]=$_branchId&where[updatedAt][greater_than]=$startOfToday&limit=500&depth=0');
+      
+      final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Stock order fetch failed: ${res.statusCode}');
         return;
       }
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
-      final now = DateTime.now().toUtc();
+      
       for (final so in docs) {
         final items = so['items'] as List<dynamic>?;
         if (items == null) continue;
@@ -302,11 +321,8 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
           final sendingAmount = item['sendingAmount'] ?? 0;
           if (sendingDateStr == null) continue;
           final sendingDate = DateTime.parse(sendingDateStr).toUtc();
-          if (sendingDate.year != now.year || sendingDate.month != now.month || sendingDate.day != now.day) {
-            continue;
-          }
-          final include = lastClosing == null || sendingDate.isAfter(lastClosing);
-          if (include) {
+          
+          if (sendingDate.isAfter(startTime)) {
             total += sendingAmount.toDouble();
           }
         }
@@ -322,11 +338,17 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     if (!_salesFormKey.currentState!.validate() || !_paymentsFormKey.currentState!.validate()) return;
     setState(() => _isSubmitting = true);
     try {
+      // Must succeed strictly
+      final lastClosing = await _fetchLastClosingToday();
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day).toUtc();
+      final startTime = lastClosing ?? startOfToday;
+
       await Future.wait([
-        _fetchIncrementalSystemSales(),
-        _fetchIncrementalExpenses(),
-        _fetchIncrementalReturns(),
-        _fetchIncrementalStockOrders(),
+        _fetchIncrementalSystemSales(startTime),
+        _fetchIncrementalExpenses(startTime),
+        _fetchIncrementalReturns(startTime),
+        _fetchIncrementalStockOrders(startTime),
       ]);
       final systemSales = double.tryParse(_systemSalesController.text) ?? 0.0;
       final payload = {
@@ -346,13 +368,11 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         },
         'branch': _branchId,
       };
-      final uri = Uri.https(_apiHost, '/api/closing-entries');
+      // final uri = Uri.https(_apiHost, '/api/closing-entries');
+      final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries');
       final res = await http.post(
         uri,
-        headers: {
-          'Authorization': 'Bearer $_token',
-          'Content-Type': 'application/json',
-        },
+        headers: ApiConfig.getHeaders(_token),
         body: jsonEncode(payload),
       );
       if (res.statusCode == 200 || res.statusCode == 201) {

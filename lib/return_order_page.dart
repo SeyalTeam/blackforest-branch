@@ -14,6 +14,7 @@ import 'package:image/image.dart' as img_lib;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:branch/api_config.dart';
 
 class ReturnOrderPage extends StatefulWidget {
   final String categoryId;
@@ -72,8 +73,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
   Future<void> _fetchUserData(String token) async {
     try {
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/users/me?depth=2'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/users/me?depth=2'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -98,8 +99,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     if (deviceIp == null) return;
     try {
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/branches?depth=1'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/branches?depth=1'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -133,10 +134,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (_branchId == null && _userRole == null) {
         await _fetchUserData(token);
       }
-      final url = 'https://admin.theblackforestcakes.com/api/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
-      final response = await http.get(Uri.parse(url), headers: {
-        'Authorization': 'Bearer $token',
-      });
+      final url = '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
+      final response = await http.get(Uri.parse(url), headers: ApiConfig.getHeaders(token));
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         setState(() {
@@ -336,8 +335,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       final token = prefs.getString('token');
       if (token == null) return null;
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/media/$mediaId?depth=0'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/media/$mediaId?depth=0'),
+        headers: ApiConfig.getHeaders(token),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -357,9 +356,10 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (token == null) return null;
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://admin.theblackforestcakes.com/api/media?prefix=returnorder'),
+        Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
       );
       request.headers['Authorization'] = 'Bearer $token';
+      request.headers['x-api-key'] = ApiConfig.apiKey;
       request.fields['alt'] = altText;
       request.files.add(http.MultipartFile(
         'file',
@@ -396,7 +396,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (file != null && await file.exists()) {
         previewWidget = Image.file(file);
       } else if (previewUrl != null) {
-        previewWidget = CachedNetworkImage(imageUrl: previewUrl, fit: BoxFit.contain);
+        previewWidget = CachedNetworkImage(imageUrl: previewUrl, fit: BoxFit.contain, httpHeaders: ApiConfig.getHeaders(null));
       } else {
         previewWidget = const Text('No preview available');
       }
@@ -467,7 +467,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
                         product['images'][0]['image']['url'] != null) {
                       imageUrl = product['images'][0]['image']['url'];
                       if (imageUrl != null && imageUrl.startsWith('/')) {
-                        imageUrl = 'https://admin.theblackforestcakes.com$imageUrl';
+                        imageUrl = '${ApiConfig.domain}$imageUrl';
                       }
                     }
                     imageUrl ??= 'https://via.placeholder.com/150?text=No+Image';
@@ -522,6 +522,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
                                           imageUrl: imageUrl!,
                                           fit: BoxFit.cover,
                                           width: double.infinity,
+                                          httpHeaders: ApiConfig.getHeaders(null),
+
                                           placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
                                           errorWidget: (context, url, error) => const Center(child: Text('No Image', style: TextStyle(color: Colors.grey))),
                                         ),
@@ -598,6 +600,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
                                           width: 24,
                                           height: 24,
                                           fit: BoxFit.cover,
+                                          httpHeaders: ApiConfig.getHeaders(null),
                                           placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
                                           errorWidget: (context, url, error) => Icon(
                                             Icons.camera_alt,

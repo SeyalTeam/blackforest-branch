@@ -13,8 +13,13 @@ class StockOrderReportPage extends StatefulWidget {
 
 class _StockOrderReportPageState extends State<StockOrderReportPage> {
   DateTime _selectedDate = DateTime.now();
+  String _selectedFilter = "All";
   // Map to track local edits: OrderID -> { ProductID -> ReceivedQty }
   final Map<String, Map<String, TextEditingController>> _controllers = {};
+  // Track items currently being updated to prevent double-tap race conditions
+  final Set<String> _updatingItems = {}; // "orderId_productId"
+  // Track expanded order cards
+  final Set<String> _expandedOrderIds = {};
 
   @override
   void initState() {
@@ -69,34 +74,47 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       pageType: PageType.stock, 
       body: Consumer<StockProvider>(
         builder: (context, sp, child) {
-          if (sp.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          final reports = sp.stockReports.where((order) {
+            if (_selectedFilter == "All") return true;
+            final isLive = _isLive(order);
+            if (_selectedFilter == "Live") return isLive;
+            if (_selectedFilter == "Stock") return !isLive;
+            return true;
+          }).toList();
 
-          if (sp.stockReports.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: _fetchData,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                  _buildEmptyState(),
-                ],
-              ),
+          if (reports.isEmpty) {
+            return Column(
+              children: [
+
+                _buildFilterChips(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _fetchData,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                        _buildEmptyState(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             );
           }
 
           return Column(
             children: [
-              _buildDateHeader(),
+
+              _buildFilterChips(),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _fetchData,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: sp.stockReports.length,
+                    itemCount: reports.length,
                     itemBuilder: (context, index) {
-                      return _buildOrderCard(context, sp.stockReports[index], sp);
+                      return _buildOrderCard(context, reports[index], sp);
                     },
                   ),
                 ),
@@ -108,6 +126,21 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     );
   }
 
+  bool _isLive(dynamic order) {
+    if (order["deliveryDate"] == null || order["createdAt"] == null) return false;
+    try {
+      final deliveryDate = DateTime.parse(order["deliveryDate"]).toLocal();
+      final createdAt = DateTime.parse(order["createdAt"]).toLocal();
+      return deliveryDate.year == createdAt.year &&
+             deliveryDate.month == createdAt.month &&
+             deliveryDate.day == createdAt.day;
+    } catch (_) {
+      return false;
+    }
+  }
+
+
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -116,8 +149,11 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
           const Icon(Icons.assignment_outlined, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
           Text(
-            "No Stock Orders for ${DateFormat('dd MMM yyyy').format(_selectedDate)}",
+            _selectedFilter == "All" 
+              ? "No Stock Orders for ${DateFormat('dd MMM yyyy').format(_selectedDate)}"
+              : "No orders for ${DateFormat('dd MMM yyyy').format(_selectedDate)} with selection: $_selectedFilter",
             style: const TextStyle(fontSize: 16, color: Colors.grey),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
@@ -134,21 +170,80 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     );
   }
 
-  Widget _buildDateHeader() {
+
+
+  Widget _buildFilterChips() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey[100],
-      child: GestureDetector(
-        onTap: () => _selectDate(context),
-        child: Text(
-          "Date: ${DateFormat('dd MMM yyyy').format(_selectedDate)}",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepPurple),
-          textAlign: TextAlign.center,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Calendar Button
+            InkWell(
+              onTap: () => _selectDate(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_month, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('MMM dd').format(_selectedDate),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            // Filter Chips
+            ...["All", "Stock", "Live"].map((filter) {
+              final isSelected = _selectedFilter == filter;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  showCheckmark: false,
+                  label: Text(
+                    filter,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  selected: isSelected,
+                  selectedColor: filter == "Live" ? Colors.red : (filter == "Stock" ? Colors.blue : Colors.deepPurple),
+                  backgroundColor: Colors.white,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedFilter = filter;
+                      });
+                    }
+                  },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: isSelected ? 2 : 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              );
+            }).toList(),
+          ],
         ),
       ),
     );
   }
+
 
   Widget _buildOrderCard(BuildContext context, dynamic order, StockProvider sp) {
     final items = order["items"] as List<dynamic>? ?? [];
@@ -159,8 +254,8 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       _controllers[orderId] = {};
       for (var item in items) {
         final pid = _getProductId(item);
-        // Default received to sending only (strictly Snt column)
-        final initialVal = (item["sendingQty"] ?? 0).toString();
+        // Default received to picked only (strictly Pic column)
+        final initialVal = (item["pickedQty"] ?? 0).toString();
         _controllers[orderId]![pid] = TextEditingController(text: initialVal);
       }
     }
@@ -187,16 +282,10 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       totalAmount += (qty * price);
     }
     
-    // Delivery Date Formatting
-    String deliveryText = "";
-    if (order["deliveryDate"] != null) {
-      try {
-        final dt = DateTime.parse(order["deliveryDate"]);
-        deliveryText = DateFormat('dd MMM yyyy, hh:mm a').format(dt);
-      } catch (e) {
-        deliveryText = "";
-      }
-    }
+
+
+    // Check if expanded
+    final isExpanded = _expandedOrderIds.contains(orderId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 24),
@@ -205,253 +294,289 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Builder(
-                            builder: (context) {
-                              bool isLive = false;
-                              if (order["deliveryDate"] != null && order["createdAt"] != null) {
-                                try {
-                                  final deliveryDate = DateTime.parse(order["deliveryDate"]);
-                                  final createdAt = DateTime.parse(order["createdAt"]);
-                                  isLive = deliveryDate.year == createdAt.year &&
-                                           deliveryDate.month == createdAt.month &&
-                                           deliveryDate.day == createdAt.day;
-                                } catch (_) {}
-                              }
-                              
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isLive ? Colors.red : Colors.blue,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  isLive ? "Live" : "Stock",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(order["status"]).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: _getStatusColor(order["status"])),
-                            ),
-                            child: Text(
-                              (order["status"] ?? "Unknown").toUpperCase(),
-                              style: TextStyle(
-                                color: _getStatusColor(order["status"]), 
-                                fontWeight: FontWeight.bold, 
-                                fontSize: 10
+          // HEADER (Always Visible, Tappable)
+          InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedOrderIds.remove(orderId);
+                } else {
+                  _expandedOrderIds.add(orderId);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                order["invoiceNumber"] ?? "Order #${orderId.toString().substring(orderId.toString().length - 6).toUpperCase()}",
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      if (deliveryText.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Builder(
+                              builder: (context) {
+                                final isLive = _isLive(order);
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isLive ? Colors.red : Colors.blue,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    isLive ? "Live" : "Stock",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(order["status"]).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: _getStatusColor(order["status"])),
+                              ),
+                              child: Text(
+                                (order["status"] ?? "Unknown").toUpperCase(),
+                                style: TextStyle(
+                                  color: _getStatusColor(order["status"]), 
+                                  fontWeight: FontWeight.bold, 
+                                  fontSize: 10
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 4),
-                        Text(
-                          "Delivery: $deliveryText",
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        Builder(
+                          builder: (context) {
+                            String ordText = "";
+                            String delText = "";
+                            try {
+                               if (order["createdAt"] != null) {
+                                 final ordDt = DateTime.parse(order["createdAt"]).toLocal();
+                                 ordText = DateFormat('dd MMM, hh:mm a').format(ordDt);
+                               }
+                               if (order["deliveryDate"] != null) {
+                                 final delDt = DateTime.parse(order["deliveryDate"]).toLocal();
+                                 delText = DateFormat('dd MMM, hh:mm a').format(delDt);
+                               }
+                            } catch (_) {}
+
+                            return Row(
+                              children: [
+                                Text(
+                                  "Ord: $ordText",
+                                  style: TextStyle(fontSize: 11, color: Colors.grey[800], fontWeight: FontWeight.w500),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  "Del: $delText",
+                                  style: TextStyle(fontSize: 11, color: Colors.grey[800], fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
+                    ),
+                  ),
+                  // Chevron Icon
+                  Icon(
+                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          if (isExpanded) ...[
+            const Divider(height: 1),
+            
+            // Table Header
+            Container(
+              color: Colors.grey[50],
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: const [
+                  Expanded(flex: 3, child: Text("Product", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                  Expanded(flex: 1, child: Center(child: Text("Ord", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+                  Expanded(flex: 1, child: Center(child: Text("Pic", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+                  Expanded(flex: 1, child: Center(child: Text("Rec", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)))),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // Items List
+            ...items.map((item) {
+               final pid = _getProductId(item);
+               
+               final controller = _controllers[orderId]![pid];
+               
+               final product = item["product"];
+               final productName = (product is Map ? product["name"] : "Unknown Product");
+               final price = _getProductPrice(item);
+               
+               String priceDetails = "";
+               if (product is Map) {
+                  final d = product['defaultPriceDetails'];
+                  if (d != null) {
+                     priceDetails = "${d['quantity'] ?? ''}${d['unit'] ?? ''}";
+                  }
+               }
+
+               final reqQty = (item["requiredQty"] as num?)?.toDouble() ?? 0;
+               final sentQty = (item["pickedQty"] as num?)?.toDouble() ?? 0; // UPDATED to pickedQty
+               final recQty = (item["receivedQty"] as num?)?.toDouble() ?? 0;
+               final isReceived = item["status"] == "received";
+               final canUpdate = sentQty > 0;
+
+               return InkWell(
+                 onDoubleTap: (isReceived || !canUpdate) ? null : () => _markItemReceived(context, orderId, items, item, sp),
+                 child: Container(
+                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                   decoration: BoxDecoration(
+                     color: isReceived ? Colors.green.withOpacity(0.1) : Colors.white,
+                     border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                   ),
+                   child: Row(
+                     children: [
+                       // Product Name & Price
+                       Expanded(
+                         flex: 3,
+                         child: Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             Text(productName, style: TextStyle(fontSize: 14, color: canUpdate || isReceived ? Colors.black : Colors.grey)),
+                             Row(
+                               children: [
+                                  Text(
+                                    "₹$price $priceDetails",
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                 if (item["status"] != null) ...[
+                                   const SizedBox(width: 8),
+                                   Text(
+                                     item["status"],
+                                     style: TextStyle(
+                                       fontSize: 12, 
+                                       fontWeight: FontWeight.bold,
+                                       color: _getStatusColor(item["status"]).withOpacity(canUpdate || isReceived ? 1.0 : 0.5),
+                                     ),
+                                   ),
+                                 ],
+                               ],
+                             ),
+                           ],
+                         ),
+                       ),
+                       // Required Qty
+                       Expanded(
+                         flex: 1,
+                         child: Center(child: Text(reqQty.toString(), style: TextStyle(fontSize: 14, color: canUpdate || isReceived ? Colors.black : Colors.grey))),
+                       ),
+                       // Sent Qty (Now Picked)
+                       Expanded(
+                         flex: 1,
+                         child: Center(child: Text(sentQty.toString(), style: TextStyle(fontSize: 14, color: canUpdate || isReceived ? Colors.black : Colors.grey))),
+                       ),
+                       // Received Qty (Editable if not received)
+                       Expanded(
+                         flex: 1,
+                         child: isReceived 
+                           ? Center(
+                               child: Text(
+                                 recQty.toString(),
+                                 style: const TextStyle(
+                                   fontSize: 14, 
+                                   fontWeight: FontWeight.bold,
+                                   color: Colors.green
+                                 ),
+                               ),
+                             )
+                           : Container(
+                               height: 36,
+                               padding: const EdgeInsets.symmetric(horizontal: 4),
+                               margin: const EdgeInsets.only(left: 8, right: 8),
+                               decoration: BoxDecoration(
+                                 borderRadius: BorderRadius.circular(8),
+                                 border: Border.all(color: canUpdate ? Colors.blue.withOpacity(0.5) : Colors.grey.withOpacity(0.3)),
+                                 color: canUpdate ? Colors.white : Colors.grey[100],
+                               ),
+                               child: TextField(
+                                 controller: controller,
+                                 enabled: canUpdate,
+                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                 textAlign: TextAlign.center,
+                                 style: TextStyle(fontWeight: FontWeight.bold, color: canUpdate ? Colors.blue : Colors.grey),
+                                 decoration: const InputDecoration(
+                                   border: InputBorder.none,
+                                   contentPadding: EdgeInsets.only(bottom: 12),
+                                 ),
+                                 onTap: () {
+                                   // Prevent InkWell onTap from firing when tapping inside TextField
+                                 },
+                                 onChanged: (v) {
+                                    // Update UI totals only
+                                    setState(() {});
+                                 },
+                               ),
+                             ),
+                       ),
+                     ],
+                   ),
+                 ),
+               );
+            }).toList(),
+
+            // Totals Section
+            Container(
+              color: Colors.grey[100],
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Total Qty:", style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        totalQty.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Total Amount:", style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        "₹${totalAmount.toStringAsFixed(2)}",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          
-          // Table Header
-          Container(
-            color: Colors.grey[50],
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: const [
-                Expanded(flex: 3, child: Text("Product", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                Expanded(flex: 1, child: Center(child: Text("Ord", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-                Expanded(flex: 1, child: Center(child: Text("Snt", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-                Expanded(flex: 1, child: Center(child: Text("Rec", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)))),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-
-          // Items List
-          ...items.map((item) {
-             final pid = _getProductId(item);
-             final controller = _controllers[orderId]![pid];
-             
-             final product = item["product"];
-             final productName = (product is Map ? product["name"] : "Unknown Product");
-             final price = _getProductPrice(item);
-             
-             String priceDetails = "";
-             if (product is Map) {
-                final d = product['defaultPriceDetails'];
-                if (d != null) {
-                   priceDetails = "${d['quantity'] ?? ''}${d['unit'] ?? ''}";
-                }
-             }
-
-             final reqQty = (item["requiredQty"] as num?)?.toDouble() ?? 0;
-             final sentQty = (item["sendingQty"] as num?)?.toDouble() ?? 0;
-             final recQty = (item["receivedQty"] as num?)?.toDouble() ?? 0;
-             
-             final isReceived = item["status"] == "received";
-
-             return InkWell(
-               onTap: isReceived ? null : () => _markItemReceived(context, orderId, items, item, sp),
-               child: Container(
-                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                 decoration: BoxDecoration(
-                   color: isReceived ? Colors.green.withOpacity(0.1) : Colors.white,
-                   border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-                 ),
-                 child: Row(
-                   children: [
-                     // Product Name & Price
-                     Expanded(
-                       flex: 3,
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           Text(productName, style: const TextStyle(fontSize: 14)),
-                           Row(
-                             children: [
-                                Text(
-                                  "₹$price $priceDetails",
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                               if (item["status"] != null) ...[
-                                 const SizedBox(width: 8),
-                                 Text(
-                                   item["status"],
-                                   style: TextStyle(
-                                     fontSize: 12, 
-                                     fontWeight: FontWeight.bold,
-                                     color: _getStatusColor(item["status"]),
-                                   ),
-                                 ),
-                               ],
-                             ],
-                           ),
-                         ],
-                       ),
-                     ),
-                     // Required Qty
-                     Expanded(
-                       flex: 1,
-                       child: Center(child: Text(reqQty.toString(), style: const TextStyle(fontSize: 14))),
-                     ),
-                     // Sent Qty
-                     Expanded(
-                       flex: 1,
-                       child: Center(child: Text(sentQty.toString(), style: const TextStyle(fontSize: 14))),
-                     ),
-                     // Received Qty (Editable if not received)
-                     Expanded(
-                       flex: 1,
-                       child: isReceived 
-                         ? Center(
-                             child: Text(
-                               recQty.toString(),
-                               style: const TextStyle(
-                                 fontSize: 14, 
-                                 fontWeight: FontWeight.bold,
-                                 color: Colors.green
-                               ),
-                             ),
-                           )
-                         : Container(
-                             height: 36,
-                             padding: const EdgeInsets.symmetric(horizontal: 4),
-                             margin: const EdgeInsets.only(left: 8, right: 8),
-                             decoration: BoxDecoration(
-                               borderRadius: BorderRadius.circular(8),
-                               border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                               color: Colors.white,
-                             ),
-                             child: TextField(
-                               controller: controller,
-                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                               textAlign: TextAlign.center,
-                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                               decoration: const InputDecoration(
-                                 border: InputBorder.none,
-                                 contentPadding: EdgeInsets.only(bottom: 12),
-                               ),
-                               onTap: () {
-                                 // Prevent InkWell onTap from firing when tapping inside TextField
-                               },
-                               onChanged: (v) {
-                                  // Update UI totals only
-                                  setState(() {});
-                               },
-                             ),
-                           ),
-                     ),
-                   ],
-                 ),
-               ),
-             );
-          }).toList(),
-
-          // Totals Section
-          Container(
-            color: Colors.grey[100],
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("Total Qty:", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(
-                      totalQty.toString(),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("Total Amount:", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(
-                      "₹${totalAmount.toStringAsFixed(2)}",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          ], // End ifExpanded
         ],
       ),
     );
@@ -476,9 +601,17 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
   Future<void> _markItemReceived(BuildContext context, String orderId, List<dynamic> currentItems, Map<String, dynamic> itemToUpdate, StockProvider sp) async {
     // Optimistic check
     if (itemToUpdate["status"] == "received") return;
+    
+    final pid = _getProductId(itemToUpdate);
+    final key = "${orderId}_$pid";
+    if (_updatingItems.contains(key)) return;
 
     final orderCtrls = _controllers[orderId];
     if (orderCtrls == null) return;
+    
+    setState(() {
+      _updatingItems.add(key);
+    });
 
     // List for API (compact)
     List<Map<String, dynamic>> apiItems = [];
@@ -519,7 +652,16 @@ class _StockOrderReportPageState extends State<StockOrderReportPage> {
     }
 
     // Show loading? Or just await
-    final success = await sp.updateStockOrderReceipt(orderId, apiItems);
+    bool success = false;
+    try {
+      success = await sp.updateStockOrderReceipt(orderId, apiItems);
+    } finally {
+       if (mounted) {
+         setState(() {
+           _updatingItems.remove(key);
+         });
+       }
+    }
     
     if (mounted) {
        if (success) {

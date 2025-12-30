@@ -3,6 +3,7 @@ import 'common_scaffold.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:branch/api_config.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:esc_pos_printer/esc_pos_printer.dart';
@@ -122,10 +123,16 @@ class Bill {
 }
 
 Future<List<Bill>> fetchBills(String branchId, String? token) async {
-  Map<String, String>? headers = token != null ? {'Authorization': 'Bearer $token'} : null;
+  Map<String, String> headers = ApiConfig.getHeaders(token);
+  
+  // Calculate start of today in UTC or Local depending on how server expects.
+  // Usually server stores UTC. Let's send ISO string.
+  final now = DateTime.now();
+  final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+  
   final response = await http.get(
     Uri.parse(
-        'https://admin.theblackforestcakes.com/api/billings?limit=1000&sort=-createdAt&depth=2'),
+        '${ApiConfig.baseUrl}/billings?where[branch][equals]=$branchId&where[createdAt][greater_than]=$startOfToday&limit=1000&sort=-createdAt&depth=2'),
     headers: headers,
   );
   if (response.statusCode == 200) {
@@ -137,15 +144,7 @@ Future<List<Bill>> fetchBills(String branchId, String? token) async {
         allBills.add(Bill.fromJson(d));
       } catch (_) {}
     }
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(Duration(days: 1));
-    return allBills
-        .where((b) =>
-    b.branch == branchId &&
-        b.createdAt.isAfter(todayStart) &&
-        b.createdAt.isBefore(todayEnd))
-        .toList();
+    return allBills;
   } else {
     throw Exception("Failed to load bills");
   }
@@ -154,13 +153,10 @@ Future<List<Bill>> fetchBills(String branchId, String? token) async {
 Future<bool> updatePaymentMethod(String billId, String newMethod, String? token) async {
   if (billId.isEmpty) return false;
 
-  Map<String, String>? headers = {
-    'Content-Type': 'application/json',
-    if (token != null) 'Authorization': 'Bearer $token',
-  };
+  Map<String, String> headers = ApiConfig.getHeaders(token);
 
   final response = await http.patch(
-    Uri.parse('https://admin.theblackforestcakes.com/api/billings/$billId'),
+    Uri.parse('${ApiConfig.baseUrl}/billings/$billId'),
     headers: headers,
     body: json.encode({'paymentMethod': newMethod}),
   );
@@ -226,8 +222,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
     if (token == null) return;
     try {
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/branches/$branchId?depth=1'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/branches/$branchId?depth=1'),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (response.statusCode == 200) {
@@ -251,8 +247,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
   Future<void> _fetchCompanyDetails(String token, String companyId) async {
     try {
       final response = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/companies/$companyId?depth=1'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/companies/$companyId?depth=1'),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (response.statusCode == 200) {

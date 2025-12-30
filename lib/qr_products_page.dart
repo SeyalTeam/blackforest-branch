@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:branch/api_config.dart';
 
 class QrProductsPage extends StatefulWidget {
   final dynamic categoryId;
@@ -46,7 +47,8 @@ class _QrProductsPageState extends State<QrProductsPage>
     try {
       final resp = await http.get(
         Uri.parse(
-            "https://admin.theblackforestcakes.com/api/products?where[category][equals]=${widget.categoryId}&limit=500&depth=1"),
+            "${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=500&depth=1"),
+        headers: ApiConfig.getHeaders(_token),
       );
 
       if (resp.statusCode == 200) {
@@ -87,11 +89,8 @@ class _QrProductsPageState extends State<QrProductsPage>
 
     try {
       final resp = await http.patch(
-        Uri.parse("https://admin.theblackforestcakes.com/api/products/$productId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $_token",
-        },
+        Uri.parse("${ApiConfig.baseUrl}/products/$productId"),
+        headers: ApiConfig.getHeaders(_token),
         body: jsonEncode({"upc": upc}),
       );
 
@@ -143,7 +142,7 @@ class _QrProductsPageState extends State<QrProductsPage>
           p["images"][0]["image"]["url"] != null) {
         String url = p["images"][0]["image"]["url"];
         if (url.startsWith("/")) {
-          return "https://admin.theblackforestcakes.com$url";
+          return "${ApiConfig.domain}$url";
         }
         return url;
       }
@@ -195,6 +194,7 @@ class _QrProductsPageState extends State<QrProductsPage>
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
+                        httpHeaders: ApiConfig.getHeaders(null),
                       ),
                     ),
                   ),

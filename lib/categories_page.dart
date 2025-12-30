@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:branch/api_config.dart';
 
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/products_page.dart';
@@ -49,8 +50,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
   Future<void> _fetchUserData(String token) async {
     try {
       final res = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/users/me?depth=2'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/users/me?depth=2'),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode == 200) {
@@ -104,8 +105,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
     try {
       final res = await http.get(
-        Uri.parse('https://admin.theblackforestcakes.com/api/branches?depth=1'),
-        headers: {'Authorization': 'Bearer $token'},
+        Uri.parse('${ApiConfig.baseUrl}/branches?depth=1'),
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode == 200) {
@@ -174,9 +175,9 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       final res = await http.get(
         Uri.parse(
-          "https://admin.theblackforestcakes.com/api/categories?$filter&limit=100&depth=1",
+          "${ApiConfig.baseUrl}/categories?$filter&limit=100&depth=1",
         ),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode == 200) {
@@ -200,9 +201,9 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       final res = await http.get(
         Uri.parse(
-          "https://admin.theblackforestcakes.com/api/products?where[upc][equals]=$scanResult&limit=1&depth=1",
+          "${ApiConfig.baseUrl}/products?where[upc][equals]=$scanResult&limit=1&depth=1",
         ),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: ApiConfig.getHeaders(token),
       );
 
       if (res.statusCode == 200) {
@@ -280,7 +281,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
             String? img = c['image']?['url'];
             if (img != null && img.startsWith('/')) {
-              img = "https://admin.theblackforestcakes.com$img";
+              img = "${ApiConfig.domain}$img";
             }
             img ??= "https://via.placeholder.com/150?text=No+Image";
 
@@ -337,6 +338,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                 imageUrl: img,
                 fit: BoxFit.cover,
                 width: double.infinity,
+                httpHeaders: ApiConfig.getHeaders(null),
               ),
             ),
           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/stock_provider.dart';
+import 'package:branch/api_config.dart';
 
 class StockOrderPage extends StatelessWidget {
   const StockOrderPage({super.key});
@@ -57,7 +58,7 @@ class StockOrderPage extends StatelessWidget {
               final c = sp.categories[i];
               String? img = c["image"]?["url"];
               if (img != null && img.startsWith("/")) {
-                img = "https://admin.theblackforestcakes.com$img";
+                img = "${ApiConfig.domain}$img";
               }
               img ??= "https://via.placeholder.com/200?text=No+Image";
 
@@ -85,6 +86,7 @@ class StockOrderPage extends StatelessWidget {
                               img,
                               width: double.infinity,
                               fit: BoxFit.cover,
+                              headers: ApiConfig.getHeaders(null),
                             ),
                           ),
                         ),
@@ -122,6 +124,39 @@ class StockOrderPage extends StatelessWidget {
   Widget _buildProducts(BuildContext context, StockProvider sp) {
     return Column(
       children: [
+        // SUPERADMIN BRANCH SELECTION (NEW)
+        if (sp.userRole == 'superadmin' && sp.availableBranches.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Container(
+               padding: const EdgeInsets.symmetric(horizontal: 12),
+               decoration: BoxDecoration(
+                 color: const Color(0xFFFFF0F0),
+                 borderRadius: BorderRadius.circular(10),
+                 border: Border.all(color: Colors.pink.shade300),
+               ),
+               child: DropdownButtonHideUnderline(
+                 child: DropdownButton<String>(
+                   isExpanded: true,
+                   hint: const Text("Select Branch"),
+                   value: sp.overrideBranchId,
+                   items: sp.availableBranches.map<DropdownMenuItem<String>>((b) {
+                     return DropdownMenuItem<String>(
+                       value: b['id'] ?? b['_id'],
+                       child: Text(
+                         b['name'] ?? 'Unknown Branch',
+                         style: const TextStyle(fontWeight: FontWeight.bold),
+                       ),
+                     );
+                   }).toList(),
+                   onChanged: (val) {
+                     sp.setOverrideBranch(val);
+                   },
+                 ),
+               ),
+            ),
+          ),
+
         Padding(
           padding: const EdgeInsets.all(12),
           child: TextField(
