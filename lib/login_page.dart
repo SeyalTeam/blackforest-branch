@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/categories_page.dart';
 import 'package:branch/api_config.dart';
 import 'package:branch/home.dart'; // ADDED
+import 'package:branch/auth_service.dart'; // ADDED
 import 'package:network_info_plus/network_info_plus.dart';
 
 // ---------------------------------------------------------
@@ -33,14 +34,7 @@ class _IdleTimeoutWrapperState extends State<IdleTimeoutWrapper> with WidgetsBin
   }
 
   Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-    }
+    await AuthService.logout();
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:branch/api_config.dart';
+import 'package:branch/auth_service.dart'; // ADDED
 
 class StockProvider extends ChangeNotifier {
   // ========== STEP SYSTEM ==========
@@ -313,6 +314,11 @@ class StockProvider extends ChangeNotifier {
         headers: ApiConfig.getHeaders(token),
       );
 
+    if (res.statusCode == 401) {
+      await AuthService.logout();
+      return;
+    }
+
     if (res.statusCode == 200) {
       _categories = jsonDecode(res.body)["docs"] ?? [];
     }
@@ -340,6 +346,11 @@ class StockProvider extends ChangeNotifier {
       Uri.parse(url),
       headers: ApiConfig.getHeaders(token),
     );
+
+    if (res.statusCode == 401) {
+      await AuthService.logout();
+      return;
+    }
 
     if (res.statusCode == 200) {
       final docs = jsonDecode(res.body)["docs"] ?? [];
@@ -493,6 +504,11 @@ class StockProvider extends ChangeNotifier {
         headers: ApiConfig.getHeaders(token),
         body: body,
       );
+
+      if (res.statusCode == 401) {
+        await AuthService.logout();
+        return null;
+      }
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         final jsonResponse = jsonDecode(res.body);

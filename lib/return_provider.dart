@@ -161,7 +161,7 @@ class ReturnProvider extends ChangeNotifier {
         Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.headers['x-api-key'] = ApiConfig.apiKey;
+
       request.fields['alt'] = altText;
       request.files.add(http.MultipartFile(
         'file',

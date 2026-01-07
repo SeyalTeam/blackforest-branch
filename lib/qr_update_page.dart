@@ -139,7 +139,7 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
                             imageUrl: imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            httpHeaders: ApiConfig.getHeaders(null),
+
                             placeholder: (context, url) =>
                             const Center(
                                 child:

@@ -14,6 +14,7 @@ import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
 import 'package:branch/editbill.dart';
+import 'package:branch/auth_service.dart'; // ADDED
 
 /// ✅ UPDATED ENUM — added stock & returnorder
 enum PageType {
@@ -77,14 +78,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
   }
 
   Future<void> _logout() async {
-    // Clear Provider Data to prevent caching issues when switching branches/users
-    Provider.of<StockProvider>(context, listen: false).clearData();
-    Provider.of<CartProvider>(context, listen: false).clearData();
-    Provider.of<ReturnProvider>(context, listen: false).clearData();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    Navigator.pushReplacementNamed(context, '/login');
+    await AuthService.logout();
   }
 
   void _showMessage(String msg) {

@@ -372,7 +372,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                     imageUrl: imageUrl!,
                                     fit: BoxFit.cover,
                                     width: double.infinity,
-                                    httpHeaders: ApiConfig.getHeaders(null),
+
                                     placeholder: (context, url) =>
                                     const Center(child: CircularProgressIndicator()),
                                     errorWidget: (context, url, error) => const Center(

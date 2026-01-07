@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/cart_provider.dart';
 import 'package:branch/return_provider.dart';
-import 'package:branch/stock_provider.dart'; // Add this import
-import 'package:branch/login_page.dart'; // Replace with your project name if different
+import 'package:branch/stock_provider.dart';
+import 'package:branch/auth_service.dart'; // ADDED
+import 'package:branch/login_page.dart';
 
 void main() {
   runApp(
@@ -11,7 +12,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (context) => CartProvider()),
         ChangeNotifierProvider(create: (context) => ReturnProvider()),
-        ChangeNotifierProvider(create: (context) => StockProvider()), // Add this provider
+        ChangeNotifierProvider(create: (context) => StockProvider()),
       ],
       child: const MyApp(),
     ),
@@ -24,10 +25,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: AuthService.navigatorKey, // ADDED
       title: 'Black Forest App',
       theme: ThemeData(
         primarySwatch: Colors.grey,
-        scaffoldBackgroundColor: const Color(0xFFF5F5F5), // Light grey background
+        scaffoldBackgroundColor: const Color(0xFFF5F5F5),
       ),
       home: const LoginPage(),
       routes: {

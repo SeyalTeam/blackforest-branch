@@ -194,7 +194,7 @@ class _QrProductsPageState extends State<QrProductsPage>
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        httpHeaders: ApiConfig.getHeaders(null),
+
                       ),
                     ),
                   ),

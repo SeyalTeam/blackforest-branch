@@ -338,7 +338,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                 imageUrl: img,
                 fit: BoxFit.cover,
                 width: double.infinity,
-                httpHeaders: ApiConfig.getHeaders(null),
+
               ),
             ),
           ),

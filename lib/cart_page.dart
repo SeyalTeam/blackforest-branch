@@ -1507,7 +1507,7 @@ class _ReturnCartItemCard extends StatelessWidget {
     if (tempFile != null && tempFile.existsSync()) {
       imageProvider = FileImage(tempFile);
     } else if (url != null) {
-      imageProvider = CachedNetworkImageProvider(url, headers: ApiConfig.getHeaders(null));
+      imageProvider = CachedNetworkImageProvider(url);
     }
 
     return Container(
@@ -1676,7 +1676,7 @@ class _CartItemCard extends StatelessWidget {
                 width: 70,
                 height: 70,
                 fit: BoxFit.cover,
-                httpHeaders: ApiConfig.getHeaders(null),
+
                 placeholder: (context, url) => Container(color: Colors.white10),
                 errorWidget: (context, url, error) => Container(color: Colors.white10, child: const Icon(Icons.broken_image, color: Colors.white24)),
               )

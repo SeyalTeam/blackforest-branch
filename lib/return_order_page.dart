@@ -359,7 +359,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.headers['x-api-key'] = ApiConfig.apiKey;
+
       request.fields['alt'] = altText;
       request.files.add(http.MultipartFile(
         'file',
@@ -396,7 +396,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (file != null && await file.exists()) {
         previewWidget = Image.file(file);
       } else if (previewUrl != null) {
-        previewWidget = CachedNetworkImage(imageUrl: previewUrl, fit: BoxFit.contain, httpHeaders: ApiConfig.getHeaders(null));
+        previewWidget = CachedNetworkImage(imageUrl: previewUrl, fit: BoxFit.contain);
       } else {
         previewWidget = const Text('No preview available');
       }
@@ -522,7 +522,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
                                           imageUrl: imageUrl!,
                                           fit: BoxFit.cover,
                                           width: double.infinity,
-                                          httpHeaders: ApiConfig.getHeaders(null),
+
 
                                           placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
                                           errorWidget: (context, url, error) => const Center(child: Text('No Image', style: TextStyle(color: Colors.grey))),
@@ -600,7 +600,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
                                           width: 24,
                                           height: 24,
                                           fit: BoxFit.cover,
-                                          httpHeaders: ApiConfig.getHeaders(null),
+
                                           placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
                                           errorWidget: (context, url, error) => Icon(
                                             Icons.camera_alt,
