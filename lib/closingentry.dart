@@ -25,7 +25,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   final _cashController = TextEditingController();
   // NEW Controller for Stock Sending
   final _stockOrderController = TextEditingController();
-  final List<int> _denominationValues = [2000, 500, 200, 100, 50, 10, 5];
+  final List<int> _denominationValues = [2000, 500, 200, 100, 50, 20, 10, 5];
   late final List<TextEditingController> _denomControllers;
   bool _isLoading = true;
   bool _isFetchingSales = false;

@@ -1,25 +1,100 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/api_config.dart';
+import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img_lib;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class _ExpenseItem {
   String? source;
   final TextEditingController reason;
   final TextEditingController amount;
+  String? imageId;
+  File? imageFile;
+  String? imageUrl;
 
   _ExpenseItem({
     this.source,
     TextEditingController? reason,
     TextEditingController? amount,
+    this.imageId,
+    this.imageFile,
+    this.imageUrl,
   })  : reason = reason ?? TextEditingController(),
         amount = amount ?? TextEditingController();
 
   void dispose() {
     reason.dispose();
     amount.dispose();
+  }
+}
+
+class CameraDialog extends StatefulWidget {
+  final List<CameraDescription> cameras;
+
+  const CameraDialog({super.key, required this.cameras});
+
+  @override
+  _CameraDialogState createState() => _CameraDialogState();
+}
+
+class _CameraDialogState extends State<CameraDialog> {
+  late CameraController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+    }).catchError((e) {
+      print('Camera init error: $e');
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_controller.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return AlertDialog(
+      content: AspectRatio(
+        aspectRatio: _controller.value.aspectRatio,
+        child: CameraPreview(_controller),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () async {
+            try {
+              final XFile file = await _controller.takePicture();
+              Navigator.pop(context, file);
+            } catch (e) {
+              print('Capture error: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Failed to capture photo')),
+              );
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Capture'),
+        ),
+      ],
+    );
   }
 }
 
@@ -133,6 +208,16 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
       return;
     }
 
+    // Validate that all items have an image
+    for (int i = 0; i < _expenseItems.length; i++) {
+      if (_expenseItems[i].imageId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please add an image for Expense #${i + 1}')),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
     final expenseData = {
@@ -142,6 +227,7 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
           'source': e.source,
           'reason': e.reason.text.trim(),
           'amount': double.tryParse(e.amount.text) ?? 0.0,
+          'image': e.imageId,
         };
       }).toList(),
       'total': double.tryParse(_totalExpensesController.text) ?? 0.0,
@@ -181,6 +267,169 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Future<void> _captureExpensePhoto(int index) async {
+    if (await Permission.camera.request().isDenied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Camera permission required')),
+      );
+      return;
+    }
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No camera found')),
+      );
+      return;
+    }
+    final XFile? photo = await showDialog<XFile>(
+      context: context,
+      builder: (context) => CameraDialog(cameras: cameras),
+    );
+    if (photo == null) return;
+    final bytes = await photo.readAsBytes();
+    final image = img_lib.decodeImage(bytes)!;
+    final compressed = img_lib.encodeJpg(image, quality: 70);
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final tempFile = File('${tempDir.path}/expense_${index}_$timestamp.jpg');
+    await tempFile.writeAsBytes(compressed);
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Photo Preview'),
+        content: Image.file(tempFile),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Retake')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      await tempFile.delete();
+      return _captureExpensePhoto(index);
+    }
+
+    final item = _expenseItems[index];
+    final altText = 'Expense ${item.source ?? "Entry"} ${item.reason.text}';
+    final mediaId = await _uploadPhoto(tempFile, altText);
+
+    setState(() {
+      item.imageFile = tempFile;
+      if (mediaId != null) {
+        item.imageId = mediaId;
+        _fetchMediaUrl(mediaId).then((url) {
+          if (url != null) {
+            setState(() {
+              item.imageUrl = url;
+            });
+          }
+        });
+      }
+    });
+
+    if (mediaId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Upload failed, saved locally')),
+      );
+    }
+  }
+
+  Future<String?> _uploadPhoto(File file, String altText) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return null;
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/media?prefix=expense'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.fields['alt'] = altText;
+      request.files.add(http.MultipartFile(
+        'file',
+        file.readAsBytes().asStream(),
+        file.lengthSync(),
+        filename: file.path.split('/').last,
+        contentType: MediaType('image', 'jpeg'),
+      ));
+      final response = await request.send();
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final body = await response.stream.bytesToString();
+        final data = jsonDecode(body);
+        return data['doc']['id'];
+      } else {
+        final body = await response.stream.bytesToString();
+        print('Upload error: ${response.statusCode} - $body');
+        return null;
+      }
+    } catch (e) {
+      print('Upload exception: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _fetchMediaUrl(String mediaId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return null;
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/media/$mediaId?depth=0'),
+        headers: ApiConfig.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['url'];
+      }
+    } catch (e) {
+      print('Fetch URL error: $e');
+    }
+    return null;
+  }
+
+  Future<void> _handleCameraTap(int index) async {
+    final item = _expenseItems[index];
+    final hasPhoto = item.imageFile != null || item.imageUrl != null;
+    if (!hasPhoto) {
+      await _captureExpensePhoto(index);
+    } else {
+      Widget previewWidget;
+      if (item.imageFile != null && await item.imageFile!.exists()) {
+        previewWidget = Image.file(item.imageFile!);
+      } else if (item.imageUrl != null) {
+        previewWidget = CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.contain);
+      } else {
+        previewWidget = const Text('No preview available');
+      }
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Current Photo'),
+          content: previewWidget,
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, 'remove'), child: const Text('Remove', style: TextStyle(color: Colors.red))),
+            TextButton(onPressed: () => Navigator.pop(context, 'keep'), child: const Text('Keep')),
+            TextButton(onPressed: () => Navigator.pop(context, 'retake'), child: const Text('Retake')),
+          ],
+        ),
+      );
+      if (result == 'retake') {
+        await _captureExpensePhoto(index);
+      } else if (result == 'remove') {
+        _removeExpensePhoto(index);
+      }
+    }
+  }
+
+  void _removeExpensePhoto(int index) {
+    setState(() {
+      _expenseItems[index].imageFile = null;
+      _expenseItems[index].imageId = null;
+      _expenseItems[index].imageUrl = null;
+    });
   }
 
   void _resetForm() {
@@ -423,6 +672,66 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                   if (num <= 0) return 'Must be > 0';
                   return null;
                 },
+              ),
+              const SizedBox(height: 12),
+              
+              // Camera / Image Preview
+              Row(
+                children: [
+                  Expanded(
+                    child: item.imageId != null || item.imageFile != null
+                        ? GestureDetector(
+                            onTap: () => _handleCameraTap(index),
+                            child: Container(
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: item.imageFile != null
+                                    ? Image.file(item.imageFile!, fit: BoxFit.cover, width: double.infinity)
+                                    : (item.imageUrl != null 
+                                        ? CachedNetworkImage(
+                                            imageUrl: item.imageUrl!,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                                            errorWidget: (context, url, error) => const Icon(Icons.error),
+                                          )
+                                        : const Center(child: Text("Uploading..."))),
+                              ),
+                            ),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: () => _handleCameraTap(index),
+                            icon: const Icon(Icons.camera_alt),
+                            label: const Text('Add Receipt/Photo'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                  ),
+                  if (item.imageId != null || item.imageFile != null) ...[
+                    const SizedBox(width: 8),
+                    Column(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: Colors.blue),
+                          onPressed: () => _captureExpensePhoto(index),
+                          tooltip: 'Retake',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _removeExpensePhoto(index),
+                          tooltip: 'Remove',
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

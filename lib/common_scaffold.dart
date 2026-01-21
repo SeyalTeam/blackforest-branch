@@ -10,6 +10,7 @@ import 'package:branch/categories_page.dart';
 import 'package:branch/cart_page.dart';
 import 'package:branch/cart_provider.dart';
 import 'package:branch/stock_provider.dart';
+import 'package:branch/instock_provider.dart';
 import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
@@ -25,7 +26,8 @@ enum PageType {
   editbill,
   stock,
   returnorder,
-  expense, // NEW
+  expense,
+  instock, // NEW
 }
 
 class CommonScaffold extends StatefulWidget {
@@ -148,7 +150,45 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           actionsIconTheme: const IconThemeData(color: Colors.black),
           actions: [
             ...?widget.actions,
-            if (widget.pageType == PageType.stock)
+            if (widget.pageType == PageType.instock)
+              Consumer<InstockProvider>( // NEW CONSUMER for Instock
+                builder: (_, sp, __) {
+                  final int count = sp.inStockQuery.length;
+                  return Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        onPressed: () {
+                          _resetTimer();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CartPage(isInstock: true),
+                            ),
+                          );
+                        },
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                                color: const Color(0xFF11998e), borderRadius: BorderRadius.circular(10)),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              )
+            else if (widget.pageType == PageType.stock)
               Consumer<StockProvider>(
                 builder: (_, sp, __) {
                   final int count = sp.selected.values.where((v) => v == true).length;

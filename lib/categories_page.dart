@@ -10,6 +10,9 @@ import 'package:branch/common_scaffold.dart';
 import 'package:branch/products_page.dart';
 import 'package:branch/stock_order.dart';
 import 'package:branch/return_order_page.dart';
+import 'package:branch/instock_products_page.dart';
+import 'package:branch/stock_provider.dart';
+import 'package:branch/instock_provider.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -20,12 +23,14 @@ class CategoriesPage extends StatefulWidget {
   final bool isPastryFilter;     // For pastry billing (rarely used)
   final bool isStockFilter;      // For stock orders
   final bool isReturnOrder;      // ⭐ NEW — For Return Orders
+  final bool isInstockEntry;     // ⭐ NEW — For Instock Entry (Billing-like UI)
 
   const CategoriesPage({
     super.key,
     this.isPastryFilter = false,
     this.isStockFilter = false,
     this.isReturnOrder = false,
+    this.isInstockEntry = false,
   });
 
   @override
@@ -150,7 +155,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       if (widget.isReturnOrder) {
         filter = "where[isStock][equals]=true"; // Same products used
-      } else if (widget.isStockFilter) {
+      } else if (widget.isStockFilter || widget.isInstockEntry) {
         filter = "where[isStock][equals]=true";
       } else {
         filter = "where[isBilling][equals]=true";
@@ -234,6 +239,9 @@ class _CategoriesPageState extends State<CategoriesPage> {
     } else if (widget.isStockFilter) {
       title = "Stock Order Categories";
       pageType = PageType.stock;          // ⭐ FIXED
+    } else if (widget.isInstockEntry) {
+      title = "Instock Categories";
+      pageType = PageType.stock;
     } else {
       title = "Billing Categories";
       pageType = PageType.billing;        // Billing footer highlight
@@ -296,6 +304,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
                   );
                 } else if (widget.isStockFilter) {
                   page = const StockOrderPage();
+                } else if (widget.isInstockEntry) {
+                   // Initialize InstockProvider before navigation
+                   Provider.of<InstockProvider>(context, listen: false).selectCategory(c);
+                   page = const InstockProductsPage();
                 } else {
                   page = ProductsPage(
                     categoryId: c['id'],

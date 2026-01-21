@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/cart_provider.dart';
 import 'package:branch/return_provider.dart';
+import 'package:branch/instock_provider.dart';
 import 'package:branch/stock_provider.dart';
 import 'package:branch/auth_service.dart'; // ADDED
 import 'package:branch/login_page.dart';
@@ -13,6 +14,7 @@ void main() {
         ChangeNotifierProvider(create: (context) => CartProvider()),
         ChangeNotifierProvider(create: (context) => ReturnProvider()),
         ChangeNotifierProvider(create: (context) => StockProvider()),
+        ChangeNotifierProvider(create: (context) => InstockProvider()),
       ],
       child: const MyApp(),
     ),

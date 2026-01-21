@@ -23,8 +23,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Updated to 9 cards
-    for (int i = 0; i < 9; i++) {
+    // Updated to 10 cards
+    for (int i = 0; i < 10; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -49,6 +49,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _openStock() {
     Navigator.push(context, _createRoute(const StockOrderPage()));
+  }
+
+  void _openInstock() {
+    Navigator.push(
+      context,
+      _createRoute(const CategoriesPage(isInstockEntry: true)), // Reuse categories with instock flag
+    );
   }
 
   void _openReturn() {
@@ -230,6 +237,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       const Color(0xFF00F2FE),
                       'Stock',
                       _openStock,
+                    ),
+
+                    _buildCard(
+                      9, // New Instock Card
+                      Icons.check_circle_outline, // Distinct icon
+                      const Color(0xFF11998e),
+                      const Color(0xFF38ef7d),
+                      'Instock',
+                      _openInstock,
                     ),
 
                     _buildCard(
