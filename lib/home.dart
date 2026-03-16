@@ -6,8 +6,8 @@ import 'categories_page.dart';
 import 'billsheet.dart';
 import 'qr_update_page.dart';
 import 'stock_order.dart';
-import 'stock_order.dart';
 import 'stockorder_report.dart';
+import 'table_creation_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -54,7 +54,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _openInstock() {
     Navigator.push(
       context,
-      _createRoute(const CategoriesPage(isInstockEntry: true)), // Reuse categories with instock flag
+      _createRoute(
+        const CategoriesPage(isInstockEntry: true),
+      ), // Reuse categories with instock flag
     );
   }
 
@@ -85,22 +87,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Navigator.push(context, _createRoute(const StockOrderReportPage()));
   }
 
-  void _comingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Coming soon ✨'),
-        backgroundColor: Colors.deepPurple,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void _openTableCreation() {
+    Navigator.push(context, _createRoute(const TableCreationPage()));
   }
 
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, animation, __) => FadeTransition(
-        opacity: animation,
-        child: page,
-      ),
+      pageBuilder: (_, animation, __) =>
+          FadeTransition(opacity: animation, child: page),
       transitionDuration: const Duration(milliseconds: 300),
     );
   }
@@ -108,13 +102,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   // --------------------------- CARD UI --------------------------------
 
   Widget _buildCard(
-      int index,
-      IconData? icon,
-      Color start,
-      Color end,
-      String label,
-      VoidCallback onTap,
-      {double size = 140}) {
+    int index,
+    IconData? icon,
+    Color start,
+    Color end,
+    String label,
+    VoidCallback onTap, {
+    double size = 140,
+  }) {
     return AnimatedBuilder(
       animation: _animations[index]!,
       builder: (context, _) => Transform.scale(
@@ -259,11 +254,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                     _buildCard(
                       6,
-                      Icons.shopping_cart,
-                      const Color(0xFFFA8BFF),
-                      const Color(0xFF8B6CFF),
-                      'Orders',
-                      _comingSoon,
+                      Icons.assignment,
+                      const Color(0xFFFF9966),
+                      const Color(0xFFFF5E62),
+                      'Stock Report',
+                      _openStockReport,
                     ),
 
                     _buildCard(
@@ -277,11 +272,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                     _buildCard(
                       8,
-                      Icons.assignment,
-                      const Color(0xFFFF9966),
-                      const Color(0xFFFF5E62),
-                      'Stock Report',
-                      _openStockReport,
+                      Icons.table_restaurant,
+                      const Color(0xFF607D8B),
+                      const Color(0xFF90A4AE),
+                      'Table Creation',
+                      _openTableCreation,
                     ),
                   ],
                 );
@@ -291,7 +286,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             const SizedBox(height: 32),
 
             // Reports section removed completely
-
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(

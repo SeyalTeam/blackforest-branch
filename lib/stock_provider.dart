@@ -36,7 +36,11 @@ class StockProvider extends ChangeNotifier {
       _deliveryDate = now;
     } else {
       // Default back to Tomorrow 10:00 AM if same-day is toggled off
-      _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+      _deliveryDate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(days: 1, hours: 10));
     }
     notifyListeners();
   }
@@ -45,7 +49,11 @@ class StockProvider extends ChangeNotifier {
   void setStockMode() {
     _isSameDay = false;
     final now = DateTime.now();
-    _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+    _deliveryDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1, hours: 10));
     notifyListeners();
   }
 
@@ -85,7 +93,8 @@ class StockProvider extends ChangeNotifier {
   String? _branchId;
   String? get userRole => _userRole;
   String? get companyId => _companyId;
-  String? get branchId => _overrideBranchId ?? _branchId; // UPDATED: Return override if set
+  String? get branchId =>
+      _overrideBranchId ?? _branchId; // UPDATED: Return override if set
 
   // ========== SUPERADMIN BRANCH SELECTION ==========
   List<dynamic> _availableBranches = [];
@@ -95,7 +104,7 @@ class StockProvider extends ChangeNotifier {
   String? get overrideBranchId => _overrideBranchId;
 
   // ========== FIELD MAPS ==========
-  final Map<String, double?> _requiredQty = {};          // UPDATED
+  final Map<String, double?> _requiredQty = {}; // UPDATED
   final Map<String, double?> _inStock = {};
   final Map<String, bool> _selected = {};
   final Map<String, TextEditingController> _requiredCtrl = {}; // UPDATED
@@ -107,7 +116,7 @@ class StockProvider extends ChangeNotifier {
 
   final TextEditingController _searchCtrl = TextEditingController();
 
-  Map<String, double?> get quantities => _requiredQty;      // alias
+  Map<String, double?> get quantities => _requiredQty; // alias
   Map<String, double?> get inStock => _inStock;
   Map<String, bool> get selected => _selected;
   Map<String, TextEditingController> get qtyCtrl => _requiredCtrl;
@@ -122,10 +131,14 @@ class StockProvider extends ChangeNotifier {
   StockProvider() {
     _loadStockCategories();
     _searchCtrl.addListener(_filterProducts);
-    
+
     // Default to tomorrow 10:00 AM
     final now = DateTime.now();
-    _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+    _deliveryDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1, hours: 10));
   }
 
   @override
@@ -178,13 +191,15 @@ class StockProvider extends ChangeNotifier {
       _userRole = user["role"];
 
       if (_userRole == "company") {
-        _companyId =
-        user["company"] is Map ? user["company"]["id"] : user["company"];
+        _companyId = user["company"] is Map
+            ? user["company"]["id"]
+            : user["company"];
       }
 
       if (_userRole == "branch") {
-        _branchId =
-        user["branch"] is Map ? user["branch"]["id"] : user["branch"];
+        _branchId = user["branch"] is Map
+            ? user["branch"]["id"]
+            : user["branch"];
         final comp = user["branch"]["company"];
         _companyId = comp is Map ? comp["id"] : comp;
       }
@@ -194,7 +209,7 @@ class StockProvider extends ChangeNotifier {
       }
 
       if (_userRole == "superadmin") {
-         await fetchBranches(token);
+        await fetchBranches(token);
       }
 
       notifyListeners();
@@ -247,8 +262,7 @@ class StockProvider extends ChangeNotifier {
       final range = b["ipAddress"]?.toString().trim();
       if (range != null && _ipInRange(ip, range)) {
         final comp = b["company"];
-        final cid =
-        comp is Map ? comp["id"] : comp?.toString();
+        final cid = comp is Map ? comp["id"] : comp?.toString();
         if (cid != null) out.add(cid);
       }
     }
@@ -308,11 +322,10 @@ class StockProvider extends ChangeNotifier {
       }
     }
 
-      final res = await http.get(
-        Uri.parse(
-          "${ApiConfig.baseUrl}/categories?$query&limit=100&depth=1"),
-        headers: ApiConfig.getHeaders(token),
-      );
+    final res = await http.get(
+      Uri.parse("${ApiConfig.baseUrl}/categories?$query&limit=100&depth=1"),
+      headers: ApiConfig.getHeaders(token),
+    );
 
     if (res.statusCode == 401) {
       await AuthService.logout();
@@ -364,23 +377,24 @@ class StockProvider extends ChangeNotifier {
         // APPLY BRANCH OVERRIDES
         dynamic priceDetails = p['defaultPriceDetails'];
         final currentBranch = _overrideBranchId ?? _branchId;
-        
+
         if (currentBranch != null && p['branchOverrides'] != null) {
           for (var override in p['branchOverrides']) {
-             var b = override['branch'];
-             String bId = b is Map ? b['id'] ?? b['_id'] : b;
-             if (bId == currentBranch) {
-               priceDetails = override;
-               break;
-             }
+            var b = override['branch'];
+            String bId = b is Map ? b['id'] ?? b['_id'] : b;
+            if (bId == currentBranch) {
+              priceDetails = override;
+              break;
+            }
           }
         }
 
         _productNames[id] = p["name"] ?? "Unknown";
-        _prices[id] =
-            (priceDetails['price'] as num?)?.toDouble() ?? 0.0;
-        _units[id] = "${priceDetails['quantity'] ?? ''}${priceDetails['unit'] ?? ''}";
-        _baseQuantities[id] = (priceDetails['quantity'] as num?)?.toDouble() ?? 1.0;
+        _prices[id] = (priceDetails['price'] as num?)?.toDouble() ?? 0.0;
+        _units[id] =
+            "${priceDetails['quantity'] ?? ''}${priceDetails['unit'] ?? ''}";
+        _baseQuantities[id] =
+            (priceDetails['quantity'] as num?)?.toDouble() ?? 1.0;
         if (_baseQuantities[id] == 0) _baseQuantities[id] = 1.0;
 
         _requiredQty.putIfAbsent(id, () => null);
@@ -400,8 +414,7 @@ class StockProvider extends ChangeNotifier {
   void _filterProducts() {
     final q = _searchCtrl.text.toLowerCase();
     _filteredProducts = _products
-        .where((p) =>
-        p["name"].toString().toLowerCase().contains(q))
+        .where((p) => p["name"].toString().toLowerCase().contains(q))
         .toList();
 
     notifyListeners();
@@ -443,28 +456,34 @@ class StockProvider extends ChangeNotifier {
       if (_isSameDay) {
         // If same-day is active, force the date to Today, but keep the selected time
         final selectedTime = _deliveryDate ?? now;
-        _deliveryDate = DateTime(now.year, now.month, now.day, selectedTime.hour, selectedTime.minute);
+        _deliveryDate = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          selectedTime.hour,
+          selectedTime.minute,
+        );
       }
 
       if (_deliveryDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select delivery date & time")),
-      );
-      return null;
-    }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select delivery date & time")),
+        );
+        return null;
+      }
 
-    // NEW: Prevent past date/time (allow 1 min buffer for network/latency)
-    if (_deliveryDate!.isBefore(now.subtract(const Duration(minutes: 1)))) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cannot place order for a past date or time"),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return null;
-    }
+      // NEW: Prevent past date/time (allow 1 min buffer for network/latency)
+      if (_deliveryDate!.isBefore(now.subtract(const Duration(minutes: 1)))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cannot place order for a past date or time"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return null;
+      }
 
-    // Validation (Removed 2-hour restriction globally)
+      // Validation (Removed 2-hour restriction globally)
       List<Map<String, dynamic>> items = [];
 
       // Create a temporary map to hold names and prices for injection later
@@ -476,8 +495,8 @@ class StockProvider extends ChangeNotifier {
           final pid = entry.key;
           items.add({
             "product": pid,
-            "inStock": _inStock[pid],
-            "requiredQty": _requiredQty[pid],
+            "inStock": _inStock[pid] ?? 0.0,
+            "requiredQty": _requiredQty[pid] ?? 0.0,
           });
           tempNames[pid] = _productNames[pid] ?? "Item";
           tempPrices[pid] = _prices[pid] ?? 0.0;
@@ -485,11 +504,9 @@ class StockProvider extends ChangeNotifier {
       }
 
       if (items.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("No items selected"),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("No items selected")));
         return null;
       }
 
@@ -528,14 +545,15 @@ class StockProvider extends ChangeNotifier {
             } else {
               pid = item['product'];
             }
-            
+
             if (pid != null) {
-               // Create a new map to avoid modifying a locked map if any
-               Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
-               if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
-               if (tempPrices.containsKey(pid)) newItem['price'] = tempPrices[pid];
-               if (pid != null) newItem['baseQuantity'] = _baseQuantities[pid] ?? 1.0;
-               respItems[i] = newItem;
+              // Create a new map to avoid modifying a locked map if any
+              Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+              if (tempNames.containsKey(pid)) newItem['name'] = tempNames[pid];
+              if (tempPrices.containsKey(pid))
+                newItem['price'] = tempPrices[pid];
+              newItem['baseQuantity'] = _baseQuantities[pid] ?? 1.0;
+              respItems[i] = newItem;
             }
           }
           orderDoc['items'] = respItems;
@@ -559,7 +577,11 @@ class StockProvider extends ChangeNotifier {
 
         _isSameDay = false;
         final now = DateTime.now();
-        _deliveryDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1, hours: 10));
+        _deliveryDate = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).add(const Duration(days: 1, hours: 10));
 
         _step = "categories";
         _selectedCategoryId = null;
@@ -575,19 +597,31 @@ class StockProvider extends ChangeNotifier {
         return orderDoc; // Return the confirmed order data with names
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed: ${res.statusCode}")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed: ${res.statusCode}")));
     } catch (e) {
-       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       _isSubmitting = false;
       notifyListeners();
     }
 
     return null;
+  }
+
+  // ========== CLEAR CART ==========
+  void clearCart() {
+    _requiredQty.clear();
+    _inStock.clear();
+    _selected.clear();
+    _requiredCtrl.forEach((_, c) => c.dispose());
+    _requiredCtrl.clear();
+    _stockCtrl.forEach((_, c) => c.dispose());
+    _stockCtrl.clear();
+    notifyListeners();
   }
 
   // ========== SELECT CATEGORY ==========
@@ -630,10 +664,22 @@ class StockProvider extends ChangeNotifier {
 
       // Default to today if no date provided
       final now = date ?? DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+      final startOfDay = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).toIso8601String();
+      final endOfDay = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        23,
+        59,
+        59,
+      ).toIso8601String();
 
-      String query = "where[deliveryDate][greater_than_equal]=$startOfDay&where[deliveryDate][less_than_equal]=$endOfDay";
+      String query =
+          "where[deliveryDate][greater_than_equal]=$startOfDay&where[deliveryDate][less_than_equal]=$endOfDay";
 
       if (_branchId != null) {
         query += "&where[branch][equals]=$_branchId";
@@ -658,7 +704,10 @@ class StockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> updateStockOrderReceipt(String orderId, List<Map<String, dynamic>> items) async {
+  Future<bool> updateStockOrderReceipt(
+    String orderId,
+    List<Map<String, dynamic>> items,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token");
@@ -701,9 +750,30 @@ class StockProvider extends ChangeNotifier {
     _stockReports = [];
     _availableBranches = [];
     _selectedCategoryId = null;
-    _overrideBranchId = null; // Replaced _selectedBranchId with _overrideBranchId
-    _deliveryDate = null; // Replaced _selectedDate with _deliveryDate (if this is what was intended)
-    // Removed _userName and _lastStockGridLoad as they don't exist
+    _overrideBranchId = null;
+    _deliveryDate = null;
+
+    // Clear cart data
+    _requiredQty.clear();
+    _inStock.clear();
+    _selected.clear();
+    _productNames.clear();
+    _prices.clear();
+    _units.clear();
+    _baseQuantities.clear();
+
+    _requiredCtrl.forEach((_, c) => c.dispose());
+    _requiredCtrl.clear();
+    _stockCtrl.forEach((_, c) => c.dispose());
+    _stockCtrl.clear();
+
+    _isLoading = false;
+    _isSubmitting = false;
+    _step = "categories";
+    _selectedCategoryName = null;
+    _filteredProducts = [];
+    _searchCtrl.clear();
+
     notifyListeners();
   }
 }

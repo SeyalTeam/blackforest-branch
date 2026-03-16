@@ -5,14 +5,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/api_config.dart';
 import 'dart:async';
-import 'package:intl/intl.dart';
 import 'package:esc_pos_printer/esc_pos_printer.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 
 class Bill {
   final String id;
   final String invoiceNumber;
-  final int totalAmount;
+  final double totalAmount;
   final String branch;
   final String branchName;
   final DateTime createdAt;
@@ -25,6 +24,8 @@ class Bill {
   final String customerName;
   final String notes;
   final String status;
+  final String? tableNumber;
+  final String? section;
 
   Bill({
     required this.id,
@@ -42,6 +43,8 @@ class Bill {
     required this.customerName,
     required this.notes,
     required this.status,
+    this.tableNumber,
+    this.section,
   });
 
   factory Bill.fromJson(Map<String, dynamic> json) {
@@ -65,76 +68,103 @@ class Bill {
       }
     }
 
-    final id = getId(json['_id'] ?? json['id']);
+    try {
+      final id = getId(json['_id'] ?? json['id']);
 
-    final branchJson = json['branch'];
-    final branchId = getId(branchJson);
-    String branchName = 'Unknown Branch';
-    if (branchJson is Map<String, dynamic>) {
-      branchName = branchJson['name'] as String? ?? 'Unknown Branch';
-    }
-
-    final createdByJson = json['createdBy'];
-    final createdById = getId(createdByJson);
-    String waiterName = 'Unknown';
-    if (createdByJson is Map<String, dynamic>) {
-      final employee = createdByJson['employee'];
-      if (employee != null && employee is Map<String, dynamic> && employee['name'] != null) {
-        waiterName = employee['name'].toString();
-      } else if (createdByJson['email'] != null) {
-        waiterName = createdByJson['email'].toString();
+      final branchJson = json['branch'];
+      final branchId = getId(branchJson);
+      String branchName = 'Unknown Branch';
+      if (branchJson is Map<String, dynamic>) {
+        branchName = branchJson['name'] as String? ?? 'Unknown Branch';
       }
+
+      final createdByJson = json['createdBy'];
+      final createdById = getId(createdByJson);
+      String waiterName = 'Unknown';
+      if (createdByJson is Map<String, dynamic>) {
+        final employee = createdByJson['employee'];
+        if (employee != null &&
+            employee is Map<String, dynamic> &&
+            employee['name'] != null) {
+          waiterName = employee['name'].toString();
+        } else if (createdByJson['email'] != null) {
+          waiterName = createdByJson['email'].toString();
+        }
+      }
+
+      final companyJson = json['company'];
+      final companyId = getId(companyJson);
+      String companyName = 'Unknown Company';
+      if (companyJson is Map<String, dynamic>) {
+        companyName = companyJson['name'] as String? ?? 'Unknown Company';
+      }
+
+      final createdAtStr = getCreatedAtStr(json['createdAt']);
+      final invoiceNumber = json['invoiceNumber'] ?? 'N/A';
+      final totalAmount = (json['totalAmount'] ?? 0).toDouble();
+      final items = json['items'] ?? [];
+      final paymentMethod = json['paymentMethod'] ?? 'Unknown';
+      final customerName = json['customerDetails']?['name'] ?? '';
+      final notes = json['notes'] ?? '';
+      final status = json['status'] ?? '';
+
+      // Table Details
+      final tableObj = json['tableDetails'];
+      String? tNum;
+      String? tSec;
+      if (tableObj is Map<String, dynamic>) {
+        tNum = tableObj['tableNumber']?.toString();
+        tSec = tableObj['section']?.toString();
+      }
+
+      DateTime parsedDate;
+      try {
+        parsedDate = DateTime.parse(createdAtStr);
+      } catch (_) {
+        parsedDate = DateTime.now();
+      }
+
+      return Bill(
+        id: id,
+        invoiceNumber: invoiceNumber,
+        totalAmount: totalAmount,
+        branch: branchId,
+        branchName: branchName,
+        createdAt: parsedDate,
+        items: items,
+        paymentMethod: paymentMethod,
+        createdBy: createdById,
+        waiterName: waiterName,
+        company: companyId,
+        companyName: companyName,
+        customerName: customerName,
+        notes: notes,
+        status: status,
+        tableNumber: tNum,
+        section: tSec,
+      );
+    } catch (e) {
+      print('❌ Error parsing Bill: $e');
+      rethrow;
     }
-
-    final companyJson = json['company'];
-    final companyId = getId(companyJson);
-    String companyName = 'Unknown Company';
-    if (companyJson is Map<String, dynamic>) {
-      companyName = companyJson['name'] as String? ?? 'Unknown Company';
-    }
-
-    final createdAtStr = getCreatedAtStr(json['createdAt']);
-    final invoiceNumber = json['invoiceNumber'] ?? 'N/A';
-    final totalAmount = json['totalAmount'] ?? 0;
-    final items = json['items'] ?? [];
-    final paymentMethod = json['paymentMethod'] ?? 'Unknown';
-    final customerName = json['customerDetails']?['name'] ?? '';
-    final notes = json['notes'] ?? '';
-    final status = json['status'] ?? '';
-
-    return Bill(
-      id: id,
-      invoiceNumber: invoiceNumber,
-      totalAmount: totalAmount,
-      branch: branchId,
-      branchName: branchName,
-      createdAt: DateTime.parse(createdAtStr),
-      items: items,
-      paymentMethod: paymentMethod,
-      createdBy: createdById,
-      waiterName: waiterName,
-      company: companyId,
-      companyName: companyName,
-      customerName: customerName,
-      notes: notes,
-      status: status,
-    );
   }
 }
 
 Future<List<Bill>> fetchBills(String branchId, String? token) async {
   Map<String, String> headers = ApiConfig.getHeaders(token);
-  
-  // Calculate start of today in UTC or Local depending on how server expects.
-  // Usually server stores UTC. Let's send ISO string.
+
   final now = DateTime.now();
-  final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
-  
-  final response = await http.get(
-    Uri.parse(
-        '${ApiConfig.baseUrl}/billings?where[branch][equals]=$branchId&where[createdAt][greater_than]=$startOfToday&limit=1000&sort=-createdAt&depth=2'),
-    headers: headers,
-  );
+  final startOfToday = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).toUtc().toIso8601String();
+
+  // We fetch without status filter to get both KOTs and Bills
+  final url =
+      '${ApiConfig.baseUrl}/billings?where[branch][equals]=$branchId&where[createdAt][greater_than]=$startOfToday&limit=1000&sort=-createdAt&depth=2';
+
+  final response = await http.get(Uri.parse(url), headers: headers);
   if (response.statusCode == 200) {
     final data = json.decode(response.body);
     final docs = data['docs'] ?? [];
@@ -142,15 +172,21 @@ Future<List<Bill>> fetchBills(String branchId, String? token) async {
     for (var d in docs) {
       try {
         allBills.add(Bill.fromJson(d));
-      } catch (_) {}
+      } catch (e) {
+        print('Skipping bill due to error: $e');
+      }
     }
     return allBills;
   } else {
-    throw Exception("Failed to load bills");
+    throw Exception("Failed to load bills: ${response.statusCode}");
   }
 }
 
-Future<bool> updatePaymentMethod(String billId, String newMethod, String? token) async {
+Future<bool> updatePaymentMethod(
+  String billId,
+  String newMethod,
+  String? token,
+) async {
   if (billId.isEmpty) return false;
 
   Map<String, String> headers = ApiConfig.getHeaders(token);
@@ -271,25 +307,41 @@ class _BillSheetPageState extends State<BillSheetPage> {
       final profile = await CapabilityProfile.load();
       final printer = NetworkPrinter(paper, profile);
 
-      final PosPrintResult res = await printer.connect(_printerIp!, port: _printerPort);
+      final PosPrintResult res = await printer.connect(
+        _printerIp!,
+        port: _printerPort,
+      );
 
       if (res == PosPrintResult.success) {
         // Prepare data
         DateTime now = DateTime.now();
-        String date = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        String date =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
         int hour = now.hour;
         String ampm = hour >= 12 ? 'PM' : 'AM';
         hour = hour % 12;
         if (hour == 0) hour = 12;
         String time = '$hour:${now.minute.toString().padLeft(2, '0')}$ampm';
         String dateStr = '$date $time';
-        
+
         String billNo = bill.invoiceNumber.split("-").last.padLeft(3, '0');
 
-        printer.text(_companyName ?? 'BLACK FOREST CAKES', styles: const PosStyles(align: PosAlign.center, bold: true));
-        printer.text('Branch: ${_branchName ?? bill.branchName}', styles: const PosStyles(align: PosAlign.center));
-        printer.text('GST: ${_branchGst ?? 'N/A'}', styles: const PosStyles(align: PosAlign.center));
-        printer.text('Mobile: ${_branchMobile ?? 'N/A'}', styles: const PosStyles(align: PosAlign.center));
+        printer.text(
+          _companyName ?? 'BLACK FOREST CAKES',
+          styles: const PosStyles(align: PosAlign.center, bold: true),
+        );
+        printer.text(
+          'Branch: ${_branchName ?? bill.branchName}',
+          styles: const PosStyles(align: PosAlign.center),
+        );
+        printer.text(
+          'GST: ${_branchGst ?? 'N/A'}',
+          styles: const PosStyles(align: PosAlign.center),
+        );
+        printer.text(
+          'Mobile: ${_branchMobile ?? 'N/A'}',
+          styles: const PosStyles(align: PosAlign.center),
+        );
         printer.hr(ch: '=');
         printer.row([
           PosColumn(
@@ -304,70 +356,112 @@ class _BillSheetPageState extends State<BillSheetPage> {
           ),
         ]);
         if (bill.waiterName != 'Unknown') {
-          printer.text('Assigned by: ${bill.waiterName}', styles: const PosStyles(align: PosAlign.center));
+          printer.text(
+            'Assigned by: ${bill.waiterName}',
+            styles: const PosStyles(align: PosAlign.center),
+          );
         }
         printer.hr(ch: '=');
         printer.row([
-          PosColumn(text: 'Item', width: 5, styles: const PosStyles(bold: true)),
-          PosColumn(text: 'Qty', width: 2, styles: const PosStyles(bold: true, align: PosAlign.center)),
-          PosColumn(text: 'Price', width: 2, styles: const PosStyles(bold: true, align: PosAlign.right)),
-          PosColumn(text: 'Amount', width: 3, styles: const PosStyles(bold: true, align: PosAlign.right)),
+          PosColumn(
+            text: 'Item',
+            width: 5,
+            styles: const PosStyles(bold: true),
+          ),
+          PosColumn(
+            text: 'Qty',
+            width: 2,
+            styles: const PosStyles(bold: true, align: PosAlign.center),
+          ),
+          PosColumn(
+            text: 'Price',
+            width: 2,
+            styles: const PosStyles(bold: true, align: PosAlign.right),
+          ),
+          PosColumn(
+            text: 'Amount',
+            width: 3,
+            styles: const PosStyles(bold: true, align: PosAlign.right),
+          ),
         ]);
         printer.hr(ch: '-');
 
         for (var item in bill.items) {
           // Check if item structure matches expectation
-           String name = item['product'] is Map ? item['product']['name'] ?? 'Item' : 'Item';
-           // Fallback if 'product' is just ID or unexpected structure (though bill.items usually has populated data if depth=2)
-           // Actually in fetchBills we request depth=2, so product should be populated.
-           // However based on CartPage logic it might differ. Let's inspect Bill.fromJson. 
-           // In Bill.fromJson items = json['items'].
-           // Wait, usually items list contains objects with 'product' field.
-           // Let's assume standard structure:
-           // { product: { name: ... }, quantity: ..., unitPrice: ..., subtotal: ... } or similar.
-           // The CartPage saves: 'product': item.id, 'name': item.name... 
-           // So 'name' might be directly on the item object.
-           
-           String rawName = item['name'] ?? (item['product'] is Map ? item['product']['name'] : 'Item');
-           // Remove standard Rupee symbol if present, or any non-ascii if needed.
-           // For now, just replacing known issue char.
-           String itemName = rawName.replaceAll('₹', 'Rs. ');
-           double quantity = (item['quantity'] ?? 0).toDouble();
-           double price = (item['unitPrice'] ?? 0).toDouble();
-           double subtotal = (item['subtotal'] ?? 0).toDouble();
-           
-           final qtyStr = quantity % 1 == 0 ? quantity.toStringAsFixed(0) : quantity.toStringAsFixed(2);
-           
-           printer.row([
+          String name = item['product'] is Map
+              ? item['product']['name'] ?? 'Item'
+              : 'Item';
+          // Fallback if 'product' is just ID or unexpected structure (though bill.items usually has populated data if depth=2)
+          // Actually in fetchBills we request depth=2, so product should be populated.
+          // However based on CartPage logic it might differ. Let's inspect Bill.fromJson.
+          // In Bill.fromJson items = json['items'].
+          // Wait, usually items list contains objects with 'product' field.
+          // Let's assume standard structure:
+          // { product: { name: ... }, quantity: ..., unitPrice: ..., subtotal: ... } or similar.
+          // The CartPage saves: 'product': item.id, 'name': item.name...
+          // So 'name' might be directly on the item object.
+
+          String rawName =
+              item['name'] ??
+              (item['product'] is Map ? item['product']['name'] : 'Item');
+          // Remove standard Rupee symbol if present, or any non-ascii if needed.
+          // For now, just replacing known issue char.
+          String itemName = rawName.replaceAll('₹', 'Rs. ');
+          double quantity = (item['quantity'] ?? 0).toDouble();
+          double price = (item['unitPrice'] ?? 0).toDouble();
+          double subtotal = (item['subtotal'] ?? 0).toDouble();
+
+          final qtyStr = quantity % 1 == 0
+              ? quantity.toStringAsFixed(0)
+              : quantity.toStringAsFixed(2);
+
+          printer.row([
             PosColumn(text: itemName, width: 5),
-            PosColumn(text: qtyStr, width: 2, styles: const PosStyles(align: PosAlign.center)),
-            PosColumn(text: price.toStringAsFixed(2), width: 2, styles: const PosStyles(align: PosAlign.right)),
             PosColumn(
-                text: subtotal.toStringAsFixed(2),
-                width: 3,
-                styles: const PosStyles(align: PosAlign.right)),
+              text: qtyStr,
+              width: 2,
+              styles: const PosStyles(align: PosAlign.center),
+            ),
+            PosColumn(
+              text: price.toStringAsFixed(2),
+              width: 2,
+              styles: const PosStyles(align: PosAlign.right),
+            ),
+            PosColumn(
+              text: subtotal.toStringAsFixed(2),
+              width: 3,
+              styles: const PosStyles(align: PosAlign.right),
+            ),
           ]);
         }
 
         printer.hr(ch: '-');
         printer.row([
-          PosColumn(text: 'TOTAL RS', width: 8, styles: const PosStyles(bold: true)),
           PosColumn(
-              text: bill.totalAmount.toStringAsFixed(2),
-              width: 4,
-              styles: const PosStyles(align: PosAlign.right, bold: true)),
+            text: 'TOTAL RS',
+            width: 8,
+            styles: const PosStyles(bold: true),
+          ),
+          PosColumn(
+            text: bill.totalAmount.toStringAsFixed(2),
+            width: 4,
+            styles: const PosStyles(align: PosAlign.right, bold: true),
+          ),
         ]);
         printer.text('Paid by: ${bill.paymentMethod.toUpperCase()}');
 
-        // Note: Customer details could be parsed from bill.customerName if we had more structure, 
-        // but Bill class only extracts customerName. 
+        // Note: Customer details could be parsed from bill.customerName if we had more structure,
+        // but Bill class only extracts customerName.
         if (bill.customerName.isNotEmpty) {
-           printer.hr();
-           printer.text('Customer: ${bill.customerName}');
+          printer.hr();
+          printer.text('Customer: ${bill.customerName}');
         }
 
         printer.hr(ch: '=');
-        printer.text('Thank you! Visit Again', styles: const PosStyles(align: PosAlign.center));
+        printer.text(
+          'Thank you! Visit Again',
+          styles: const PosStyles(align: PosAlign.center),
+        );
         printer.feed(2);
         printer.cut();
         printer.disconnect();
@@ -381,7 +475,9 @@ class _BillSheetPageState extends State<BillSheetPage> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Print failed: $e')));
     }
   }
 
@@ -436,22 +532,32 @@ class _BillSheetPageState extends State<BillSheetPage> {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content:
-                          Text("Cannot update payment method after 5 minutes.")),
+                        content: Text(
+                          "Cannot update payment method after 5 minutes.",
+                        ),
+                      ),
                     );
                     return;
                   }
 
-                  final success = await updatePaymentMethod(bill.id, newMethod, token);
+                  final success = await updatePaymentMethod(
+                    bill.id,
+                    newMethod,
+                    token,
+                  );
                   if (success) {
                     await _fetchBills(); // Refresh list
                     Navigator.pop(context); // Close sheet
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Payment method updated to $label.")),
+                      SnackBar(
+                        content: Text("Payment method updated to $label."),
+                      ),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed to update payment method.")),
+                      SnackBar(
+                        content: Text("Failed to update payment method."),
+                      ),
                     );
                   }
                 },
@@ -469,8 +575,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Payment Method",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                "Payment Method",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 20),
               Row(
                 children: [
@@ -491,8 +599,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
                         ),
                       ),
                       onPressed: () async {
-                         await _printReceipt(bill);
-                         if (mounted) Navigator.pop(context);
+                        await _printReceipt(bill);
+                        if (mounted) Navigator.pop(context);
                       },
                       child: Icon(Icons.print, size: 20),
                     ),
@@ -518,40 +626,95 @@ class _BillSheetPageState extends State<BillSheetPage> {
           : bills.isEmpty
           ? Center(child: Text("No bills today"))
           : GridView.builder(
-        padding: EdgeInsets.all(16),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          childAspectRatio: 1,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-        ),
-        itemCount: bills.length,
-        itemBuilder: (_, i) {
-          final bill = bills[i];
-          // Format bill number (e.g., 001)
-          final raw = bill.invoiceNumber.split("-").last;
-          final billNo = raw.padLeft(3, '0');
-          return GestureDetector(
-            onTap: () => _showPaymentSheet(bill),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(10),
+              padding: EdgeInsets.all(16),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 1,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
               ),
-              child: Center(
-                child: Text(
-                  billNo,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+              itemCount: bills.length,
+              itemBuilder: (_, i) {
+                final bill = bills[i];
+                // KOT detection based on status or invoice number
+                final isKot =
+                    bill.status.toLowerCase() != 'completed' ||
+                    bill.invoiceNumber.toUpperCase().contains('KOT');
+
+                // Format display number
+                final raw = bill.invoiceNumber.split("-").last;
+                // If it's a KOT and doesn't explicitly say KOT in the number part, we can add it or just show the number.
+                // Usually raw will be something like '002' or 'KOT002'.
+                String displayNo = raw;
+                if (isKot && !raw.toUpperCase().startsWith('KOT')) {
+                  displayNo = 'KOT $raw';
+                } else if (!isKot) {
+                  // Pad only finalized bills if they are just numbers
+                  if (RegExp(r'^\d+$').hasMatch(raw)) {
+                    displayNo = raw.padLeft(3, '0');
+                  }
+                }
+
+                return GestureDetector(
+                  onTap: () => _showPaymentSheet(bill),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isKot ? Colors.blue.shade700 : Colors.black,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        if (isKot)
+                          BoxShadow(
+                            color: Colors.blue.withOpacity(0.3),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (isKot) ...[
+                            Text(
+                              "RUNNING",
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.white60,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (bill.tableNumber != null &&
+                                bill.tableNumber!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2.0,
+                                ),
+                                child: Text(
+                                  "T-${bill.tableNumber}",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                          Text(
+                            displayNo,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: isKot ? 14 : 26,
+                              fontWeight: FontWeight.bold,
+                              color: isKot ? Colors.white70 : Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }

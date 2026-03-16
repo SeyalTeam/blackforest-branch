@@ -14,7 +14,7 @@ import 'package:branch/instock_provider.dart';
 import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
-import 'package:branch/editbill.dart';
+import 'package:branch/table_tracking_page.dart';
 import 'package:branch/auth_service.dart'; // ADDED
 
 /// ✅ UPDATED ENUM — added stock & returnorder
@@ -28,6 +28,7 @@ enum PageType {
   returnorder,
   expense,
   instock, // NEW
+  table, // NEW
 }
 
 class CommonScaffold extends StatefulWidget {
@@ -36,6 +37,7 @@ class CommonScaffold extends StatefulWidget {
   final Function(String)? onScanCallback;
   final PageType pageType;
   final List<Widget>? actions;
+  final PreferredSizeWidget? bottom; // NEW
 
   const CommonScaffold({
     super.key,
@@ -44,6 +46,7 @@ class CommonScaffold extends StatefulWidget {
     this.onScanCallback,
     required this.pageType,
     this.actions,
+    this.bottom, // NEW
   });
 
   @override
@@ -144,14 +147,19 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           elevation: 1,
           title: Text(
             widget.title,
-            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           iconTheme: const IconThemeData(color: Colors.black),
           actionsIconTheme: const IconThemeData(color: Colors.black),
+          bottom: widget.bottom, // NEW
           actions: [
             ...?widget.actions,
             if (widget.pageType == PageType.instock)
-              Consumer<InstockProvider>( // NEW CONSUMER for Instock
+              Consumer<InstockProvider>(
+                // NEW CONSUMER for Instock
                 builder: (_, sp, __) {
                   final int count = sp.inStockQuery.length;
                   return Stack(
@@ -175,11 +183,19 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                                color: const Color(0xFF11998e), borderRadius: BorderRadius.circular(10)),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              color: const Color(0xFF11998e),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -191,7 +207,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
             else if (widget.pageType == PageType.stock)
               Consumer<StockProvider>(
                 builder: (_, sp, __) {
-                  final int count = sp.selected.values.where((v) => v == true).length;
+                  final int count = sp.selected.values
+                      .where((v) => v == true)
+                      .length;
                   return Stack(
                     children: [
                       IconButton(
@@ -216,11 +234,19 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                                color: Colors.blue, borderRadius: BorderRadius.circular(10)), // Blue badge for stock? Or Keep Red. Let's keep Red but maybe distinct.
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              color: Colors.blue,
+                              borderRadius: BorderRadius.circular(10),
+                            ), // Blue badge for stock? Or Keep Red. Let's keep Red but maybe distinct.
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -242,7 +268,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const CartPage(isReturnOrder: true),
+                              builder: (_) =>
+                                  const CartPage(isReturnOrder: true),
                             ),
                           );
                         },
@@ -257,10 +284,17 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                               color: Colors.red,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -279,8 +313,10 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                         icon: const Icon(Icons.shopping_cart_outlined),
                         onPressed: () {
                           _resetTimer();
-                          Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const CartPage()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const CartPage()),
+                          );
                         },
                       ),
                       if (count > 0)
@@ -290,11 +326,19 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                                color: Colors.red, borderRadius: BorderRadius.circular(10)),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -312,16 +356,20 @@ class _CommonScaffoldState extends State<CommonScaffold> {
             children: [
               DrawerHeader(
                 decoration: const BoxDecoration(color: Colors.black),
-                child: Text(_username,
-                    style: const TextStyle(color: Colors.white, fontSize: 24)),
+                child: Text(
+                  _username,
+                  style: const TextStyle(color: Colors.white, fontSize: 24),
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.receipt, color: Colors.black),
                 title: const Text("Billing"),
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const CategoriesPage()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CategoriesPage()),
+                  );
                 },
               ),
               ListTile(
@@ -338,62 +386,68 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
         body: widget.body,
 
-        bottomNavigationBar: (widget.pageType == PageType.stock) ? null : Container(
-          decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.grey, width: 1))),
-          child: BottomAppBar(
-            color: Colors.white,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                /// HOME
-                _buildNavItem(
-                  icon: Icons.home_outlined,
-                  label: "Home",
-                  page: const HomePage(),
-                  type: PageType.home,
+        bottomNavigationBar: (widget.pageType == PageType.stock)
+            ? null
+            : Container(
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey, width: 1)),
                 ),
+                child: BottomAppBar(
+                  color: Colors.white,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      /// HOME
+                      _buildNavItem(
+                        icon: Icons.home_outlined,
+                        label: "Home",
+                        page: const HomePage(),
+                        type: PageType.home,
+                      ),
 
-                /// BILLING
-                _buildNavItem(
-                  icon: Icons.receipt_long_outlined,
-                  label: "Billing",
-                  page: const CategoriesPage(),
-                  type: PageType.billing,
-                ),
+                      /// BILLING
+                      _buildNavItem(
+                        icon: Icons.receipt_long_outlined,
+                        label: "Billing",
+                        page: const CategoriesPage(),
+                        type: PageType.billing,
+                      ),
 
-                /// SCAN
-                GestureDetector(
-                  onTap: _scanBarcode,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.qr_code_scanner_outlined,
-                          color: Colors.black, size: 32),
-                      Text("Scan", style: TextStyle(fontSize: 10)),
+                      /// SCAN
+                      GestureDetector(
+                        onTap: _scanBarcode,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.qr_code_scanner_outlined,
+                              color: Colors.black,
+                              size: 32,
+                            ),
+                            Text("Scan", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ),
+
+                      /// BILLSHEET
+                      _buildNavItem(
+                        icon: Icons.description_outlined,
+                        label: "BillSheet",
+                        page: const BillSheetPage(),
+                        type: PageType.billsheet,
+                      ),
+
+                      /// TABLE tracking
+                      _buildNavItem(
+                        icon: Icons.table_restaurant_outlined,
+                        label: "Table",
+                        page: const TableTrackingPage(),
+                        type: PageType.table,
+                      ),
                     ],
                   ),
                 ),
-
-                /// BILLSHEET
-                _buildNavItem(
-                  icon: Icons.description_outlined,
-                  label: "BillSheet",
-                  page: const BillSheetPage(),
-                  type: PageType.billsheet,
-                ),
-
-                /// EDIT BILL
-                _buildNavItem(
-                  icon: Icons.edit_outlined,
-                  label: "Edit Bill",
-                  page: const EditBillPage(),
-                  type: PageType.editbill,
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -410,15 +464,17 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         Navigator.pushAndRemoveUntil(
           context,
           _createRoute(page),
-              (route) => false,
+          (route) => false,
         );
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon,
-              size: 32,
-              color: widget.pageType == type ? Colors.blue : Colors.black),
+          Icon(
+            icon,
+            size: 32,
+            color: widget.pageType == type ? Colors.blue : Colors.black,
+          ),
           Text(
             label,
             style: TextStyle(
@@ -432,7 +488,6 @@ class _CommonScaffoldState extends State<CommonScaffold> {
   }
 }
 
-
 /// =========================
 /// BARCODE SCANNER DIALOG
 /// =========================
@@ -444,7 +499,8 @@ class ScannerDialog extends StatefulWidget {
 
 class _ScannerDialogState extends State<ScannerDialog> {
   final MobileScannerController controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates, // Added to prevent duplicate scans
+    detectionSpeed:
+        DetectionSpeed.noDuplicates, // Added to prevent duplicate scans
     // You can add torchEnabled: true if needed for low light
   );
 
@@ -457,7 +513,9 @@ class _ScannerDialogState extends State<ScannerDialog> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan QR/Barcode")), // Updated title to reflect both
+      appBar: AppBar(
+        title: const Text("Scan QR/Barcode"),
+      ), // Updated title to reflect both
       body: MobileScanner(
         controller: controller,
         onDetect: (capture) {
