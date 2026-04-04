@@ -8,6 +8,8 @@ import 'qr_update_page.dart';
 import 'stock_order.dart';
 import 'stockorder_report.dart';
 import 'table_creation_page.dart';
+import 'stock_status_page.dart';
+import 'table_tracking_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,8 +25,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Updated to 10 cards
-    for (int i = 0; i < 10; i++) {
+    // Updated to 12 cards
+    for (int i = 0; i < 12; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -87,14 +89,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Navigator.push(context, _createRoute(const StockOrderReportPage()));
   }
 
+  void _openStockStatus() {
+    Navigator.push(context, _createRoute(const StockStatusPage()));
+  }
+
+  void _openTableTracking() {
+    Navigator.push(context, _createRoute(const TableTrackingPage()));
+  }
+
   void _openTableCreation() {
     Navigator.push(context, _createRoute(const TableCreationPage()));
   }
 
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, animation, __) =>
-          FadeTransition(opacity: animation, child: page),
+      pageBuilder:
+          (_, animation, __) => FadeTransition(opacity: animation, child: page),
       transitionDuration: const Duration(milliseconds: 300),
     );
   }
@@ -107,59 +117,79 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Color start,
     Color end,
     String label,
-    VoidCallback onTap, {
-    double size = 140,
-  }) {
+    VoidCallback onTap,
+  ) {
     return AnimatedBuilder(
       animation: _animations[index]!,
-      builder: (context, _) => Transform.scale(
-        scale: _animations[index]!.value,
-        child: GestureDetector(
-          onTapDown: (_) => _controllers[index]!.forward(),
-          onTapUp: (_) {
-            _controllers[index]!.reverse();
-            onTap();
-          },
-          onTapCancel: () => _controllers[index]!.reverse(),
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: [start, end],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: start.withOpacity(0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 48, color: Colors.white),
-                  const SizedBox(height: 8),
-                ],
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+      builder:
+          (context, _) => Transform.scale(
+            scale: _animations[index]!.value,
+            child: GestureDetector(
+              onTapDown: (_) => _controllers[index]!.forward(),
+              onTapUp: (_) {
+                _controllers[index]!.reverse();
+                onTap();
+              },
+              onTapCancel: () => _controllers[index]!.reverse(),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    colors: [start, end],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  textAlign: TextAlign.center,
+                  boxShadow: [
+                    BoxShadow(
+                      color: start.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-              ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compactCard =
+                        constraints.maxWidth < 110 || constraints.maxHeight < 110;
+                    final iconSize = compactCard ? 30.0 : 48.0;
+                    final labelSize = compactCard ? 12.0 : 16.0;
+                    final gap = compactCard ? 4.0 : 8.0;
+                    final verticalPadding = compactCard ? 8.0 : 12.0;
+
+                    return Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: verticalPadding,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (icon != null) ...[
+                            Icon(icon, size: iconSize, color: Colors.white),
+                            SizedBox(height: gap),
+                          ],
+                          Flexible(
+                            child: Text(
+                              label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: labelSize,
+                                fontWeight: FontWeight.bold,
+                                height: 1.15,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
-        ),
-      ),
     );
   }
 
@@ -167,8 +197,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     return CommonScaffold(
       title: 'Dashboard',
       pageType: PageType.home,
@@ -179,12 +207,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
-                final crossCount = constraints.maxWidth > 600 ? 4 : 2;
+                final crossCount = constraints.maxWidth > 600 ? 4 : 3;
+                final compactGrid = constraints.maxWidth <= 420;
+                final spacing = compactGrid ? 12.0 : 24.0;
 
                 return GridView.count(
                   crossAxisCount: crossCount,
-                  crossAxisSpacing: 24,
-                  mainAxisSpacing: 24,
+                  crossAxisSpacing: spacing,
+                  mainAxisSpacing: spacing,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   childAspectRatio: 1.0,
@@ -201,8 +231,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     _buildCard(
                       1,
                       Icons.table_chart,
-                      const Color(0xFFFF6B6B),
-                      const Color(0xFFFF8E53),
+                      const Color(0xFFD32F2F),
+                      const Color(0xFFFF1744),
                       'Sheet',
                       _openSheet,
                     ),
@@ -271,6 +301,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
 
                     _buildCard(
+                      10,
+                      Icons.inventory,
+                      const Color(0xFF1565C0),
+                      const Color(0xFF42A5F5),
+                      'Stock Status',
+                      _openStockStatus,
+                    ),
+
+                    _buildCard(
+                      11,
+                      Icons.table_bar,
+                      const Color(0xFF546E7A),
+                      const Color(0xFF78909C),
+                      'Table',
+                      _openTableTracking,
+                    ),
+
+                    _buildCard(
                       8,
                       Icons.table_restaurant,
                       const Color(0xFF607D8B),
@@ -282,46 +330,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 );
               },
             ),
-
-            const SizedBox(height: 32),
-
-            // Reports section removed completely
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[850] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey.withOpacity(0.2)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _quickStat('Total Stock', '12,847', Colors.blue),
-                  _quickStat('Pending Returns', '23', Colors.red),
-                  _quickStat('Today Expense', '₹8,420', Colors.pink),
-                ],
-              ),
-            ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _quickStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-      ],
     );
   }
 }

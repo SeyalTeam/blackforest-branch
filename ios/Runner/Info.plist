@@ -47,5 +47,15 @@
   <true/>
   <key>NSCameraUsageDescription</key> <!-- Added for barcode scanning -->
   <string>The app needs camera access to scan barcodes for product and billing management in the admin panel.</string> <!-- Custom message for your app's purpose -->
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Your location is required for branch-specific login verification.</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>Your location is required for branch-specific login verification.</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>The app needs photo library access to select category and product images.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>The app needs Bluetooth access to connect to receipt printers.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>The app needs Bluetooth access to connect to receipt printers.</string>
 </dict>
 </plist>

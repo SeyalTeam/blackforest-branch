@@ -4,7 +4,11 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   charset_converter
+  connectivity_plus
+  file_selector_windows
+  geolocator_windows
   permission_handler_windows
+  print_bluetooth_thermal
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

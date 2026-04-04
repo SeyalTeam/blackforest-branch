@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -13,11 +12,12 @@ import 'package:branch/categories_page.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'package:esc_pos_printer/esc_pos_printer.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:branch/home.dart';
 import 'package:branch/login_page.dart';
 import 'package:branch/api_config.dart';
+import 'package:branch/printer/printer_settings_action.dart';
+import 'package:branch/printer/unified_printer.dart';
 
 class CartPage extends StatefulWidget {
   final bool isStockOrder;
@@ -133,7 +133,6 @@ class _CartPageState extends State<CartPage> {
   String? _branchGst;
   String? _branchMobile;
   String? _companyName;
-  String? _userRole;
   bool _addCustomerDetails = false;
   String? _selectedPaymentMethod;
   bool _isBillingInProgress = false; // Prevent duplicate bill taps
@@ -186,7 +185,6 @@ class _CartPageState extends State<CartPage> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final user = data['user'] ?? data;
-        _userRole = user['role'];
 
         if (user['role'] == 'branch' && user['branch'] != null) {
           _branchId = (user['branch'] is Map)
@@ -655,25 +653,9 @@ class _CartPageState extends State<CartPage> {
     Map<String, dynamic> customerDetails,
     String paymentMethod,
   ) async {
-    final printerIp = cartProvider.printerIp;
+    final printerIp = cartProvider.printerIp?.trim();
     final printerPort = cartProvider.printerPort;
     final printerProtocol = cartProvider.printerProtocol;
-
-    if (printerIp == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No printer configured for this branch')),
-      );
-      return;
-    }
-
-    if (printerProtocol == null || printerProtocol != 'esc_pos') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unsupported printer protocol: $printerProtocol'),
-        ),
-      );
-      return;
-    }
 
     // Fetch waiter name
     String? waiterName;
@@ -703,14 +685,36 @@ class _CartPageState extends State<CartPage> {
     try {
       const PaperSize paper = PaperSize.mm80;
       final profile = await CapabilityProfile.load();
-      final printer = NetworkPrinter(paper, profile);
+      final prefs = await SharedPreferences.getInstance();
+      final hasBluetoothPrinter = (prefs.getString('bt_printer_mac') ?? '')
+          .trim()
+          .isNotEmpty;
 
-      final PosPrintResult res = await printer.connect(
-        printerIp,
-        port: printerPort,
+      if (!hasBluetoothPrinter &&
+          printerProtocol != null &&
+          printerProtocol.isNotEmpty &&
+          printerProtocol != 'esc_pos') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unsupported printer protocol: $printerProtocol'),
+          ),
+        );
+        return;
+      }
+
+      final candidatePorts = <int>[
+        printerPort,
+        9100,
+        9101,
+      ].toSet().toList(growable: false);
+      final printer = await UnifiedPrinter.connect(
+        printerIp: printerIp,
+        candidatePorts: candidatePorts,
+        paperSize: paper,
+        profile: profile,
       );
 
-      if (res == PosPrintResult.success) {
+      if (printer != null) {
         String invoiceNumber =
             billingResponse['invoiceNumber'] ??
             billingResponse['doc']?['invoiceNumber'] ??
@@ -844,13 +848,16 @@ class _CartPageState extends State<CartPage> {
         );
         printer.feed(2);
         printer.cut();
-        printer.disconnect();
+        await printer.disconnectAndPrint();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Receipt printed successfully')),
         );
       } else {
-        throw Exception(res.msg);
+        final message = hasBluetoothPrinter || (printerIp?.isNotEmpty ?? false)
+            ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+            : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
+        throw Exception(message);
       }
     } catch (e) {
       ScaffoldMessenger.of(
@@ -950,6 +957,7 @@ class _CartPageState extends State<CartPage> {
     return CommonScaffold(
       title: 'Cart',
       pageType: PageType.cart,
+      actions: const [PrinterSettingsAction()],
       onScanCallback: _handleScan,
       body: Container(
         color: _bg,
@@ -1815,7 +1823,7 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _printStockOrderReceipt(Map<String, dynamic> orderData) async {
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    String? printerIp = cartProvider.printerIp;
+    String? printerIp = cartProvider.printerIp?.trim();
     int printerPort = cartProvider.printerPort;
     String? printerProtocol = cartProvider.printerProtocol;
 
@@ -1841,16 +1849,37 @@ class _CartPageState extends State<CartPage> {
           await _fetchBranchDetails(token, targetBranchId);
           // Refetch from provider after update
           final cpUpdated = Provider.of<CartProvider>(context, listen: false);
-          printerIp = cpUpdated.printerIp;
+          printerIp = cpUpdated.printerIp?.trim();
           printerPort = cpUpdated.printerPort;
           printerProtocol = cpUpdated.printerProtocol;
         }
       }
     }
 
-    if (printerIp == null) {
+    final prefs = await SharedPreferences.getInstance();
+    final hasBluetoothPrinter = (prefs.getString('bt_printer_mac') ?? '')
+        .trim()
+        .isNotEmpty;
+
+    if ((printerIp == null || printerIp.isEmpty) && !hasBluetoothPrinter) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No printer configured for this branch')),
+        const SnackBar(
+          content: Text(
+            'No printer configured. Connect a Bluetooth printer or set a branch printer.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!hasBluetoothPrinter &&
+        printerProtocol != null &&
+        printerProtocol.isNotEmpty &&
+        printerProtocol != 'esc_pos') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unsupported printer protocol: $printerProtocol'),
+        ),
       );
       return;
     }
@@ -1858,14 +1887,19 @@ class _CartPageState extends State<CartPage> {
     try {
       const PaperSize paper = PaperSize.mm80;
       final profile = await CapabilityProfile.load();
-      final printer = NetworkPrinter(paper, profile);
-
-      final PosPrintResult res = await printer.connect(
-        printerIp,
-        port: printerPort,
+      final candidatePorts = <int>[
+        printerPort,
+        9100,
+        9101,
+      ].toSet().toList(growable: false);
+      final printer = await UnifiedPrinter.connect(
+        printerIp: printerIp,
+        candidatePorts: candidatePorts,
+        paperSize: paper,
+        profile: profile,
       );
 
-      if (res == PosPrintResult.success) {
+      if (printer != null) {
         DateTime now = DateTime.now();
         String date =
             '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -2031,14 +2065,20 @@ class _CartPageState extends State<CartPage> {
         );
         printer.feed(2);
         printer.cut();
-        printer.disconnect();
+        await printer.disconnectAndPrint();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Receipt printed successfully')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Printer connection failed: ${res.msg}')),
+          SnackBar(
+            content: Text(
+              hasBluetoothPrinter || (printerIp?.isNotEmpty ?? false)
+                  ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+                  : 'No printer configured for this branch.',
+            ),
+          ),
         );
       }
     } catch (e) {

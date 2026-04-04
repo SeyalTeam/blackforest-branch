@@ -14,8 +14,8 @@ import 'package:branch/instock_provider.dart';
 import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
-import 'package:branch/table_tracking_page.dart';
 import 'package:branch/auth_service.dart'; // ADDED
+import 'package:branch/stock_alert_helper.dart';
 
 /// ✅ UPDATED ENUM — added stock & returnorder
 enum PageType {
@@ -25,11 +25,14 @@ enum PageType {
   billsheet,
   editbill,
   stock,
+  stockstatus,
   returnorder,
   expense,
   instock, // NEW
   table, // NEW
 }
+
+enum _StockAlertDialogAction { acknowledge, updateOutOfStock }
 
 class CommonScaffold extends StatefulWidget {
   final String title;
@@ -55,18 +58,26 @@ class CommonScaffold extends StatefulWidget {
 
 class _CommonScaffoldState extends State<CommonScaffold> {
   Timer? _inactivityTimer;
+  Timer? _stockAlertTimer;
   String _username = 'Menu';
+  String? _stockAlertToken;
+  String? _stockAlertBranchId;
+  bool _isCheckingStockAlerts = false;
+  bool _isStockAlertDialogOpen = false;
+  final Set<String> _seenStockAlertIds = {};
 
   @override
   void initState() {
     super.initState();
     _loadUsername();
     _resetTimer();
+    _initStockAlerts();
   }
 
   @override
   void dispose() {
     _inactivityTimer?.cancel();
+    _stockAlertTimer?.cancel();
     super.dispose();
   }
 
@@ -74,6 +85,23 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _username = prefs.getString('username') ?? 'Menu';
+    });
+  }
+
+  Future<void> _initStockAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    _stockAlertToken = prefs.getString('token');
+    _stockAlertBranchId = prefs.getString('branchId');
+
+    if ((_stockAlertToken?.isEmpty ?? true) ||
+        (_stockAlertBranchId?.isEmpty ?? true)) {
+      return;
+    }
+
+    await _checkStockAlerts();
+    _stockAlertTimer?.cancel();
+    _stockAlertTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkStockAlerts();
     });
   }
 
@@ -90,6 +118,259 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), backgroundColor: Colors.grey[800]),
     );
+  }
+
+  Future<void> _checkStockAlerts() async {
+    if (!mounted || _isCheckingStockAlerts || _isStockAlertDialogOpen) return;
+
+    final token = _stockAlertToken;
+    final branchId = _stockAlertBranchId;
+    if (token == null || token.isEmpty || branchId == null || branchId.isEmpty)
+      return;
+
+    _isCheckingStockAlerts = true;
+    try {
+      final alerts = await StockAlertHelper.fetchOpenAlerts(
+        token: token,
+        branchId: branchId,
+      );
+
+      Map<String, dynamic>? nextAlert;
+      for (final alert in alerts) {
+        final alertId = (alert['id'] ?? alert['_id'])?.toString().trim() ?? '';
+        if (alertId.isEmpty || _seenStockAlertIds.contains(alertId)) continue;
+        nextAlert = alert;
+        _seenStockAlertIds.add(alertId);
+        break;
+      }
+
+      if (nextAlert != null) {
+        await _showStockAlertDialog(nextAlert);
+      }
+    } catch (_error) {
+      // Ignore transient polling errors to avoid disrupting cashier flow.
+    } finally {
+      _isCheckingStockAlerts = false;
+    }
+  }
+
+  Future<void> _showStockAlertDialog(Map<String, dynamic> alert) async {
+    if (!mounted) return;
+
+    final alertId = (alert['id'] ?? alert['_id'])?.toString().trim() ?? '';
+    final productName = StockAlertHelper.productName(alert).toUpperCase();
+    final requesterName = StockAlertHelper.requesterName(alert);
+
+    _isStockAlertDialogOpen = true;
+    try {
+      final action = await showDialog<_StockAlertDialogAction>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
+            backgroundColor: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(36),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8BDDD9).withValues(alpha: 0.35),
+                      blurRadius: 34,
+                      offset: const Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 132,
+                        height: 132,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBE0E3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.notifications_active_rounded,
+                          size: 58,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      const Text(
+                        'Out Alert',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          color: Color(0xFF003D40),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 18,
+                            height: 1.45,
+                            color: Color(0xFF2F6E70),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: productName,
+                              style: const TextStyle(
+                                color: Color(0xFFC51E32),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const TextSpan(text: ' was reported '),
+                            const TextSpan(
+                              text: 'OUT OF STOCK',
+                              style: TextStyle(
+                                color: Color(0xFFC51E32),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const TextSpan(text: ' by '),
+                            TextSpan(
+                              text: requesterName,
+                              style: const TextStyle(
+                                color: Color(0xFF003D40),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const TextSpan(text: '.'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      const Text(
+                        'Please check this product and update it as out of stock for your branch immediately to avoid new sales.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          height: 1.45,
+                          color: Color(0xFF6F9898),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 26),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF006C67),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.of(
+                              dialogContext,
+                            ).pop(_StockAlertDialogAction.acknowledge);
+                          },
+                          child: const Text(
+                            'Acknowledge',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD84315),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.of(
+                              dialogContext,
+                            ).pop(_StockAlertDialogAction.updateOutOfStock);
+                          },
+                          child: const Text(
+                            'Update Out of Stock',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      final shouldUpdateOutOfStock =
+          action == _StockAlertDialogAction.updateOutOfStock;
+
+      if (shouldUpdateOutOfStock) {
+        final token = _stockAlertToken;
+        final branchId = _stockAlertBranchId;
+        if (token == null ||
+            token.isEmpty ||
+            branchId == null ||
+            branchId.isEmpty) {
+          throw Exception('Unable to detect branch session for stock update.');
+        }
+
+        await StockAlertHelper.markProductOutOfStock(
+          token: token,
+          branchId: branchId,
+          alert: alert,
+        );
+      }
+
+      if (alertId.isNotEmpty && _stockAlertToken != null) {
+        await StockAlertHelper.acknowledgeAlert(
+          token: _stockAlertToken!,
+          alertId: alertId,
+        );
+      }
+
+      if (mounted) {
+        _showMessage(
+          shouldUpdateOutOfStock
+              ? '$productName marked out of stock.'
+              : '$productName alert received.',
+        );
+      }
+    } catch (_error) {
+      if (alertId.isNotEmpty) {
+        _seenStockAlertIds.remove(alertId);
+      }
+    } finally {
+      _isStockAlertDialogOpen = false;
+    }
   }
 
   Future<void> _scanBarcode() async {
@@ -111,8 +392,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         barrierDismissible: true,
         pageBuilder: (_, __, ___) => const ScannerDialog(),
         barrierLabel: "Dismiss",
-        transitionBuilder: (context, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
+        transitionBuilder:
+            (context, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
       );
 
       if (result != null) {
@@ -207,9 +489,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
             else if (widget.pageType == PageType.stock)
               Consumer<StockProvider>(
                 builder: (_, sp, __) {
-                  final int count = sp.selected.values
-                      .where((v) => v == true)
-                      .length;
+                  final int count =
+                      sp.selected.values.where((v) => v == true).length;
                   return Stack(
                     children: [
                       IconButton(
@@ -219,10 +500,11 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ChangeNotifierProvider.value(
-                                value: sp,
-                                child: const CartPage(isStockOrder: true),
-                              ),
+                              builder:
+                                  (_) => ChangeNotifierProvider.value(
+                                    value: sp,
+                                    child: const CartPage(isStockOrder: true),
+                                  ),
                             ),
                           );
                         },
@@ -268,8 +550,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  const CartPage(isReturnOrder: true),
+                              builder:
+                                  (_) => const CartPage(isReturnOrder: true),
                             ),
                           );
                         },
@@ -303,7 +585,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                   );
                 },
               )
-            else
+            else if (widget.pageType != PageType.stockstatus)
               Consumer<CartProvider>(
                 builder: (_, cartProvider, __) {
                   final int count = cartProvider.cartItems.length;
@@ -386,68 +668,63 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
         body: widget.body,
 
-        bottomNavigationBar: (widget.pageType == PageType.stock)
-            ? null
-            : Container(
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey, width: 1)),
-                ),
-                child: BottomAppBar(
-                  color: Colors.white,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      /// HOME
-                      _buildNavItem(
-                        icon: Icons.home_outlined,
-                        label: "Home",
-                        page: const HomePage(),
-                        type: PageType.home,
-                      ),
-
-                      /// BILLING
-                      _buildNavItem(
-                        icon: Icons.receipt_long_outlined,
-                        label: "Billing",
-                        page: const CategoriesPage(),
-                        type: PageType.billing,
-                      ),
-
-                      /// SCAN
-                      GestureDetector(
-                        onTap: _scanBarcode,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.qr_code_scanner_outlined,
-                              color: Colors.black,
-                              size: 32,
-                            ),
-                            Text("Scan", style: TextStyle(fontSize: 10)),
-                          ],
+        bottomNavigationBar:
+            (widget.pageType == PageType.stock)
+                ? null
+                : Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.grey, width: 1),
+                    ),
+                  ),
+                  child: BottomAppBar(
+                    color: Colors.white,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        /// HOME
+                        _buildNavItem(
+                          icon: Icons.home_outlined,
+                          label: "Home",
+                          page: const HomePage(),
+                          type: PageType.home,
                         ),
-                      ),
 
-                      /// BILLSHEET
-                      _buildNavItem(
-                        icon: Icons.description_outlined,
-                        label: "BillSheet",
-                        page: const BillSheetPage(),
-                        type: PageType.billsheet,
-                      ),
+                        /// BILLING
+                        _buildNavItem(
+                          icon: Icons.receipt_long_outlined,
+                          label: "Billing",
+                          page: const CategoriesPage(),
+                          type: PageType.billing,
+                        ),
 
-                      /// TABLE tracking
-                      _buildNavItem(
-                        icon: Icons.table_restaurant_outlined,
-                        label: "Table",
-                        page: const TableTrackingPage(),
-                        type: PageType.table,
-                      ),
-                    ],
+                        /// SCAN
+                        GestureDetector(
+                          onTap: _scanBarcode,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.qr_code_scanner_outlined,
+                                color: Colors.black,
+                                size: 32,
+                              ),
+                              Text("Scan", style: TextStyle(fontSize: 10)),
+                            ],
+                          ),
+                        ),
+
+                        /// BILLSHEET
+                        _buildNavItem(
+                          icon: Icons.description_outlined,
+                          label: "BillSheet",
+                          page: const BillSheetPage(),
+                          type: PageType.billsheet,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
       ),
     );
   }

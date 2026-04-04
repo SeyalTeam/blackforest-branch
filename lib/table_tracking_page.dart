@@ -94,7 +94,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
         setState(() {
           // Filter only running (KOT) bills
           _activeBills = result.where((bill) {
-            return bill.status.toLowerCase() != 'completed' ||
+            final status = bill.status.toLowerCase();
+            final isFinalBill = status == 'completed' || status == 'settled';
+            return !isFinalBill ||
                 bill.invoiceNumber.toUpperCase().contains('KOT');
           }).toList();
         });

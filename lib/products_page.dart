@@ -1,10 +1,17 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img_lib;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:branch/common_scaffold.dart';
 import 'package:branch/cart_provider.dart';
 import 'package:branch/api_config.dart';
@@ -23,11 +30,91 @@ class ProductsPage extends StatefulWidget {
   _ProductsPageState createState() => _ProductsPageState();
 }
 
+class _ProductCameraDialog extends StatefulWidget {
+  final List<CameraDescription> cameras;
+
+  const _ProductCameraDialog({required this.cameras});
+
+  @override
+  State<_ProductCameraDialog> createState() => _ProductCameraDialogState();
+}
+
+class _ProductCameraDialogState extends State<_ProductCameraDialog> {
+  late CameraController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
+    _controller
+        .initialize()
+        .then((_) {
+          if (!mounted) return;
+          setState(() {});
+        })
+        .catchError((e) {
+          debugPrint('Camera init error: $e');
+        });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_controller.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return AlertDialog(
+      content: AspectRatio(
+        aspectRatio: _controller.value.aspectRatio,
+        child: CameraPreview(_controller),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            final navigator = Navigator.of(context);
+            final messenger = ScaffoldMessenger.of(context);
+            try {
+              final XFile file = await _controller.takePicture();
+              if (!mounted) return;
+              navigator.pop(file);
+            } catch (_) {
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Failed to capture photo')),
+              );
+              navigator.pop();
+            }
+          },
+          child: const Text('Capture'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProductsPageState extends State<ProductsPage> {
   List<dynamic> _products = [];
   bool _isLoading = true;
   String? _branchId;
   String? _userRole;
+  static const List<String> _productCreatorRoles = [
+    'superadmin',
+    'admin',
+    'company',
+    'branch',
+  ];
+
+  bool get _canCreateProduct => _productCreatorRoles.contains(_userRole);
 
   @override
   void initState() {
@@ -259,6 +346,599 @@ class _ProductsPageState extends State<ProductsPage> {
     }
   }
 
+  Future<File?> _captureAndConfirmPhoto() async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    final permission = await Permission.camera.request();
+    if (!permission.isGranted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Camera permission required')),
+      );
+      return null;
+    }
+
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('No camera found')));
+      return null;
+    }
+    if (!mounted) return null;
+
+    final XFile? photo = await showDialog<XFile>(
+      context: context,
+      builder: (context) => _ProductCameraDialog(cameras: cameras),
+    );
+    if (photo == null) return null;
+
+    final bytes = await photo.readAsBytes();
+    final decoded = img_lib.decodeImage(bytes);
+    if (decoded == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Failed to process captured image')),
+      );
+      return null;
+    }
+
+    final compressed = img_lib.encodeJpg(decoded, quality: 70);
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final tempFile = File('${tempDir.path}/product_$timestamp.jpg');
+    await tempFile.writeAsBytes(compressed);
+    if (!mounted) return null;
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Photo Preview'),
+        content: Image.file(tempFile),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Retake'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) return tempFile;
+
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+    return null;
+  }
+
+  Future<File?> _pickAndConfirmPhotoFromGallery() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final picker = ImagePicker();
+      final XFile? selected = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+      if (selected == null) return null;
+
+      final bytes = await selected.readAsBytes();
+      final decoded = img_lib.decodeImage(bytes);
+      if (decoded == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Failed to process selected image')),
+        );
+        return null;
+      }
+
+      final compressed = img_lib.encodeJpg(decoded, quality: 70);
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/product_gallery_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressed);
+      if (!mounted) return null;
+
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Image Preview'),
+          content: Image.file(tempFile),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Choose Another'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) return tempFile;
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      return null;
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to pick image: $e')),
+      );
+      return null;
+    }
+  }
+
+  Future<String?> _uploadProductPhoto(File file, String altText) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return null;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/media?prefix=product'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['alt'] = altText;
+      request.files.add(
+        http.MultipartFile(
+          'file',
+          file.readAsBytes().asStream(),
+          file.lengthSync(),
+          filename: file.path.split('/').last,
+          contentType: MediaType('image', 'jpeg'),
+        ),
+      );
+
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(body);
+        final doc = data['doc'] ?? data;
+        return doc['id']?.toString();
+      }
+
+      debugPrint('Product image upload failed: ${response.statusCode} - $body');
+      return null;
+    } catch (e) {
+      debugPrint('Product image upload exception: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _createProduct({
+    required String name,
+    required double price,
+    required double rate,
+    required bool isVeg,
+    required String unit,
+    required String gst,
+    required String imageId,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return 'No token found. Please login again.';
+
+      final normalizedName = name.trim();
+      if (normalizedName.isEmpty) {
+        return 'Product name is required';
+      }
+
+      // Friendly precheck to avoid hard 500 on unique constraint.
+      final duplicateRes = await http.get(
+        Uri.parse(
+          '${ApiConfig.baseUrl}/products?where[name][equals]=${Uri.encodeComponent(normalizedName)}&limit=1&depth=0',
+        ),
+        headers: ApiConfig.getHeaders(token),
+      );
+      if (duplicateRes.statusCode == 200) {
+        final docs = jsonDecode(duplicateRes.body)['docs'];
+        if (docs is List && docs.isNotEmpty) {
+          return 'Product name already exists';
+        }
+      }
+
+      final payload = <String, dynamic>{
+        'name': normalizedName,
+        'category': widget.categoryId,
+        'isVeg': isVeg,
+        'images': [
+          {'image': imageId},
+        ],
+        'defaultPriceDetails': {
+          'price': price,
+          'rate': rate,
+          'quantity': 1,
+          'unit': unit.trim(),
+          'gst': gst,
+        },
+      };
+
+      http.Response? res;
+      String bodyText = '';
+      const maxAttempts = 2;
+
+      for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        res = await http.post(
+          Uri.parse('${ApiConfig.baseUrl}/products'),
+          headers: ApiConfig.getHeaders(token),
+          body: jsonEncode(payload),
+        );
+        bodyText = res.body;
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          break;
+        }
+
+        // Retry once for duplicate-key race from auto-generated productId/UPC.
+        final lower = bodyText.toLowerCase();
+        final isDuplicateKey =
+            bodyText.contains('E11000') || lower.contains('duplicate key');
+        if (attempt < maxAttempts - 1 &&
+            res.statusCode == 500 &&
+            isDuplicateKey) {
+          await Future.delayed(const Duration(milliseconds: 250));
+          continue;
+        }
+
+        break;
+      }
+
+      if (res == null) {
+        return 'Failed to create product';
+      }
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        await _fetchProducts();
+        return null;
+      }
+
+      String message = 'Failed to create product (${res.statusCode})';
+      try {
+        final body = jsonDecode(bodyText);
+        final errors = body['errors'];
+        if (errors is List && errors.isNotEmpty) {
+          final firstError = errors.first;
+          if (firstError is Map && firstError['message'] != null) {
+            message = firstError['message'].toString();
+          }
+        } else if (body['message'] != null) {
+          message = body['message'].toString();
+        }
+      } catch (_) {}
+
+      if (message.startsWith('Failed to create product')) {
+        final preview = bodyText.trim();
+        if (preview.isNotEmpty) {
+          final shortPreview = preview.length > 180
+              ? '${preview.substring(0, 180)}...'
+              : preview;
+          message = '$message: $shortPreview';
+        }
+      }
+
+      return message;
+    } catch (e) {
+      return 'Error creating product: $e';
+    }
+  }
+
+  Future<void> _showCreateProductDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final rateCtrl = TextEditingController();
+
+    String selectedUnit = 'pcs';
+    String selectedGst = '0';
+    bool isVeg = false;
+    bool isSubmitting = false;
+    File? capturedImage;
+
+    final created = await showDialog<bool>(
+      context: context,
+      barrierDismissible: !isSubmitting,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (_, setDialogState) {
+            return AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 24,
+              ),
+              title: const Text('Create New Product'),
+              content: SizedBox(
+                width: MediaQuery.of(dialogContext).size.width > 620
+                    ? 520
+                    : MediaQuery.of(dialogContext).size.width - 24,
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Product Name',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Product name is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: priceCtrl,
+                        textInputAction: TextInputAction.next,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Price',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          final parsed = double.tryParse((value ?? '').trim());
+                          if (parsed == null || parsed <= 0) {
+                            return 'Enter a valid price';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: rateCtrl,
+                        textInputAction: TextInputAction.next,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Rate',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          final parsed = double.tryParse((value ?? '').trim());
+                          if (parsed == null || parsed < 0) {
+                            return 'Enter a valid rate';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedUnit,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'pcs', child: Text('pcs')),
+                          DropdownMenuItem(value: 'kg', child: Text('kg')),
+                          DropdownMenuItem(value: 'g', child: Text('g')),
+                        ],
+                        onChanged: isSubmitting
+                            ? null
+                            : (value) {
+                                if (value == null) return;
+                                setDialogState(() {
+                                  selectedUnit = value;
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedGst,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'GST',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: '0', child: Text('0%')),
+                          DropdownMenuItem(value: '5', child: Text('5%')),
+                          DropdownMenuItem(value: '12', child: Text('12%')),
+                          DropdownMenuItem(value: '18', child: Text('18%')),
+                          DropdownMenuItem(value: '22', child: Text('22%')),
+                        ],
+                        onChanged: isSubmitting
+                            ? null
+                            : (value) {
+                                if (value == null) return;
+                                setDialogState(() {
+                                  selectedGst = value;
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.camera_alt_outlined, size: 18),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text(
+                                    'Product Image',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: isSubmitting
+                                          ? null
+                                          : () async {
+                                              final file =
+                                                  await _captureAndConfirmPhoto();
+                                              if (file == null) return;
+                                              setDialogState(() {
+                                                capturedImage = file;
+                                              });
+                                            },
+                                      child: Text(
+                                        capturedImage == null
+                                            ? 'Capture'
+                                            : 'Retake',
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: isSubmitting
+                                          ? null
+                                          : () async {
+                                              final file =
+                                                  await _pickAndConfirmPhotoFromGallery();
+                                              if (file == null) return;
+                                              setDialogState(() {
+                                                capturedImage = file;
+                                              });
+                                            },
+                                      child: const Text('Select from Gallery'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            if (capturedImage != null) ...[
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.file(
+                                  capturedImage!,
+                                  height: 140,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Is Veg'),
+                        value: isVeg,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isVeg = value;
+                          });
+                        },
+                      ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+
+                          final messenger = ScaffoldMessenger.of(context);
+                          final navigator = Navigator.of(dialogContext);
+                          if (capturedImage == null) {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Please capture product image'),
+                              ),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isSubmitting = true;
+                          });
+
+                          final mediaId = await _uploadProductPhoto(
+                            capturedImage!,
+                            nameCtrl.text.trim().isEmpty
+                                ? 'Product image'
+                                : nameCtrl.text.trim(),
+                          );
+                          if (mediaId == null || mediaId.isEmpty) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                            });
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Failed to upload product image'),
+                              ),
+                            );
+                            return;
+                          }
+
+                          final error = await _createProduct(
+                            name: nameCtrl.text,
+                            price: double.parse(priceCtrl.text.trim()),
+                            rate: double.parse(rateCtrl.text.trim()),
+                            isVeg: isVeg,
+                            unit: selectedUnit,
+                            gst: selectedGst,
+                            imageId: mediaId,
+                          );
+                          if (!mounted) return;
+
+                          if (error == null) {
+                            navigator.pop(true);
+                          } else {
+                            setDialogState(() {
+                              isSubmitting = false;
+                            });
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(error)),
+                            );
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (created == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Product created successfully')),
+      );
+    }
+  }
+
   /// Barcode scan support
   void _handleScan(String scanResult) {
     for (int index = 0; index < _products.length; index++) {
@@ -281,13 +961,20 @@ class _ProductsPageState extends State<ProductsPage> {
       onScanCallback: _handleScan,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.black))
-          : _products.isEmpty
-          ? const Center(
-          child: Text('No products found', style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18)))
           : LayoutBuilder(
         builder: (context, constraints) {
+          if (_products.isEmpty && !_canCreateProduct) {
+            return const Center(
+              child: Text(
+                'No products found',
+                style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18),
+              ),
+            );
+          }
+
           final width = constraints.maxWidth;
           final crossAxisCount = (width > 600) ? 5 : 3;
+          final extraTile = _canCreateProduct ? 1 : 0;
           return GridView.builder(
             padding: const EdgeInsets.all(10),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -296,9 +983,53 @@ class _ProductsPageState extends State<ProductsPage> {
               mainAxisSpacing: 10,
               childAspectRatio: 0.75,
             ),
-            itemCount: _products.length,
+            itemCount: _products.length + extraTile,
             itemBuilder: (context, index) {
-              final product = _products[index];
+              if (_canCreateProduct && index == 0) {
+                return GestureDetector(
+                  onTap: _showCreateProductDialog,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      color: const Color(0xFFEFFAF1),
+                      border: Border.all(
+                        color: const Color(0xFF2E7D32),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.add_circle,
+                          size: 48,
+                          color: Color(0xFF2E7D32),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'New Product',
+                          style: TextStyle(
+                            color: Color(0xFF1B5E20),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Add to this category',
+                          style: TextStyle(
+                            color: Color(0xFF2E7D32),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final dataIndex = index - extraTile;
+              final product = _products[dataIndex];
               String? imageUrl;
               if (product['images'] != null &&
                   product['images'].isNotEmpty &&
@@ -325,7 +1056,7 @@ class _ProductsPageState extends State<ProductsPage> {
               final price = priceDetails != null ? '₹${priceDetails['price'] ?? 0}' : '₹0';
 
               return GestureDetector(
-                onTap: () => _toggleProductSelection(index),
+                onTap: () => _toggleProductSelection(dataIndex),
                 child: Consumer<CartProvider>(
                   builder: (context, cartProvider, child) {
                     final isSelected = cartProvider.cartItems.any((i) => i.id == product['id']);
