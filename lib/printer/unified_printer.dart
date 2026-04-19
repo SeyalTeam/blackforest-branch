@@ -5,6 +5,8 @@ import 'package:image/image.dart' as img;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum PrintPurpose { billing, kot, generic }
+
 class UnifiedPrinter {
   final NetworkPrinter? networkPrinter;
   final Generator generator;
@@ -22,12 +24,14 @@ class UnifiedPrinter {
     required List<int> candidatePorts,
     required PaperSize paperSize,
     required CapabilityProfile profile,
+    PrintPurpose purpose = PrintPurpose.generic,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final generator = Generator(paperSize, profile);
 
+    final bluetoothEnabled = prefs.getBool('bluetooth_printing_enabled') ?? true;
     final bluetoothMac = (prefs.getString('bt_printer_mac') ?? '').trim();
-    if (bluetoothMac.isNotEmpty) {
+    if (bluetoothEnabled && bluetoothMac.isNotEmpty) {
       try {
         var isConnected = await PrintBluetoothThermal.connectionStatus;
         if (!isConnected) {
@@ -59,8 +63,19 @@ class UnifiedPrinter {
       }
     }
 
+    final wifiEnabled = prefs.getBool('wifi_printing_enabled') ?? true;
     final ip = (printerIp ?? '').trim();
-    if (ip.isEmpty) {
+    
+    bool canUseWifi = wifiEnabled && ip.isNotEmpty;
+    if (canUseWifi) {
+      if (purpose == PrintPurpose.billing) {
+        canUseWifi = prefs.getBool('wifi_billing_enabled') ?? true;
+      } else if (purpose == PrintPurpose.kot) {
+        canUseWifi = prefs.getBool('wifi_kot_enabled') ?? true;
+      }
+    }
+
+    if (!canUseWifi) {
       return null;
     }
 
