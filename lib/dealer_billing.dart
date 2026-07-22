@@ -817,6 +817,23 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                 children: [
                                   Expanded(
                                     child: TextFormField(
+                                      controller: _invoiceNumberControllers[index],
+                                      decoration: InputDecoration(
+                                        labelText: 'Invoice Number',
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      ),
+                                      validator: (val) {
+                                        if (val == null || val.trim().isEmpty) {
+                                          return 'Required';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextFormField(
                                       controller: _billControllers[index],
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                       decoration: InputDecoration(
@@ -830,23 +847,6 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                         final num = double.tryParse(val);
                                         if (num == null) return 'Invalid amount';
                                         if (num <= 0) return 'Must be > 0';
-                                        return null;
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _invoiceNumberControllers[index],
-                                      decoration: InputDecoration(
-                                        labelText: 'Invoice Number',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      ),
-                                      validator: (val) {
-                                        if (val == null || val.trim().isEmpty) {
-                                          return 'Required';
-                                        }
                                         return null;
                                       },
                                     ),

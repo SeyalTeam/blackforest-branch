@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:branch/camera_page.dart';
 
 class _ExpenseItem {
   String? source;
@@ -36,67 +37,7 @@ class _ExpenseItem {
   }
 }
 
-class CameraDialog extends StatefulWidget {
-  final List<CameraDescription> cameras;
-
-  const CameraDialog({super.key, required this.cameras});
-
-  @override
-  _CameraDialogState createState() => _CameraDialogState();
-}
-
-class _CameraDialogState extends State<CameraDialog> {
-  late CameraController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
-    _controller.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-    }).catchError((e) {
-      print('Camera init error: $e');
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return AlertDialog(
-      content: AspectRatio(
-        aspectRatio: _controller.value.aspectRatio,
-        child: CameraPreview(_controller),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () async {
-            try {
-              final XFile file = await _controller.takePicture();
-              Navigator.pop(context, file);
-            } catch (e) {
-              print('Capture error: $e');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Failed to capture photo')),
-              );
-              Navigator.pop(context);
-            }
-          },
-          child: const Text('Capture'),
-        ),
-      ],
-    );
-  }
-}
+// CameraDialog class removed in favor of shared CameraPage in camera_page.dart
 
 class ExpenseDetailsPage extends StatefulWidget {
   const ExpenseDetailsPage({Key? key}) : super(key: key);
@@ -235,9 +176,12 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     };
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/expenses'),
-        headers: ApiConfig.getHeaders(null),
+        headers: ApiConfig.getHeaders(token),
         body: jsonEncode(expenseData),
       );
 
@@ -283,9 +227,12 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
       );
       return;
     }
-    final XFile? photo = await showDialog<XFile>(
-      context: context,
-      builder: (context) => CameraDialog(cameras: cameras),
+    final XFile? photo = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CameraPage(cameras: cameras),
+        fullscreenDialog: true,
+      ),
     );
     if (photo == null) return;
     final bytes = await photo.readAsBytes();
@@ -295,21 +242,6 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final tempFile = File('${tempDir.path}/expense_${index}_$timestamp.jpg');
     await tempFile.writeAsBytes(compressed);
-    bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Photo Preview'),
-        content: Image.file(tempFile),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Retake')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      await tempFile.delete();
-      return _captureExpensePhoto(index);
-    }
 
     final item = _expenseItems[index];
     final altText = 'Expense ${item.source ?? "Entry"} ${item.reason.text}';
