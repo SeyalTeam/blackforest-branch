@@ -35,15 +35,18 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   bool _isSubmitting = false;
   String? _branchId;
   String? _token;
-  static const String _manualAllowedBranch = '690e326cea6f468d6fe462e6';
-
+  String? _userName;
+  String? _userId;
 
   bool _hasError = false; // Block UI if initialization fails
 
   @override
   void initState() {
     super.initState();
-    _denomControllers = List.generate(_denominationValues.length, (_) => TextEditingController());
+    _denomControllers = List.generate(
+      _denominationValues.length,
+      (_) => TextEditingController(),
+    );
     for (var c in _denomControllers) {
       c.addListener(_updateCashFromDenoms);
     }
@@ -54,10 +57,10 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     _expensesController.addListener(_updateUI); // Good to have just in case
     _creditCardController.addListener(_updateUI);
     _upiController.addListener(_updateUI);
-    
+
     _init();
   }
-  
+
   void _updateUI() {
     if (mounted) setState(() {});
   }
@@ -74,7 +77,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       _upiController,
       _cashController,
       _stockOrderController,
-      ..._denomControllers
+      ..._denomControllers,
     ].forEach((c) => c.dispose());
     super.dispose();
   }
@@ -94,28 +97,29 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       _isLoading = true;
       _hasError = false;
     });
-    
+
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
     _branchId = prefs.getString('branchId');
+    _userName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+    _userId = prefs.getString('user_id');
     if (_token == null || _branchId == null) {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('Login required')))),
+          MaterialPageRoute(
+            builder: (_) =>
+                const Scaffold(body: Center(child: Text('Login required'))),
+          ),
         );
       }
       return;
     }
-    if (_branchId == _manualAllowedBranch) {
-      _systemSalesController.text = '';
-    }
-
     try {
       // Must succeed strictly
       // Must succeed strictly
       final lastClosing = await _fetchLastClosingToday();
-      
+
       // If no closing today, start from 00:00:00 today
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day).toUtc();
@@ -134,10 +138,16 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         setState(() => _hasError = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load data: $e. Please check your connection and retry.'),
+            content: Text(
+              'Failed to load data: $e. Please check your connection and retry.',
+            ),
             duration: const Duration(seconds: 10),
             backgroundColor: Colors.red,
-            action: SnackBarAction(label: 'Retry', onPressed: _init, textColor: Colors.white),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _init,
+              textColor: Colors.white,
+            ),
           ),
         );
       }
@@ -157,7 +167,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'sort': '-createdAt',
       });
       */
-      final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries?where[branch][equals]=$_branchId&where[date][equals]=$today&limit=1&sort=-createdAt');
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/closing-entries?where[branch][equals]=$_branchId&where[date][equals]=$today&limit=1&sort=-createdAt',
+      );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
@@ -191,7 +203,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'depth': '0',
       });
       */
-      final uri = Uri.parse('${ApiConfig.baseUrl}/billings?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/billings?where[branch][equals]=$_branchId&where[settledAt][greater_than]=$dateFilter&limit=2000&depth=0',
+      );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Billing fetch failed: ${res.statusCode}');
@@ -200,12 +214,18 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
       for (final bill in docs) {
-          final amount = bill['grandTotal'] ?? bill['total'] ?? bill['netAmount'] ?? bill['totalAmount'] ?? bill['amount'];
+        final status = bill['status']?.toString().toLowerCase();
+        if (status == 'completed' || status == 'settled') {
+          final amount =
+              bill['grandTotal'] ??
+              bill['total'] ??
+              bill['netAmount'] ??
+              bill['totalAmount'] ??
+              bill['amount'];
           if (amount is num) total += amount.toDouble();
+        }
       }
-      if (_branchId != _manualAllowedBranch) {
-        _systemSalesController.text = total.toStringAsFixed(2);
-      }
+      _systemSalesController.text = total.toStringAsFixed(2);
     } catch (e) {
       debugPrint('fetchIncrementalSystemSales error: $e');
     }
@@ -224,13 +244,15 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'depth': '0',
       });
       */
-      final uri = Uri.parse('${ApiConfig.baseUrl}/expenses?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/expenses?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0',
+      );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) return;
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
       for (final exp in docs) {
-          total += (exp['total'] ?? 0).toDouble();
+        total += (exp['total'] ?? 0).toDouble();
       }
       _expensesController.text = total.toStringAsFixed(2);
     } catch (e) {
@@ -251,7 +273,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'depth': '0',
       });
       */
-      final uri = Uri.parse('${ApiConfig.baseUrl}/return-orders?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0');
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/return-orders?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0',
+      );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Returns fetch failed: ${res.statusCode}');
@@ -278,33 +302,39 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     setState(() => _isFetchingStockOrders = true);
     try {
       // Stock orders are trickier because they loop through items which have sendingDate.
-      // But usually we filter by order creation or update. 
+      // But usually we filter by order creation or update.
       // The previous logic filtered items by sendingDate > lastClosing.
       // Let's filter orders modified/created after sendingDate.
-      // However, the payload is traversing stock-orders. 
+      // However, the payload is traversing stock-orders.
       // Let's stick to the same logic but filter stock-orders by updated/createdAt to reduce payload?
       // Or just filter all active stock orders?
       // Since 'sendingDate' is on item level, and we want items sent TODAY > lastClosing.
-      
+
       // Optimization: Fetch stock orders where 'updatedAt' > startTime (approx) or just fetch for today.
       final dateFilter = startTime.toIso8601String();
-      
+
       // Fetching stock orders created/updated recently?
       // Actually stock orders might be created earlier but items sent today.
       // So filtering by 'items.sendingDate' would be ideal but Payload doesn't support deep nested queries easily on arrays sometimes.
       // Safe bet: Filter stock orders updated today? Or just last 100 which is better than 2000.
-      
+
       // Let's keep it simpler but optimized: Filter orders created OR updated today?
       // The previous logic iterated all 2000.
       // Let's try to filter by `updatedAt` > today start?
       // If a stock order was created yesterday but an item sent today, updatedAt would be today.
-      
+
       // Let's use startOfToday for the query to be safe, then filter items strictly by startTime.
       final now = DateTime.now();
-      final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+      final startOfToday = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).toUtc().toIso8601String();
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}/stock-orders?where[branch][equals]=$_branchId&where[updatedAt][greater_than]=$startOfToday&limit=500&depth=0');
-      
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/stock-orders?where[branch][equals]=$_branchId&where[updatedAt][greater_than]=$startOfToday&limit=500&depth=0',
+      );
+
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
         debugPrint('Stock order fetch failed: ${res.statusCode}');
@@ -312,7 +342,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       }
       final docs = jsonDecode(res.body)['docs'] ?? [];
       double total = 0.0;
-      
+
       for (final so in docs) {
         final items = so['items'] as List<dynamic>?;
         if (items == null) continue;
@@ -321,7 +351,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
           final sendingAmount = item['sendingAmount'] ?? 0;
           if (sendingDateStr == null) continue;
           final sendingDate = DateTime.parse(sendingDateStr).toUtc();
-          
+
           if (sendingDate.isAfter(startTime)) {
             total += sendingAmount.toDouble();
           }
@@ -335,7 +365,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
   }
 
   Future<void> _submitForm() async {
-    if (!_salesFormKey.currentState!.validate() || !_paymentsFormKey.currentState!.validate()) return;
+    if (!_salesFormKey.currentState!.validate() ||
+        !_paymentsFormKey.currentState!.validate())
+      return;
     setState(() => _isSubmitting = true);
     try {
       // Must succeed strictly
@@ -364,9 +396,12 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'cash': double.tryParse(_cashController.text) ?? 0.0,
         'denominations': {
           for (int i = 0; i < _denominationValues.length; i++)
-            'count${_denominationValues[i]}': int.tryParse(_denomControllers[i].text) ?? 0,
+            'count${_denominationValues[i]}':
+                int.tryParse(_denomControllers[i].text) ?? 0,
         },
         'branch': _branchId,
+        'createdByName': _userName,
+        'createdByUser': _userId,
       };
       // final uri = Uri.https(_apiHost, '/api/closing-entries');
       final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries');
@@ -387,19 +422,25 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('Failed: ${res.statusCode}')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed: ${res.statusCode}')));
         }
       }
     } catch (e) {
       debugPrint('Submit error: $e');
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
     setState(() => _isSubmitting = false);
   }
 
-  Widget _buildNumberField(String label, TextEditingController controller, {bool readOnly = false}) {
+  Widget _buildNumberField(
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
     return TextFormField(
       controller: controller,
       readOnly: readOnly,
@@ -417,12 +458,14 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _isFetchingSales || _isFetchingExpenses || _isFetchingReturns || _isFetchingStockOrders) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    if (_isLoading ||
+        _isFetchingSales ||
+        _isFetchingExpenses ||
+        _isFetchingReturns ||
+        _isFetchingStockOrders) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    
+
     if (_hasError) {
       return Scaffold(
         appBar: AppBar(title: const Text('Closing Entry Error')),
@@ -447,70 +490,83 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
                 onPressed: _init,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry Connection'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-              )
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
             ],
           ),
         ),
       );
     }
 
-    final totalSales = (double.tryParse(_manualSalesController.text) ?? 0.0) +
+    final totalSales =
+        (double.tryParse(_manualSalesController.text) ?? 0.0) +
         (double.tryParse(_onlineSalesController.text) ?? 0.0);
-    final totalPayments = (double.tryParse(_creditCardController.text) ?? 0.0) +
+    final totalPayments =
+        (double.tryParse(_creditCardController.text) ?? 0.0) +
         (double.tryParse(_upiController.text) ?? 0.0) +
         (double.tryParse(_cashController.text) ?? 0.0);
     return Scaffold(
       appBar: AppBar(title: const Text('Closing Entry Form')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          Text(
-            'Date: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
-            style: const TextStyle(fontSize: 16),
-          ),
-          const SizedBox(height: 16),
-          // -------------------------------------------------------
-          // Sales Section
-          // -------------------------------------------------------
-          Card(
-            color: Colors.blue[50],
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Form(
-                key: _salesFormKey,
-                child: Column(
+        child: Column(
+          children: [
+            Text(
+              'Date: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            // -------------------------------------------------------
+            // Sales Section
+            // -------------------------------------------------------
+            Card(
+              color: Colors.blue[50],
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Form(
+                  key: _salesFormKey,
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Sales', style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Sales',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      if (_branchId == _manualAllowedBranch) ...[
-                        _buildNumberField('System Sales (Manual Entry)', _systemSalesController, readOnly: false),
-                        const SizedBox(height: 10),
-                      ],
                       _buildNumberField('Manual Sales', _manualSalesController),
                       const SizedBox(height: 10),
                       _buildNumberField('Online Sales', _onlineSalesController),
-                    ]),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          // -------------------------------------------------------
-          // Payments Section
-          // -------------------------------------------------------
-          Card(
-            color: Colors.green[50],
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Form(
-                key: _paymentsFormKey,
-                child: Column(
+            const SizedBox(height: 16),
+            // -------------------------------------------------------
+            // Payments Section
+            // -------------------------------------------------------
+            Card(
+              color: Colors.green[50],
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Form(
+                  key: _paymentsFormKey,
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Payments', style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Payments',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       _buildNumberField('Credit Card', _creditCardController),
                       const SizedBox(height: 10),
@@ -525,123 +581,173 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
                           filled: true,
                           fillColor: Colors.grey[200],
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ]),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // -------------------------------------------------------
-          // Denominations Section
-          // -------------------------------------------------------
-          Card(
-            color: Colors.yellow[50],
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Cash Denominations', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                ...List.generate(_denominationValues.length, (i) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(children: [
-                      Text('₹${_denominationValues[i]} × ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _denomControllers[i],
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'Count',
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            filled: true,
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
-                    ]),
-                  );
-                }),
-              ]),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          // -------------------------------------------------------
-          // Summary Section
-          // -------------------------------------------------------
-          Card(
-            color: Colors.purple[50],
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Manual Sales'),
-                      Text('₹${_manualSalesController.text}')
-                    ]),
-                const SizedBox(height: 6),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Online Sales'),
-                      Text('₹${_onlineSalesController.text}')
-                    ]),
-                const Divider(height: 20),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total Sales', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('₹${totalSales.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ]),
-                const SizedBox(height: 12),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Credit Card'),
-                      Text('₹${_creditCardController.text}')
-                    ]),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('UPI'),
-                      Text('₹${_upiController.text}')
-                    ]),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Cash'),
-                      Text('₹${_cashController.text}')
-                    ]),
-                const SizedBox(height: 6),
-                ...List.generate(_denominationValues.length, (i) {
-                  final count = int.tryParse(_denomControllers[i].text) ?? 0;
-                  if (count > 0) {
-                    return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('₹${_denominationValues[i]} ×'),
-                          Text('$count')
-                        ]);
-                  }
-                  return const SizedBox.shrink();
-                }),
-                const Divider(height: 20),
+            const SizedBox(height: 16),
+            // -------------------------------------------------------
+            // Denominations Section
+            // -------------------------------------------------------
+            Card(
+              color: Colors.yellow[50],
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Cash Denominations',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...List.generate(_denominationValues.length, (i) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Text(
+                              '₹${_denominationValues[i]} × ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _denomControllers[i],
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: 'Count',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  filled: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // -------------------------------------------------------
+            // Summary Section
+            // -------------------------------------------------------
+            Card(
+              color: Colors.purple[50],
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Summary',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Manual Sales'),
+                        Text('₹${_manualSalesController.text}'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Online Sales'),
+                        Text('₹${_onlineSalesController.text}'),
+                      ],
+                    ),
+                    const Divider(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Sales',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '₹${totalSales.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Credit Card'),
+                        Text('₹${_creditCardController.text}'),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('UPI'),
+                        Text('₹${_upiController.text}'),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Cash'),
+                        Text('₹${_cashController.text}'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ...List.generate(_denominationValues.length, (i) {
+                      final count =
+                          int.tryParse(_denomControllers[i].text) ?? 0;
+                      if (count > 0) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('₹${_denominationValues[i]} ×'),
+                            Text('$count'),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }),
+                    const Divider(height: 20),
 
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total Payments', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('₹${totalPayments.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ]),
-              ]),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Payments',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '₹${totalPayments.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 30),
-        ]),
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16),
@@ -649,9 +755,10 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
           onPressed: _isSubmitting ? null : _submitForm,
           icon: _isSubmitting
               ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(color: Colors.white))
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
               : const Icon(Icons.send, color: Colors.white),
           label: Text(
             _isSubmitting ? 'Submitting...' : 'Submit Closing Entry',
