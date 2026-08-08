@@ -100,37 +100,33 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
 
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
-    _branchId = prefs.getString('branchId');
+    _branchId = prefs.getString('branchId') ?? prefs.getString('branch');
     _userName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
     _userId = prefs.getString('user_id');
-    if (_token == null || _branchId == null) {
+    if (_token == null || _branchId == null || _branchId!.isEmpty) {
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                const Scaffold(body: Center(child: Text('Login required'))),
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Branch ID missing. Please log in again.'),
+            backgroundColor: Colors.red,
           ),
         );
       }
       return;
     }
     try {
-      // Must succeed strictly
-      // Must succeed strictly
       final lastClosing = await _fetchLastClosingToday();
 
-      // If no closing today, start from 00:00:00 today
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day).toUtc();
-      // Use lastClosing if available and it's after startOfToday (just safety), else startOfToday
       final startTime = lastClosing ?? startOfToday;
 
       await Future.wait([
         _fetchIncrementalSystemSales(startTime),
         _fetchIncrementalExpenses(startTime),
         _fetchIncrementalReturns(startTime),
-        _fetchIncrementalStockOrders(startTime), // NEW
+        _fetchIncrementalStockOrders(startTime),
       ]);
     } catch (e) {
       debugPrint('Initialization error: $e');
@@ -158,36 +154,30 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
 
   Future<DateTime?> _fetchLastClosingToday() async {
     try {
-      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      /*
-      final uri = Uri.https(_apiHost, '/api/closing-entries', {
-        'where[branch][equals]': _branchId!,
-        'where[date][equals]': today,
-        'limit': '1',
-        'sort': '-createdAt',
-      });
-      */
       final uri = Uri.parse(
-        '${ApiConfig.baseUrl}/closing-entries?where[branch][equals]=$_branchId&where[date][equals]=$today&limit=1&sort=-createdAt',
+        '${ApiConfig.baseUrl}/closing-entries?where[branch][equals]=$_branchId&limit=1&sort=-createdAt',
       );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);
         final docs = json['docs'] as List<dynamic>? ?? [];
         if (docs.isNotEmpty) {
-          final createdAt = docs.first['createdAt'] as String?;
-          if (createdAt != null) {
-            return DateTime.parse(createdAt).toUtc();
+          final createdAtStr = docs.first['createdAt'] as String?;
+          if (createdAtStr != null) {
+            final createdAt = DateTime.parse(createdAtStr).toUtc();
+            final now = DateTime.now();
+            final todayStart = DateTime(now.year, now.month, now.day).toUtc();
+            if (createdAt.isAfter(todayStart)) {
+              return createdAt;
+            }
           }
         }
-        return null; // Success, but no previous closing found today
-      } else {
-        // Critical: If API fails, throw error. Do NOT assume no closing exists.
-        throw Exception('Failed to fetch last closing: ${res.statusCode}');
+        return null;
       }
+      return null;
     } catch (e) {
       debugPrint('fetchLastClosingToday error: $e');
-      rethrow; // Propagate error to block submission
+      return null;
     }
   }
 
@@ -195,16 +185,8 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     setState(() => _isFetchingSales = true);
     try {
       final dateFilter = startTime.toIso8601String();
-      /*
-      final uri = Uri.https(_apiHost, '/api/billings', {
-        'where[branch][equals]': _branchId!,
-        'where[createdAt][greater_than]': dateFilter,
-        'limit': '2000',
-        'depth': '0',
-      });
-      */
       final uri = Uri.parse(
-        '${ApiConfig.baseUrl}/billings?where[branch][equals]=$_branchId&where[settledAt][greater_than]=$dateFilter&limit=2000&depth=0',
+        '${ApiConfig.baseUrl}/billings?where[branch][equals]=$_branchId&where[createdAt][greater_than]=$dateFilter&limit=2000&depth=0',
       );
       final res = await http.get(uri, headers: ApiConfig.getHeaders(_token));
       if (res.statusCode != 200) {
@@ -310,8 +292,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       // Or just filter all active stock orders?
       // Since 'sendingDate' is on item level, and we want items sent TODAY > lastClosing.
 
-      // Optimization: Fetch stock orders where 'updatedAt' > startTime (approx) or just fetch for today.
-      final dateFilter = startTime.toIso8601String();
+
 
       // Fetching stock orders created/updated recently?
       // Actually stock orders might be created earlier but items sent today.
@@ -401,6 +382,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         },
         'branch': _branchId,
         'createdByName': _userName,
+        'createdBy': _userId,
         'createdByUser': _userId,
       };
       // final uri = Uri.https(_apiHost, '/api/closing-entries');
