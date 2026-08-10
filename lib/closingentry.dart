@@ -103,6 +103,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     _branchId = prefs.getString('branchId') ?? prefs.getString('branch');
     _userName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
     _userId = prefs.getString('user_id');
+    debugPrint('[Closing Entry Debug] Loaded _userId: $_userId, _userName: $_userName, _branchId: $_branchId');
     if (_token == null || _branchId == null || _branchId!.isEmpty) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -385,6 +386,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'createdByUser': _userId,
         'createdBy': _userId,
       };
+      debugPrint('[Closing Entry Debug] Submitting payload to API: ${jsonEncode(payload)}');
       // final uri = Uri.https(_apiHost, '/api/closing-entries');
       final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries');
       final res = await http.post(
