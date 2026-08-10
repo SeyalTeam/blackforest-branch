@@ -99,6 +99,7 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController(); // username only
   final _passwordController = TextEditingController();
+  final _pinController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isCheckingSession =
@@ -109,6 +110,14 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _isCheckingSession = true; // NEW: Start with checking state
     _checkExistingSession();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _pinController.dispose();
+    super.dispose();
   }
 
   // ---------------------------------------------------------
@@ -400,22 +409,27 @@ class _LoginPageState extends State<LoginPage> {
 
     final deviceId = await _getDeviceId();
 
-    if (!await _checkLocationPermission()) {
-      setState(() => _isLoading = false);
-      return;
-    }
+    final pin = _pinController.text.trim();
+    final bool bypassGps = pin.isNotEmpty;
 
-    late final Position currentPos;
-    try {
-      currentPos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-    } catch (e) {
-      _showError("Unable to verify location: $e");
-      setState(() => _isLoading = false);
-      return;
+    Position? currentPos;
+    if (!bypassGps) {
+      if (!await _checkLocationPermission()) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      try {
+        currentPos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        );
+      } catch (e) {
+        _showError("Unable to verify location: $e");
+        setState(() => _isLoading = false);
+        return;
+      }
     }
 
     try {
@@ -425,12 +439,14 @@ class _LoginPageState extends State<LoginPage> {
           ...ApiConfig.getHeaders(null),
           "x-device-id": deviceId,
           if (deviceIp != null) "x-private-ip": deviceIp,
-          "x-latitude": currentPos.latitude.toString(),
-          "x-longitude": currentPos.longitude.toString(),
+          if (currentPos != null) "x-latitude": currentPos.latitude.toString(),
+          if (currentPos != null) "x-longitude": currentPos.longitude.toString(),
+          if (bypassGps) "x-branch-pin": pin,
         },
         body: jsonEncode({
           "email": finalEmail,
           "password": _passwordController.text,
+          if (bypassGps) "branchPin": pin,
         }),
       );
 
@@ -481,238 +497,266 @@ class _LoginPageState extends State<LoginPage> {
           branchId = branchRef?.toString();
         }
 
-        if ((branchId == null || branchId.isEmpty) && allowedRoles.contains(role)) {
-          try {
-            final gRes = await http.get(
-              Uri.parse("${ApiConfig.baseUrl}/globals/branch-geo-settings"),
-              headers: ApiConfig.getHeaders(data['token']),
-            );
-
-            if (gRes.statusCode == 200) {
-              final settings = jsonDecode(gRes.body);
-              final locations = settings['locations'] as List?;
-              if (locations != null) {
-                if (deviceIp != null) {
-                  final dynamic ipMatchLoc = locations.firstWhere((loc) {
-                    final locIp = loc['ipAddress']?.toString().trim();
-                    return locIp != null &&
-                        locIp.isNotEmpty &&
-                        _isIpInRange(deviceIp, locIp);
-                  }, orElse: () => null);
-
-                  if (ipMatchLoc != null) {
-                    final locBranch = ipMatchLoc['branch'];
-                    if (locBranch is Map) {
-                      branchId =
-                          (locBranch['id'] ??
-                                  locBranch['_id'] ??
-                                  locBranch[r'$oid'])
-                              ?.toString();
-                      branchName = locBranch['name']?.toString();
-                    } else {
-                      branchId = locBranch?.toString();
-                    }
-                  }
-                }
-
-                if (branchId == null) {
-                  final dynamic geoMatchLoc = locations.firstWhere((loc) {
-                    final lat2 = loc['latitude'] != null
-                        ? (loc['latitude'] as num).toDouble()
-                        : null;
-                    final lng2 = loc['longitude'] != null
-                        ? (loc['longitude'] as num).toDouble()
-                        : null;
-                    final radius = loc['radius'] != null
-                        ? (loc['radius'] as num).toInt()
-                        : 100;
-
-                    if (lat2 != null && lng2 != null) {
-                      final dist = Geolocator.distanceBetween(
-                        currentPos.latitude,
-                        currentPos.longitude,
-                        lat2,
-                        lng2,
-                      );
-                      return dist <= radius;
-                    }
-                    return false;
-                  }, orElse: () => null);
-
-                  if (geoMatchLoc != null) {
-                    final locBranch = geoMatchLoc['branch'];
-                    if (locBranch is Map) {
-                      branchId =
-                          (locBranch['id'] ??
-                                  locBranch['_id'] ??
-                                  locBranch[r'$oid'])
-                              ?.toString();
-                      branchName = locBranch['name']?.toString();
-                    } else {
-                      branchId = locBranch?.toString();
-                    }
-                  }
-                }
-              }
-            }
-          } catch (_) {}
-        }
-
         String? branchIpRange;
         String? printerIp;
         double? branchLat;
         double? branchLng;
         int? branchRadius;
 
-        if (branchId == null || branchId.isEmpty) {
-          _showError("Access Denied: Unable to identify branch");
-          setState(() => _isLoading = false);
-          return;
-        }
+        if (!bypassGps) {
+          if ((branchId == null || branchId.isEmpty) && allowedRoles.contains(role)) {
+            try {
+              final gRes = await http.get(
+                Uri.parse("${ApiConfig.baseUrl}/globals/branch-geo-settings"),
+                headers: ApiConfig.getHeaders(data['token']),
+              );
 
-        try {
-          final gRes = await http.get(
-            Uri.parse("${ApiConfig.baseUrl}/globals/branch-geo-settings"),
-            headers: ApiConfig.getHeaders(data['token']),
-          );
-          if (gRes.statusCode == 200) {
-            final settings = jsonDecode(gRes.body);
-            final locations = settings['locations'] as List?;
-            if (locations != null) {
-              final dynamic branchConfig = locations.firstWhere((loc) {
-                final locBranch = loc['branch'];
-                String? locBranchId;
-                if (locBranch is Map) {
-                  locBranchId =
-                      locBranch['id']?.toString() ??
-                      locBranch['_id']?.toString() ??
-                      locBranch[r'$oid']?.toString();
-                } else {
-                  locBranchId = locBranch?.toString();
-                }
-                return locBranchId == branchId;
-              }, orElse: () => null);
+              if (gRes.statusCode == 200) {
+                final settings = jsonDecode(gRes.body);
+                final locations = settings['locations'] as List?;
+                if (locations != null) {
+                  if (deviceIp != null) {
+                    final dynamic ipMatchLoc = locations.firstWhere((loc) {
+                      final locIp = loc['ipAddress']?.toString().trim();
+                      return locIp != null &&
+                          locIp.isNotEmpty &&
+                          _isIpInRange(deviceIp, locIp);
+                    }, orElse: () => null);
 
-              if (branchConfig != null) {
-                branchIpRange = branchConfig['ipAddress']?.toString().trim();
-                printerIp = branchConfig['printerIp']?.toString().trim();
-                branchLat = (branchConfig['latitude'] as num?)?.toDouble();
-                branchLng = (branchConfig['longitude'] as num?)?.toDouble();
-                branchRadius = (branchConfig['radius'] as num?)?.toInt();
+                    if (ipMatchLoc != null) {
+                      final locBranch = ipMatchLoc['branch'];
+                      if (locBranch is Map) {
+                        branchId =
+                            (locBranch['id'] ??
+                                    locBranch['_id'] ??
+                                    locBranch[r'$oid'])
+                                ?.toString();
+                        branchName = locBranch['name']?.toString();
+                      } else {
+                        branchId = locBranch?.toString();
+                      }
+                    }
+                  }
 
-                final configBranch = branchConfig['branch'];
-                if ((branchName?.trim().isEmpty ?? true) &&
-                    configBranch is Map) {
-                  branchName = configBranch['name']?.toString();
-                }
-                if (branchName?.trim().isEmpty ?? true) {
-                  branchName =
-                      branchConfig['branchName']?.toString() ??
-                      branchConfig['name']?.toString();
-                }
+                  if (branchId == null && currentPos != null) {
+                    final dynamic geoMatchLoc = locations.firstWhere((loc) {
+                      final lat2 = loc['latitude'] != null
+                          ? (loc['latitude'] as num).toDouble()
+                          : null;
+                      final lng2 = loc['longitude'] != null
+                          ? (loc['longitude'] as num).toDouble()
+                          : null;
+                      final radius = loc['radius'] != null
+                          ? (loc['radius'] as num).toInt()
+                          : 100;
 
-                final configPrefs = await SharedPreferences.getInstance();
-                if (branchLat != null) {
-                  await configPrefs.setDouble('branchLat', branchLat);
+                      if (lat2 != null && lng2 != null) {
+                        final dist = Geolocator.distanceBetween(
+                          currentPos!.latitude,
+                          currentPos.longitude,
+                          lat2,
+                          lng2,
+                        );
+                        return dist <= radius;
+                      }
+                      return false;
+                    }, orElse: () => null);
+
+                    if (geoMatchLoc != null) {
+                      final locBranch = geoMatchLoc['branch'];
+                      if (locBranch is Map) {
+                        branchId =
+                            (locBranch['id'] ??
+                                    locBranch['_id'] ??
+                                    locBranch[r'$oid'])
+                                ?.toString();
+                        branchName = locBranch['name']?.toString();
+                      } else {
+                        branchId = locBranch?.toString();
+                      }
+                    }
+                  }
                 }
-                if (branchLng != null) {
-                  await configPrefs.setDouble('branchLng', branchLng);
-                }
-                if (branchRadius != null) {
-                  await configPrefs.setInt('branchRadius', branchRadius);
+              }
+            } catch (_) {}
+          }
+
+          if (branchId == null || branchId.isEmpty) {
+            _showError("Access Denied: Unable to identify branch");
+            setState(() => _isLoading = false);
+            return;
+          }
+
+          try {
+            final gRes = await http.get(
+              Uri.parse("${ApiConfig.baseUrl}/globals/branch-geo-settings"),
+              headers: ApiConfig.getHeaders(data['token']),
+            );
+            if (gRes.statusCode == 200) {
+              final settings = jsonDecode(gRes.body);
+              final locations = settings['locations'] as List?;
+              if (locations != null) {
+                final dynamic branchConfig = locations.firstWhere((loc) {
+                  final locBranch = loc['branch'];
+                  String? locBranchId;
+                  if (locBranch is Map) {
+                    locBranchId =
+                        locBranch['id']?.toString() ??
+                        locBranch['_id']?.toString() ??
+                        locBranch[r'$oid']?.toString();
+                  } else {
+                    locBranchId = locBranch?.toString();
+                  }
+                  return locBranchId == branchId;
+                }, orElse: () => null);
+
+                if (branchConfig != null) {
+                  branchIpRange = branchConfig['ipAddress']?.toString().trim();
+                  printerIp = branchConfig['printerIp']?.toString().trim();
+                  branchLat = (branchConfig['latitude'] as num?)?.toDouble();
+                  branchLng = (branchConfig['longitude'] as num?)?.toDouble();
+                  branchRadius = (branchConfig['radius'] as num?)?.toInt();
+
+                  final configBranch = branchConfig['branch'];
+                  if ((branchName?.trim().isEmpty ?? true) &&
+                      configBranch is Map) {
+                    branchName = configBranch['name']?.toString();
+                  }
+                  if (branchName?.trim().isEmpty ?? true) {
+                    branchName =
+                        branchConfig['branchName']?.toString() ??
+                        branchConfig['name']?.toString();
+                  }
+
+                  final configPrefs = await SharedPreferences.getInstance();
+                  if (branchLat != null) {
+                    await configPrefs.setDouble('branchLat', branchLat);
+                  }
+                  if (branchLng != null) {
+                    await configPrefs.setDouble('branchLng', branchLng);
+                  }
+                  if (branchRadius != null) {
+                    await configPrefs.setInt('branchRadius', branchRadius);
+                  }
                 }
               }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
 
-        final shouldFetchBranchDetails =
-            branchIpRange == null ||
-            branchIpRange.isEmpty ||
-            (branchName?.trim().isEmpty ?? true);
-        if (shouldFetchBranchDetails) {
-          final bRes = await http.get(
-            Uri.parse("${ApiConfig.baseUrl}/branches/$branchId"),
-            headers: ApiConfig.getHeaders(data['token']),
+          final shouldFetchBranchDetails =
+              branchIpRange == null ||
+              branchIpRange.isEmpty ||
+              (branchName?.trim().isEmpty ?? true);
+          if (shouldFetchBranchDetails) {
+            final bRes = await http.get(
+              Uri.parse("${ApiConfig.baseUrl}/branches/$branchId"),
+              headers: ApiConfig.getHeaders(data['token']),
+            );
+
+            if (bRes.statusCode == 200) {
+              final branch = jsonDecode(bRes.body);
+              if (branchIpRange == null || branchIpRange.isEmpty) {
+                branchIpRange = branch["ipAddress"]?.toString().trim();
+              }
+              if (printerIp == null || printerIp.isEmpty) {
+                printerIp = branch["printerIp"]?.toString().trim();
+              }
+              final fetchedBranchName = branch["name"]?.toString();
+              if (fetchedBranchName != null &&
+                  fetchedBranchName.trim().isNotEmpty) {
+                branchName = fetchedBranchName;
+              }
+            }
+          }
+
+          final locationPrefs = await SharedPreferences.getInstance();
+          branchLat ??= locationPrefs.getDouble('branchLat');
+          branchLng ??= locationPrefs.getDouble('branchLng');
+          branchRadius ??= locationPrefs.getInt('branchRadius');
+          final hasIpRule = branchIpRange != null && branchIpRange.isNotEmpty;
+          final hasGeoRule =
+              branchLat != null &&
+              branchLng != null &&
+              branchRadius != null &&
+              branchRadius > 0;
+
+          final bool ipMatched =
+              hasIpRule &&
+              deviceIp != null &&
+              _isIpInRange(deviceIp, branchIpRange);
+
+          double? distance;
+          bool geoMatched = false;
+          if (hasGeoRule && currentPos != null) {
+            distance = Geolocator.distanceBetween(
+              currentPos.latitude,
+              currentPos.longitude,
+              branchLat,
+              branchLng,
+            );
+            geoMatched = distance <= branchRadius;
+          }
+
+          if (!ipMatched && !geoMatched) {
+            String reason = "Access Denied: Branch verification failed";
+            if (hasGeoRule && distance != null) {
+              reason =
+                  "Access Denied: You are ${distance.toStringAsFixed(0)}m away from branch";
+            } else if (hasIpRule) {
+              reason = "Access Denied: Outside Branch IP Range";
+            } else if (!hasGeoRule && !hasIpRule) {
+              reason = "Access Denied: Branch IP/Location rules not configured";
+            }
+            _showError(reason);
+            setState(() => _isLoading = false);
+            return;
+          }
+
+          final String connectionType = ipMatched && geoMatched
+              ? (isWifi ? "WiFi (IP + GPS Match)" : "Mobile (IP + GPS Match)")
+              : ipMatched
+              ? (isWifi ? "WiFi (IP Match)" : "Mobile (IP Match)")
+              : (isWifi ? "WiFi (GPS Match)" : "Mobile (GPS Match)");
+
+          final String branchInfo = distance != null
+              ? (ipMatched
+                    ? "IP matched • Distance: ${distance.toStringAsFixed(1)}m"
+                    : "Distance: ${distance.toStringAsFixed(1)}m")
+              : "IP matched";
+
+          await _showIpAlert(
+            connectionType,
+            deviceIp ?? "Unknown",
+            branchInfo,
+            printerIp,
           );
-
-          if (bRes.statusCode == 200) {
-            final branch = jsonDecode(bRes.body);
-            if (branchIpRange == null || branchIpRange.isEmpty) {
-              branchIpRange = branch["ipAddress"]?.toString().trim();
-            }
-            if (printerIp == null || printerIp.isEmpty) {
-              printerIp = branch["printerIp"]?.toString().trim();
-            }
-            final fetchedBranchName = branch["name"]?.toString();
-            if (fetchedBranchName != null &&
-                fetchedBranchName.trim().isNotEmpty) {
-              branchName = fetchedBranchName;
-            }
+        } else {
+          // Bypassed GPS checks - resolve printerIp/branchName if needed
+          if (branchRef is Map) {
+            printerIp = branchRef["printerIp"]?.toString();
+          }
+          if (branchId == null || branchId.isEmpty) {
+            _showError("Access Denied: Unable to identify branch from PIN");
+            setState(() => _isLoading = false);
+            return;
+          }
+          if (printerIp == null || printerIp.isEmpty || (branchName?.trim().isEmpty ?? true)) {
+            try {
+              final bRes = await http.get(
+                Uri.parse("${ApiConfig.baseUrl}/branches/$branchId"),
+                headers: ApiConfig.getHeaders(data['token']),
+              );
+              if (bRes.statusCode == 200) {
+                final branch = jsonDecode(bRes.body);
+                printerIp ??= branch["printerIp"]?.toString().trim();
+                final fetchedBranchName = branch["name"]?.toString();
+                if (fetchedBranchName != null && fetchedBranchName.trim().isNotEmpty) {
+                  branchName = fetchedBranchName;
+                }
+              }
+            } catch (_) {}
           }
         }
-
-        final locationPrefs = await SharedPreferences.getInstance();
-        branchLat ??= locationPrefs.getDouble('branchLat');
-        branchLng ??= locationPrefs.getDouble('branchLng');
-        branchRadius ??= locationPrefs.getInt('branchRadius');
-        final hasIpRule = branchIpRange != null && branchIpRange.isNotEmpty;
-        final hasGeoRule =
-            branchLat != null &&
-            branchLng != null &&
-            branchRadius != null &&
-            branchRadius > 0;
-
-        final bool ipMatched =
-            hasIpRule &&
-            deviceIp != null &&
-            _isIpInRange(deviceIp, branchIpRange);
-
-        double? distance;
-        bool geoMatched = false;
-        if (hasGeoRule) {
-          distance = Geolocator.distanceBetween(
-            currentPos.latitude,
-            currentPos.longitude,
-            branchLat,
-            branchLng,
-          );
-          geoMatched = distance <= branchRadius;
-        }
-
-        if (!ipMatched && !geoMatched) {
-          String reason = "Access Denied: Branch verification failed";
-          if (hasGeoRule && distance != null) {
-            reason =
-                "Access Denied: You are ${distance.toStringAsFixed(0)}m away from branch";
-          } else if (hasIpRule) {
-            reason = "Access Denied: Outside Branch IP Range";
-          } else if (!hasGeoRule && !hasIpRule) {
-            reason = "Access Denied: Branch IP/Location rules not configured";
-          }
-          _showError(reason);
-          setState(() => _isLoading = false);
-          return;
-        }
-
-        final String connectionType = ipMatched && geoMatched
-            ? (isWifi ? "WiFi (IP + GPS Match)" : "Mobile (IP + GPS Match)")
-            : ipMatched
-            ? (isWifi ? "WiFi (IP Match)" : "Mobile (IP Match)")
-            : (isWifi ? "WiFi (GPS Match)" : "Mobile (GPS Match)");
-
-        final String branchInfo = distance != null
-            ? (ipMatched
-                  ? "IP matched • Distance: ${distance.toStringAsFixed(1)}m"
-                  : "Distance: ${distance.toStringAsFixed(1)}m")
-            : "IP matched";
-
-        await _showIpAlert(
-          connectionType,
-          deviceIp ?? "Unknown",
-          branchInfo,
-          printerIp,
-        );
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("token", data["token"]);
@@ -909,6 +953,22 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       validator: (v) => v!.isEmpty ? "Enter password" : null,
                     ),
+                    const SizedBox(height: 15),
+                    // BRANCH PIN FIELD (OPTIONAL - BYPASSES GPS)
+                    _premiumInput(
+                      controller: _pinController,
+                      hint: "Branch PIN (Optional to bypass GPS)",
+                      icon: Icons.pin,
+                      obscure: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty && v.length != 4) {
+                          return "PIN must be 4 digits";
+                        }
+                        return null;
+                      },
+                    ),
                     const SizedBox(height: 25),
                     // LOGIN BUTTON
                     SizedBox(
@@ -947,6 +1007,8 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+
+
   // INPUT WIDGET
   Widget _premiumInput({
     required TextEditingController controller,
@@ -955,6 +1017,8 @@ class _LoginPageState extends State<LoginPage> {
     bool obscure = false,
     Widget? suffix,
     FormFieldValidator<String>? validator,
+    TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -966,6 +1030,8 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         obscureText: obscure,
         validator: validator,
+        keyboardType: keyboardType,
+        maxLength: maxLength,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: Colors.white),
@@ -973,6 +1039,7 @@ class _LoginPageState extends State<LoginPage> {
           hintText: hint,
           hintStyle: const TextStyle(color: Colors.white60),
           border: InputBorder.none,
+          counterText: "", // Hides the counter string
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 18,
             vertical: 15,
