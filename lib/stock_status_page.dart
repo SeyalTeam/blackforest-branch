@@ -131,15 +131,15 @@ class _StockStatusPageState extends State<StockStatusPage> {
 
       if (_userRole == 'company') {
         _companyId =
-            user['company'] is Map ? user['company']['id'] : user['company'];
+            user['company'] is Map ? (user['company']['id'] ?? user['company']['_id'])?.toString() : user['company']?.toString();
       } else if (_userRole == 'branch') {
         final branch = user['branch'];
         if (branch != null) {
-          _branchId = branch is Map ? branch['id'] : branch?.toString();
+          _branchId = branch is Map ? (branch['id'] ?? branch['_id'])?.toString() : branch?.toString();
           final branchCompany = branch is Map ? branch['company'] : null;
           if (branchCompany != null) {
             _companyId =
-                branchCompany is Map ? branchCompany['id'] : branchCompany;
+                branchCompany is Map ? (branchCompany['id'] ?? branchCompany['_id'])?.toString() : branchCompany?.toString();
           }
         }
       }
@@ -232,10 +232,10 @@ class _StockStatusPageState extends State<StockStatusPage> {
                 : raw.trim() == deviceIp;
         if (!matches) continue;
 
-        _branchId ??= branch['id']?.toString();
+        _branchId ??= (branch['id'] ?? branch['_id'])?.toString();
         final company = branch['company'];
         _companyId ??=
-            company is Map ? company['id']?.toString() : company?.toString();
+            company is Map ? (company['id'] ?? company['_id'])?.toString() : company?.toString();
         break;
       }
     } catch (_) {}
@@ -323,7 +323,14 @@ class _StockStatusPageState extends State<StockStatusPage> {
 
   String _extractBranchId(dynamic branch) {
     if (branch is Map) {
-      return (branch['id'] ?? branch[r'$oid'] ?? '').toString().trim();
+      if (branch.containsKey('branch') && branch['branch'] != null) {
+        final b = branch['branch'];
+        if (b is Map) {
+          return (b['id'] ?? b['_id'] ?? b[r'$oid'] ?? '').toString().trim();
+        }
+        return b.toString().trim();
+      }
+      return (branch['id'] ?? branch['_id'] ?? branch[r'$oid'] ?? '').toString().trim();
     }
     return branch?.toString().trim() ?? '';
   }

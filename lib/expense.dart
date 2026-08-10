@@ -263,44 +263,135 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
     if (mediaId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload failed, saved locally')),
+        SnackBar(content: Text(_lastUploadError ?? 'Upload failed, saved locally')),
       );
     }
   }
 
-  Future<String?> _uploadPhoto(File file, String altText) async {
+  Future<File> _prepareImageForUpload(File originalFile, String prefix) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) return null;
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/media?prefix=expense'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length < 1500 * 1024) return originalFile;
 
-      request.fields['alt'] = altText;
-      request.files.add(http.MultipartFile(
-        'file',
-        file.readAsBytes().asStream(),
-        file.lengthSync(),
-        filename: file.path.split('/').last,
-        contentType: MediaType('image', 'jpeg'),
-      ));
-      final response = await request.send();
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final body = await response.stream.bytesToString();
-        final data = jsonDecode(body);
-        return data['doc']['id'];
-      } else {
-        final body = await response.stream.bytesToString();
-        print('Upload error: ${response.statusCode} - $body');
+      final bytes = await originalFile.readAsBytes();
+      final image = img_lib.decodeImage(bytes);
+      if (image == null) return originalFile;
+
+      img_lib.Image resized = image;
+      if (image.width > 1280 || image.height > 1280) {
+        if (image.width > image.height) {
+          resized = img_lib.copyResize(image, width: 1280);
+        } else {
+          resized = img_lib.copyResize(image, height: 1280);
+        }
+      }
+      final compressedBytes = img_lib.encodeJpg(resized, quality: 70);
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/opt_${prefix}_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressedBytes);
+      return tempFile;
+    } catch (_) {
+      return originalFile;
+    }
+  }
+
+  String? _lastUploadError;
+
+  Future<String?> _uploadPhoto(File file, String altText) async {
+    _lastUploadError = null;
+    try {
+      final uploadFile = await _prepareImageForUpload(file, 'expense');
+      if (!await uploadFile.exists()) {
+        _lastUploadError = 'Upload failed: File does not exist';
         return null;
       }
+      if (await uploadFile.length() == 0) {
+        _lastUploadError = 'Upload failed: File is empty (0 bytes)';
+        return null;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) {
+        _lastUploadError = 'Upload failed: No login token found';
+        return null;
+      }
+
+      final filename = 'expense_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final urlsToTry = [
+        '${ApiConfig.baseUrl}/media/?prefix=expense',
+        '${ApiConfig.baseUrl}/media?prefix=expense',
+      ];
+
+      for (final urlStr in urlsToTry) {
+        final request = http.MultipartRequest('POST', Uri.parse(urlStr));
+        request.followRedirects = false;
+        request.headers['Authorization'] = 'Bearer $token';
+        request.fields['_payload'] = jsonEncode({
+          'alt': altText,
+          'prefix': 'expense',
+        });
+        request.fields['alt'] = altText;
+        request.fields['prefix'] = 'expense';
+
+        final multipartFile = await http.MultipartFile.fromPath(
+          'file',
+          uploadFile.path,
+          filename: filename,
+          contentType: MediaType('image', 'jpeg'),
+        );
+        request.files.add(multipartFile);
+
+        final response = await request.send();
+        final body = await response.stream.bytesToString();
+
+        debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          final data = jsonDecode(body);
+          final doc = data['doc'] ?? data;
+          return doc['id']?.toString();
+        }
+
+        if (response.statusCode >= 300 && response.statusCode < 400) {
+          final location = response.headers['location'];
+          if (location != null) {
+            final resolvedUri = Uri.parse(urlStr).resolve(location);
+            final redirRequest = http.MultipartRequest('POST', resolvedUri);
+            redirRequest.headers['Authorization'] = 'Bearer $token';
+            redirRequest.fields['_payload'] = jsonEncode({
+              'alt': altText,
+              'prefix': 'expense',
+            });
+            redirRequest.fields['alt'] = altText;
+            redirRequest.fields['prefix'] = 'expense';
+            redirRequest.files.add(await http.MultipartFile.fromPath(
+              'file',
+              uploadFile.path,
+              filename: filename,
+              contentType: MediaType('image', 'jpeg'),
+            ));
+            final redirResponse = await redirRequest.send();
+            final redirBody = await redirResponse.stream.bytesToString();
+            debugPrint('Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
+            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+              final data = jsonDecode(redirBody);
+              final doc = data['doc'] ?? data;
+              return doc['id']?.toString();
+            }
+            _lastUploadError = 'Upload failed (${redirResponse.statusCode}): $redirBody';
+          }
+        } else {
+          _lastUploadError = 'Upload failed (${response.statusCode}): $body';
+        }
+      }
     } catch (e) {
-      print('Upload exception: $e');
-      return null;
+      debugPrint('Upload exception: $e');
+      _lastUploadError = 'Upload exception: $e';
     }
+    return null;
   }
 
   Future<String?> _fetchMediaUrl(String mediaId) async {

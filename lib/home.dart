@@ -10,6 +10,10 @@ import 'stockorder_report.dart';
 import 'table_creation_page.dart';
 import 'stock_status_page.dart';
 import 'table_tracking_page.dart';
+import 'kitchen_chef_page.dart';
+import 'favorite_rules_page.dart';
+import 'dealer_billing.dart';
+import 'cake_order_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -25,8 +29,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Updated to 12 cards
-    for (int i = 0; i < 12; i++) {
+    // Updated to 16 cards
+    for (int i = 0; i < 16; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -39,7 +43,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _controllers.values.forEach((c) => c.dispose());
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -101,10 +107,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     Navigator.push(context, _createRoute(const TableCreationPage()));
   }
 
+  void _openChefManagement() {
+    Navigator.push(
+      context,
+      _createRoute(const KitchenChefPage(showNamesOnly: true)),
+    );
+  }
+
+  void _openFavoriteRules() {
+    Navigator.push(context, _createRoute(const FavoriteRulesPage()));
+  }
+
+  void _openDealerBilling() {
+    Navigator.push(context, _createRoute(const DealerBillingPage()));
+  }
+
+  void _openCake() {
+    Navigator.push(context, _createRoute(const CakeOrderPage()));
+  }
+
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder:
-          (_, animation, __) => FadeTransition(opacity: animation, child: page),
+      pageBuilder: (_, animation, __) =>
+          FadeTransition(opacity: animation, child: page),
       transitionDuration: const Duration(milliseconds: 300),
     );
   }
@@ -121,75 +146,74 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   ) {
     return AnimatedBuilder(
       animation: _animations[index]!,
-      builder:
-          (context, _) => Transform.scale(
-            scale: _animations[index]!.value,
-            child: GestureDetector(
-              onTapDown: (_) => _controllers[index]!.forward(),
-              onTapUp: (_) {
-                _controllers[index]!.reverse();
-                onTap();
-              },
-              onTapCancel: () => _controllers[index]!.reverse(),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: LinearGradient(
-                    colors: [start, end],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: start.withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compactCard =
-                        constraints.maxWidth < 110 || constraints.maxHeight < 110;
-                    final iconSize = compactCard ? 30.0 : 48.0;
-                    final labelSize = compactCard ? 12.0 : 16.0;
-                    final gap = compactCard ? 4.0 : 8.0;
-                    final verticalPadding = compactCard ? 8.0 : 12.0;
-
-                    return Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: verticalPadding,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (icon != null) ...[
-                            Icon(icon, size: iconSize, color: Colors.white),
-                            SizedBox(height: gap),
-                          ],
-                          Flexible(
-                            child: Text(
-                              label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: labelSize,
-                                fontWeight: FontWeight.bold,
-                                height: 1.15,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+      builder: (context, _) => Transform.scale(
+        scale: _animations[index]!.value,
+        child: GestureDetector(
+          onTapDown: (_) => _controllers[index]!.forward(),
+          onTapUp: (_) {
+            _controllers[index]!.reverse();
+            onTap();
+          },
+          onTapCancel: () => _controllers[index]!.reverse(),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [start, end],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: start.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compactCard =
+                    constraints.maxWidth < 110 || constraints.maxHeight < 110;
+                final iconSize = compactCard ? 30.0 : 48.0;
+                final labelSize = compactCard ? 12.0 : 16.0;
+                final gap = compactCard ? 4.0 : 8.0;
+                final verticalPadding = compactCard ? 8.0 : 12.0;
+
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: verticalPadding,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: iconSize, color: Colors.white),
+                        SizedBox(height: gap),
+                      ],
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: labelSize,
+                            fontWeight: FontWeight.bold,
+                            height: 1.15,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
+        ),
+      ),
     );
   }
 
@@ -325,6 +349,42 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       const Color(0xFF90A4AE),
                       'Table Creation',
                       _openTableCreation,
+                    ),
+
+                    _buildCard(
+                      12,
+                      Icons.soup_kitchen,
+                      const Color(0xFF795548),
+                      const Color(0xFFA1887F),
+                      'Chef',
+                      _openChefManagement,
+                    ),
+
+                    _buildCard(
+                      13,
+                      Icons.qr_code_2,
+                      const Color(0xFFFFB75E),
+                      const Color(0xFFED8F03),
+                      'QRC',
+                      _openFavoriteRules,
+                    ),
+
+                    _buildCard(
+                      14,
+                      Icons.business,
+                      const Color(0xFF00796B),
+                      const Color(0xFF00BFA5),
+                      'Dealer Billing',
+                      _openDealerBilling,
+                    ),
+
+                    _buildCard(
+                      15,
+                      Icons.cake,
+                      const Color(0xFFD81B60),
+                      const Color(0xFFF48FB1),
+                      'Cake',
+                      _openCake,
                     ),
                   ],
                 );

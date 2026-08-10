@@ -186,13 +186,13 @@ class _CartPageState extends State<CartPage> {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final user = data['user'] ?? data;
 
-        if (user['role'] == 'branch' && user['branch'] != null) {
+        if (user['branch'] != null) {
           _branchId = (user['branch'] is Map)
               ? user['branch']['id']
               : user['branch'];
           _branchName = (user['branch'] is Map) ? user['branch']['name'] : null;
           await _fetchBranchDetails(token, _branchId!);
-        } else if (user['role'] == 'waiter') {
+        } else if (user['role'] == 'waiter' || user['role'] == 'kitchen' || user['role'] == 'chef' || user['role'] == 'manager' || user['role'] == 'cashier') {
           await _fetchWaiterBranch(token);
         }
 
@@ -1284,15 +1284,6 @@ class _CartPageState extends State<CartPage> {
                                                 fontSize: 12,
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              "|  In Stock: $inStock",
-                                              style: TextStyle(
-                                                color: _accent,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
                                           ],
                                         ),
                                       ],
@@ -1301,18 +1292,76 @@ class _CartPageState extends State<CartPage> {
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      SizedBox(
-                                        width: 80,
-                                        height: 40,
-                                        child: TextField(
-                                          controller: ctrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                decimal: true,
+                                      Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 70,
+                                            height: 40,
+                                            child: TextField(
+                                              controller: sp.stockCtrl[pid],
+                                              keyboardType:
+                                                  const TextInputType.numberWithOptions(
+                                                    decimal: true,
+                                                  ),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
                                               ),
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                              decoration: InputDecoration(
+                                                labelText: 'In Stock',
+                                                labelStyle: const TextStyle(
+                                                  color: Colors.white54,
+                                                  fontSize: 10,
+                                                ),
+                                                filled: true,
+                                                fillColor: Colors.black12,
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  borderSide: const BorderSide(
+                                                    color: Colors.white24,
+                                                  ),
+                                                ),
+                                                enabledBorder: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  borderSide: const BorderSide(
+                                                    color: Colors.white24,
+                                                  ),
+                                                ),
+                                                focusedBorder: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  borderSide: BorderSide(
+                                                    color: _accent,
+                                                  ),
+                                                ),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                    ),
+                                              ),
+                                              onChanged: (val) {
+                                                final newQty =
+                                                    double.tryParse(val) ?? 0.0;
+                                                sp.updateInStock(pid, newQty);
+                                              },
+                                            ),
                                           ),
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 70,
+                                            height: 40,
+                                            child: TextField(
+                                              controller: ctrl,
+                                              keyboardType:
+                                                  const TextInputType.numberWithOptions(
+                                                    decimal: true,
+                                                  ),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                              ),
                                           decoration: InputDecoration(
                                             labelText: 'Req',
                                             labelStyle: const TextStyle(
@@ -1353,7 +1402,9 @@ class _CartPageState extends State<CartPage> {
                                           },
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
                                       Text(
                                         "Total: ₹ ${lineTotal.toStringAsFixed(2)}",
                                         style: const TextStyle(

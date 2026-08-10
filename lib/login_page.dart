@@ -437,7 +437,7 @@ class _LoginPageState extends State<LoginPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final user = data["user"];
-        final role = user["role"];
+        final String role = (user["role"]?.toString() ?? "").trim().toLowerCase();
 
         if (_isForceLoggedOutUser(user)) {
           _showError("Your session was ended by admin. Please try again.");
@@ -453,7 +453,15 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
 
-        const allowedRoles = ["branch", "kitchen", "cashier", "waiter"];
+        const allowedRoles = [
+          "branch",
+          "kitchen",
+          "cashier",
+          "waiter",
+          "chef",
+          "manager",
+          "supervisor"
+        ];
         if (!allowedRoles.contains(role)) {
           _showError("Access denied: only branch-related users allowed.");
           setState(() => _isLoading = false);
@@ -473,7 +481,7 @@ class _LoginPageState extends State<LoginPage> {
           branchId = branchRef?.toString();
         }
 
-        if (branchId == null && role == "waiter") {
+        if ((branchId == null || branchId.isEmpty) && allowedRoles.contains(role)) {
           try {
             final gRes = await http.get(
               Uri.parse("${ApiConfig.baseUrl}/globals/branch-geo-settings"),
@@ -718,8 +726,12 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.setString("lastLoginIp", deviceIp);
         }
         if (printerIp != null) await prefs.setString("printerIp", printerIp);
-        if (user['id'] != null) {
-          await prefs.setString("user_id", user['id'].toString());
+        final userId =
+            user['id']?.toString() ??
+            user['_id']?.toString() ??
+            user[r'$oid']?.toString();
+        if (userId != null && userId.isNotEmpty) {
+          await prefs.setString("user_id", userId);
         }
 
         final name = user['name'] ?? user['username'];

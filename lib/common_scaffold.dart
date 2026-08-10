@@ -30,6 +30,8 @@ enum PageType {
   expense,
   instock, // NEW
   table, // NEW
+  dealerBilling, // NEW
+  cake, // NEW
 }
 
 enum _StockAlertDialogAction { acknowledge, updateOutOfStock }
@@ -59,7 +61,9 @@ class CommonScaffold extends StatefulWidget {
 class _CommonScaffoldState extends State<CommonScaffold> {
   Timer? _inactivityTimer;
   Timer? _stockAlertTimer;
-  String _username = 'Menu';
+  String _username = 'User';
+  String _role = '';
+  String _branchName = '';
   String? _stockAlertToken;
   String? _stockAlertBranchId;
   bool _isCheckingStockAlerts = false;
@@ -83,9 +87,20 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
   Future<void> _loadUsername() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _username = prefs.getString('username') ?? 'Menu';
-    });
+    final name = prefs.getString('user_name') ??
+        prefs.getString('employee_name') ??
+        prefs.getString('username') ??
+        prefs.getString('email')?.split('@').first ??
+        'User';
+    final role = prefs.getString('role') ?? '';
+    final branchName = prefs.getString('branchName') ?? '';
+    if (mounted) {
+      setState(() {
+        _username = (name.isEmpty || name == 'Menu') ? 'User' : name;
+        _role = role;
+        _branchName = branchName;
+      });
+    }
   }
 
   Future<void> _initStockAlerts() async {
@@ -636,24 +651,86 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              DrawerHeader(
-                decoration: const BoxDecoration(color: Colors.black),
-                child: Text(
-                  _username,
-                  style: const TextStyle(color: Colors.white, fontSize: 24),
+              Container(
+                padding: const EdgeInsets.fromLTRB(18, 48, 18, 20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1C0908), Color(0xFF4A1A12)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: const Color(0xFFF8EFE6),
+                      child: Text(
+                        _username.isNotEmpty ? _username[0].toUpperCase() : 'U',
+                        style: const TextStyle(
+                          color: Color(0xFF2E170F),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _username,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          if (_role.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                _role.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                          if (_branchName.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Branch: $_branchName',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              ListTile(
-                leading: const Icon(Icons.receipt, color: Colors.black),
-                title: const Text("Billing"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CategoriesPage()),
-                  );
-                },
-              ),
+
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.black),
                 title: const Text('Logout'),

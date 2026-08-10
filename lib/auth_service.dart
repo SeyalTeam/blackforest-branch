@@ -5,12 +5,16 @@ import 'package:branch/stock_provider.dart';
 import 'package:branch/cart_provider.dart';
 import 'package:branch/return_provider.dart';
 
+import 'package:branch/auth_session_manager.dart';
+import 'package:branch/session_prefs.dart';
+
 class AuthService {
   // Global navigator key to allow navigation without context
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   // Centralized logout function
   static Future<void> logout() async {
+    AuthSessionManager.instance.stopHeartbeat();
     final context = navigatorKey.currentContext;
     
     // Clear Providers if context is available
@@ -27,9 +31,10 @@ class AuthService {
 
     // Clear SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await clearSessionPreservingFavorites(prefs);
 
     // Navigate to Login Page
     navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
   }
 }
+

@@ -4,10 +4,15 @@ import 'package:branch/cart_provider.dart';
 import 'package:branch/return_provider.dart';
 import 'package:branch/instock_provider.dart';
 import 'package:branch/stock_provider.dart';
-import 'package:branch/auth_service.dart'; // ADDED
+import 'package:branch/auth_service.dart';
+import 'package:branch/auth_session_manager.dart';
 import 'package:branch/login_page.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  AuthSessionManager.instance.attachNavigatorKey(AuthService.navigatorKey);
+  AuthSessionManager.instance.startHeartbeat();
+
   runApp(
     MultiProvider(
       providers: [

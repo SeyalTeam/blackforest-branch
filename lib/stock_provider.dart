@@ -196,15 +196,13 @@ class StockProvider extends ChangeNotifier {
             : user["company"];
       }
 
-      if (_userRole == "branch") {
+      if (user["branch"] != null) {
         _branchId = user["branch"] is Map
             ? user["branch"]["id"]
             : user["branch"];
-        final comp = user["branch"]["company"];
+        final comp = user["branch"] is Map ? user["branch"]["company"] : null;
         _companyId = comp is Map ? comp["id"] : comp;
-      }
-
-      if (_userRole == "waiter") {
+      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
         await _detectWaiterBranch(token);
       }
 
@@ -310,9 +308,7 @@ class StockProvider extends ChangeNotifier {
     if (_userRole != "superadmin") {
       if (_companyId != null) {
         query += "&where[company][equals]=$_companyId";
-      }
-
-      if (_userRole == "waiter") {
+      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
         final ip = await _deviceIp();
         final matches = await _matchingCompanies(token, ip);
 

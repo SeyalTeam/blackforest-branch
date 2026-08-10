@@ -2866,17 +2866,29 @@ class _BillSheetPageState extends State<BillSheetPage> {
                 pay != null &&
                 !isSettling;
             final isAlreadySettled = billStatus == 'settled';
+            final screenHeight = MediaQuery.of(statefulContext).size.height;
+            final maxSheetHeight = screenHeight * 0.85;
+
             return SafeArea(
               top: false,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      color: Colors.grey.shade200,
-                      padding: EdgeInsets.all(8),
-                      child: _buildReceiptPreviewPanel(
+              child: Center(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: 450,
+                    maxHeight: maxSheetHeight,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: Container(
+                              margin: EdgeInsets.symmetric(vertical: 12),
+                              color: Colors.grey.shade200,
+                              padding: EdgeInsets.all(8),
+                              child: _buildReceiptPreviewPanel(
                         bill,
                         selectedPaymentMethod: pay,
                         showCustomerHistoryButton: showCustomerHistoryButton,
@@ -2932,8 +2944,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
                             reviewedLookup: reviewedLookup,
                           );
                         },
-                      ),
-                    ),
+                              ),
+                            ),
+                          ),
+                        ),
                     SizedBox(height: 12),
                     Row(
                       children: [
@@ -3061,7 +3075,9 @@ class _BillSheetPageState extends State<BillSheetPage> {
                         ],
                       ),
                     ],
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             );

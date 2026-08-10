@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:image/image.dart' as img_lib;
+import 'package:path_provider/path_provider.dart';
 import 'package:branch/api_config.dart';
 
 class ReturnItem {
@@ -151,39 +153,111 @@ class ReturnProvider extends ChangeNotifier {
     return null;
   }
 
+  Future<File> _prepareImageForUpload(File originalFile, String prefix) async {
+    try {
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length < 1500 * 1024) return originalFile;
+
+      final bytes = await originalFile.readAsBytes();
+      final image = img_lib.decodeImage(bytes);
+      if (image == null) return originalFile;
+
+      img_lib.Image resized = image;
+      if (image.width > 1280 || image.height > 1280) {
+        if (image.width > image.height) {
+          resized = img_lib.copyResize(image, width: 1280);
+        } else {
+          resized = img_lib.copyResize(image, height: 1280);
+        }
+      }
+      final compressedBytes = img_lib.encodeJpg(resized, quality: 70);
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/opt_${prefix}_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressedBytes);
+      return tempFile;
+    } catch (_) {
+      return originalFile;
+    }
+  }
+
   Future<String?> _uploadPhoto(File file, String altText) async {
     try {
+      final uploadFile = await _prepareImageForUpload(file, 'returnorder');
+      if (!await uploadFile.exists()) return null;
+      if (await uploadFile.length() == 0) return null;
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
       if (token == null) return null;
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
 
-      request.fields['alt'] = altText;
-      request.files.add(http.MultipartFile(
-        'file',
-        file.readAsBytes().asStream(),
-        file.lengthSync(),
-        filename: file.path.split('/').last,
-        contentType: MediaType('image', 'jpeg'),
-      ));
-      final response = await request.send();
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final urlsToTry = [
+        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
+        '${ApiConfig.baseUrl}/media?prefix=returnorder',
+      ];
+
+      for (final urlStr in urlsToTry) {
+        final request = http.MultipartRequest('POST', Uri.parse(urlStr));
+        request.followRedirects = false;
+        request.headers['Authorization'] = 'Bearer $token';
+        request.fields['_payload'] = jsonEncode({
+          'alt': altText,
+          'prefix': 'returnorder',
+        });
+        request.fields['alt'] = altText;
+        request.fields['prefix'] = 'returnorder';
+
+        final multipartFile = await http.MultipartFile.fromPath(
+          'file',
+          uploadFile.path,
+          filename: filename,
+          contentType: MediaType('image', 'jpeg'),
+        );
+        request.files.add(multipartFile);
+
+        final response = await request.send();
         final body = await response.stream.bytesToString();
-        final data = jsonDecode(body);
-        return data['doc']['id'];
-      } else {
-        final body = await response.stream.bytesToString();
-        print('Upload error: ${response.statusCode} - $body');
-        return null;
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          final data = jsonDecode(body);
+          final doc = data['doc'] ?? data;
+          return doc['id']?.toString();
+        }
+
+        if (response.statusCode >= 300 && response.statusCode < 400) {
+          final location = response.headers['location'];
+          if (location != null) {
+            final resolvedUri = Uri.parse(urlStr).resolve(location);
+            final redirRequest = http.MultipartRequest('POST', resolvedUri);
+            redirRequest.headers['Authorization'] = 'Bearer $token';
+            redirRequest.fields['_payload'] = jsonEncode({
+              'alt': altText,
+              'prefix': 'returnorder',
+            });
+            redirRequest.fields['alt'] = altText;
+            redirRequest.fields['prefix'] = 'returnorder';
+            redirRequest.files.add(await http.MultipartFile.fromPath(
+              'file',
+              uploadFile.path,
+              filename: filename,
+              contentType: MediaType('image', 'jpeg'),
+            ));
+            final redirResponse = await redirRequest.send();
+            final redirBody = await redirResponse.stream.bytesToString();
+            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+              final data = jsonDecode(redirBody);
+              final doc = data['doc'] ?? data;
+              return doc['id']?.toString();
+            }
+          }
+        }
       }
     } catch (e) {
-      print('Upload exception: $e');
-      return null;
+      debugPrint('Upload exception: $e');
     }
+    return null;
   }
 
   Future<void> loadPendingPhotos([List<dynamic>? products]) async {

@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:branch/common_scaffold.dart';
-import 'package:branch/cart_page.dart';
 import 'package:provider/provider.dart';
 import 'package:branch/return_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -15,6 +14,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:branch/api_config.dart';
+import 'package:branch/camera_page.dart';
+
 
 class ReturnOrderPage extends StatefulWidget {
   final String categoryId;
@@ -82,12 +83,12 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         setState(() {
           _userRole = user['role'];
         });
-        if (user['role'] == 'branch' && user['branch'] != null) {
+        if (user['branch'] != null) {
           setState(() {
             _branchId = (user['branch'] is Map) ? user['branch']['id'] : user['branch'];
           });
           Provider.of<ReturnProvider>(context, listen: false).setBranchId(_branchId);
-        } else if (user['role'] == 'waiter') {
+        } else if (user['role'] == 'waiter' || user['role'] == 'kitchen' || user['role'] == 'chef' || user['role'] == 'manager' || user['role'] == 'cashier') {
           await _fetchWaiterBranch(token);
         }
       }
@@ -285,33 +286,26 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       );
       return;
     }
-    final XFile? photo = await showDialog<XFile>(
-      context: context,
-      builder: (context) => CameraDialog(cameras: cameras),
+    final XFile? photo = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CameraPage(cameras: cameras),
+      ),
     );
     if (photo == null) return;
     final bytes = await photo.readAsBytes();
-    final image = img_lib.decodeImage(bytes)!;
+    final image = img_lib.decodeImage(bytes);
+    if (image == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to process captured image')),
+      );
+      return;
+    }
     final compressed = img_lib.encodeJpg(image, quality: 70);
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final tempFile = File('${tempDir.path}/return_${productId}_$timestamp.jpg');
     await tempFile.writeAsBytes(compressed);
-    bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Photo Preview'),
-        content: Image.file(tempFile),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Retake')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      await tempFile.delete();
-      return _capturePhoto(productId);
-    }
     final product = _products.firstWhere((p) => p['id'] == productId, orElse: () => {'name': 'Unknown'});
     final altText = product['name'] ?? 'Return proof';
     final mediaId = await _uploadPhoto(tempFile, altText);
@@ -321,7 +315,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       provider.setPhoto(productId, mediaId, tempFile, url);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload failed, saved locally')),
+        SnackBar(content: Text(_lastUploadError ?? 'Upload failed, saved locally')),
       );
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_photo_$productId', tempFile.path);
@@ -340,48 +334,138 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['url'];
+        return data['url'] ?? '${ApiConfig.domain}${data['filename']}';
       }
     } catch (e) {
-      print('Fetch URL error: $e');
+      debugPrint('Error fetching media url: $e');
     }
     return null;
   }
 
-  Future<String?> _uploadPhoto(File file, String altText) async {
-    // Same as before
+  Future<File> _prepareImageForUpload(File originalFile, String prefix) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) return null;
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/media?prefix=returnorder'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length < 1500 * 1024) return originalFile;
 
-      request.fields['alt'] = altText;
-      request.files.add(http.MultipartFile(
-        'file',
-        file.readAsBytes().asStream(),
-        file.lengthSync(),
-        filename: file.path.split('/').last,
-        contentType: MediaType('image', 'jpeg'),
-      ));
-      final response = await request.send();
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final body = await response.stream.bytesToString();
-        final data = jsonDecode(body);
-        return data['doc']['id'];
-      } else {
-        final body = await response.stream.bytesToString();
-        print('Upload error: ${response.statusCode} - $body');
+      final bytes = await originalFile.readAsBytes();
+      final image = img_lib.decodeImage(bytes);
+      if (image == null) return originalFile;
+
+      img_lib.Image resized = image;
+      if (image.width > 1280 || image.height > 1280) {
+        if (image.width > image.height) {
+          resized = img_lib.copyResize(image, width: 1280);
+        } else {
+          resized = img_lib.copyResize(image, height: 1280);
+        }
+      }
+      final compressedBytes = img_lib.encodeJpg(resized, quality: 70);
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/opt_${prefix}_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressedBytes);
+      return tempFile;
+    } catch (_) {
+      return originalFile;
+    }
+  }
+
+  String? _lastUploadError;
+
+  Future<String?> _uploadPhoto(File file, String altText) async {
+    _lastUploadError = null;
+    try {
+      final uploadFile = await _prepareImageForUpload(file, 'returnorder');
+      if (!await uploadFile.exists()) {
+        _lastUploadError = 'Upload failed: File does not exist';
         return null;
       }
+      if (await uploadFile.length() == 0) {
+        _lastUploadError = 'Upload failed: File is empty (0 bytes)';
+        return null;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) {
+        _lastUploadError = 'Upload failed: No login token found';
+        return null;
+      }
+
+      final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final urlsToTry = [
+        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
+        '${ApiConfig.baseUrl}/media?prefix=returnorder',
+      ];
+
+      for (final urlStr in urlsToTry) {
+        final request = http.MultipartRequest('POST', Uri.parse(urlStr));
+        request.followRedirects = false;
+        request.headers['Authorization'] = 'Bearer $token';
+        request.fields['_payload'] = jsonEncode({
+          'alt': altText,
+          'prefix': 'returnorder',
+        });
+        request.fields['alt'] = altText;
+        request.fields['prefix'] = 'returnorder';
+
+        final multipartFile = await http.MultipartFile.fromPath(
+          'file',
+          uploadFile.path,
+          filename: filename,
+          contentType: MediaType('image', 'jpeg'),
+        );
+        request.files.add(multipartFile);
+
+        final response = await request.send();
+        final body = await response.stream.bytesToString();
+
+        debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          final data = jsonDecode(body);
+          final doc = data['doc'] ?? data;
+          return doc['id']?.toString();
+        }
+
+        if (response.statusCode >= 300 && response.statusCode < 400) {
+          final location = response.headers['location'];
+          if (location != null) {
+            final resolvedUri = Uri.parse(urlStr).resolve(location);
+            final redirRequest = http.MultipartRequest('POST', resolvedUri);
+            redirRequest.headers['Authorization'] = 'Bearer $token';
+            redirRequest.fields['_payload'] = jsonEncode({
+              'alt': altText,
+              'prefix': 'returnorder',
+            });
+            redirRequest.fields['alt'] = altText;
+            redirRequest.fields['prefix'] = 'returnorder';
+            redirRequest.files.add(await http.MultipartFile.fromPath(
+              'file',
+              uploadFile.path,
+              filename: filename,
+              contentType: MediaType('image', 'jpeg'),
+            ));
+            final redirResponse = await redirRequest.send();
+            final redirBody = await redirResponse.stream.bytesToString();
+            debugPrint('Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
+            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+              final data = jsonDecode(redirBody);
+              final doc = data['doc'] ?? data;
+              return doc['id']?.toString();
+            }
+            _lastUploadError = 'Upload failed (${redirResponse.statusCode}): $redirBody';
+          }
+        } else {
+          _lastUploadError = 'Upload failed (${response.statusCode}): $body';
+        }
+      }
     } catch (e) {
-      print('Upload exception: $e');
-      return null;
+      debugPrint('Upload exception: $e');
+      _lastUploadError = 'Upload exception: $e';
     }
+    return null;
   }
 
   Future<void> _handleCameraTap(String productId) async {
@@ -652,64 +736,4 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
   }
 }
 
-class CameraDialog extends StatefulWidget {
-  final List<CameraDescription> cameras;
-
-  const CameraDialog({super.key, required this.cameras});
-
-  @override
-  _CameraDialogState createState() => _CameraDialogState();
-}
-
-class _CameraDialogState extends State<CameraDialog> {
-  late CameraController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
-    _controller.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-    }).catchError((e) {
-      print('Camera init error: $e');
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return AlertDialog(
-      content: AspectRatio(
-        aspectRatio: _controller.value.aspectRatio,
-        child: CameraPreview(_controller),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () async {
-            try {
-              final XFile file = await _controller.takePicture();
-              Navigator.pop(context, file);
-            } catch (e) {
-              print('Capture error: $e');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Failed to capture photo')),
-              );
-              Navigator.pop(context);
-            }
-          },
-          child: const Text('Capture'),
-        ),
-      ],
-    );
-  }
-}
+// CameraDialog class removed in favor of shared CameraPage in camera_page.dart

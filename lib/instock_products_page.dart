@@ -10,6 +10,8 @@ import 'package:image/image.dart' as img_lib;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:branch/camera_page.dart';
+
 
 class InstockProductsPage extends StatefulWidget {
   const InstockProductsPage({super.key});
@@ -18,77 +20,8 @@ class InstockProductsPage extends StatefulWidget {
   State<InstockProductsPage> createState() => _InstockProductsPageState();
 }
 
-class _ProductCameraDialog extends StatefulWidget {
-  final List<CameraDescription> cameras;
+// _ProductCameraDialog class removed in favor of shared CameraPage in camera_page.dart
 
-  const _ProductCameraDialog({required this.cameras});
-
-  @override
-  State<_ProductCameraDialog> createState() => _ProductCameraDialogState();
-}
-
-class _ProductCameraDialogState extends State<_ProductCameraDialog> {
-  late CameraController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
-    _controller
-        .initialize()
-        .then((_) {
-          if (!mounted) return;
-          setState(() {});
-        })
-        .catchError((e) {
-          debugPrint('Camera init error: $e');
-        });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return AlertDialog(
-      content: AspectRatio(
-        aspectRatio: _controller.value.aspectRatio,
-        child: CameraPreview(_controller),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () async {
-            final navigator = Navigator.of(context);
-            final messenger = ScaffoldMessenger.of(context);
-            try {
-              final XFile file = await _controller.takePicture();
-              if (!mounted) return;
-              navigator.pop(file);
-            } catch (e) {
-              if (!mounted) return;
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Failed to capture photo')),
-              );
-              navigator.pop();
-            }
-          },
-          child: const Text('Capture'),
-        ),
-      ],
-    );
-  }
-}
 
 class _InstockProductsPageState extends State<InstockProductsPage> {
   // No need to set live mode as InstockProvider handles it implicitly
@@ -111,9 +44,11 @@ class _InstockProductsPageState extends State<InstockProductsPage> {
     }
     if (!mounted) return null;
 
-    final XFile? photo = await showDialog<XFile>(
-      context: context,
-      builder: (context) => _ProductCameraDialog(cameras: cameras),
+    final XFile? photo = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CameraPage(cameras: cameras),
+      ),
     );
     if (photo == null) return null;
 
@@ -131,32 +66,7 @@ class _InstockProductsPageState extends State<InstockProductsPage> {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final tempFile = File('${tempDir.path}/product_$timestamp.jpg');
     await tempFile.writeAsBytes(compressed);
-    if (!mounted) return null;
-
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Photo Preview'),
-        content: Image.file(tempFile),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Retake'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) return tempFile;
-
-    if (await tempFile.exists()) {
-      await tempFile.delete();
-    }
-    return null;
+    return tempFile;
   }
 
   Future<File?> _pickAndConfirmPhotoFromGallery() async {

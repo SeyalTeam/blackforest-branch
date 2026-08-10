@@ -41,7 +41,7 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
   final List<TextEditingController> _invoiceNumberControllers = [];
 
   List<Map<String, dynamic>> _products = [];
-  Map<String, Map<String, double>> _selectedProductQuantities = {};
+  Map<String, Map<String, dynamic>> _selectedProductQuantities = {};
   bool _isLoadingProducts = false;
 
   late final _PhotoSlot _billCopySlot;
@@ -208,17 +208,25 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     if (photo == null) return;
 
     final bytes = await photo.readAsBytes();
-    final image = img_lib.decodeImage(bytes);
-    if (image == null) return;
-    final compressed = img_lib.encodeJpg(image, quality: 70);
-
-    final tempDir = await getTemporaryDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final tempFile = File('${tempDir.path}/${slot.prefix}_$timestamp.jpg');
-    await tempFile.writeAsBytes(compressed);
+    File finalFile;
+    try {
+      final image = img_lib.decodeImage(bytes);
+      if (image != null) {
+        final compressed = img_lib.encodeJpg(image, quality: 70);
+        final tempDir = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final tempFile = File('${tempDir.path}/${slot.prefix}_$timestamp.jpg');
+        await tempFile.writeAsBytes(compressed);
+        finalFile = tempFile;
+      } else {
+        finalFile = File(photo.path);
+      }
+    } catch (_) {
+      finalFile = File(photo.path);
+    }
 
     setState(() {
-      slot.file = tempFile;
+      slot.file = finalFile;
       slot.mediaId = null;
       slot.url = null;
     });
@@ -266,17 +274,25 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     if (photo == null) return;
 
     final bytes = await photo.readAsBytes();
-    final image = img_lib.decodeImage(bytes);
-    if (image == null) return;
-    final compressed = img_lib.encodeJpg(image, quality: 70);
-
-    final tempDir = await getTemporaryDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final tempFile = File('${tempDir.path}/dealerproducts_$timestamp.jpg');
-    await tempFile.writeAsBytes(compressed);
+    File finalFile;
+    try {
+      final image = img_lib.decodeImage(bytes);
+      if (image != null) {
+        final compressed = img_lib.encodeJpg(image, quality: 70);
+        final tempDir = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final tempFile = File('${tempDir.path}/dealerproducts_$timestamp.jpg');
+        await tempFile.writeAsBytes(compressed);
+        finalFile = tempFile;
+      } else {
+        finalFile = File(photo.path);
+      }
+    } catch (_) {
+      finalFile = File(photo.path);
+    }
 
     setState(() {
-      _productPhotos.add(tempFile);
+      _productPhotos.add(finalFile);
     });
   }
 
@@ -373,39 +389,137 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     );
   }
 
-  Future<String?> _uploadPhoto(File file, String altText, String prefix) async {
+  Future<File> _prepareImageForUpload(File originalFile, String prefix) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) return null;
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length == 0) return originalFile;
+      if (length < 1000 * 1024) return originalFile;
 
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/media?prefix=$prefix'),
-      );
+      final bytes = await originalFile.readAsBytes();
+      final image = img_lib.decodeImage(bytes);
+      if (image == null) return originalFile;
+
+      img_lib.Image resized = image;
+      if (image.width > 1280 || image.height > 1280) {
+        if (image.width > image.height) {
+          resized = img_lib.copyResize(image, width: 1280);
+        } else {
+          resized = img_lib.copyResize(image, height: 1280);
+        }
+      }
+      final compressedBytes = img_lib.encodeJpg(resized, quality: 70);
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/opt_${prefix}_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressedBytes);
+      return tempFile;
+    } catch (_) {
+      return originalFile;
+    }
+  }
+
+  Future<String?> _uploadPhoto(File file, String altText, String prefix) async {
+    final uploadFile = await _prepareImageForUpload(file, prefix);
+    if (!await uploadFile.exists()) {
+      throw Exception('Photo file does not exist on device.');
+    }
+    final length = await uploadFile.length();
+    if (length == 0) {
+      throw Exception('Photo file is empty (0 bytes).');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    if (token == null) throw Exception('No login token found. Please log in again.');
+
+    final filename = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    
+    // Try both without and with trailing slash if needed
+    final urlsToTry = [
+      '${ApiConfig.baseUrl}/media/?prefix=$prefix',
+      '${ApiConfig.baseUrl}/media?prefix=$prefix',
+    ];
+
+    String lastResponseBody = '';
+    int lastStatusCode = 0;
+
+    for (final urlStr in urlsToTry) {
+      final request = http.MultipartRequest('POST', Uri.parse(urlStr));
+      request.followRedirects = false;
       request.headers['Authorization'] = 'Bearer $token';
+      request.fields['_payload'] = jsonEncode({
+        'alt': altText,
+        'prefix': prefix,
+      });
       request.fields['alt'] = altText;
-      request.files.add(http.MultipartFile(
+      request.fields['prefix'] = prefix;
+
+      final multipartFile = await http.MultipartFile.fromPath(
         'file',
-        file.readAsBytes().asStream(),
-        file.lengthSync(),
-        filename: file.path.split('/').last,
+        uploadFile.path,
+        filename: filename,
         contentType: MediaType('image', 'jpeg'),
-      ));
+      );
+      request.files.add(multipartFile);
 
       final response = await request.send();
+      final body = await response.stream.bytesToString();
+      lastStatusCode = response.statusCode;
+      lastResponseBody = body;
+
+      debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+
       if (response.statusCode == 201 || response.statusCode == 200) {
-        final body = await response.stream.bytesToString();
         final data = jsonDecode(body);
-        return data['doc']['id'];
-      } else {
-        final body = await response.stream.bytesToString();
-        debugPrint('Upload error: ${response.statusCode} - $body');
+        final doc = data['doc'] ?? data;
+        return doc['id']?.toString();
       }
-    } catch (e) {
-      debugPrint('Upload exception: $e');
+
+      // If redirect 301/302/307/308, follow manually to location preserving POST multipart body
+      if (response.statusCode >= 300 && response.statusCode < 400) {
+        final location = response.headers['location'];
+        if (location != null) {
+          final resolvedUri = Uri.parse(urlStr).resolve(location);
+          debugPrint('Upload redirected to: $location (resolved: $resolvedUri). Retrying POST with body...');
+          final redirRequest = http.MultipartRequest('POST', resolvedUri);
+          redirRequest.headers['Authorization'] = 'Bearer $token';
+          redirRequest.fields['_payload'] = jsonEncode({
+            'alt': altText,
+            'prefix': prefix,
+          });
+          redirRequest.fields['alt'] = altText;
+          redirRequest.fields['prefix'] = prefix;
+          redirRequest.files.add(await http.MultipartFile.fromPath(
+            'file',
+            uploadFile.path,
+            filename: filename,
+            contentType: MediaType('image', 'jpeg'),
+          ));
+          final redirResponse = await redirRequest.send();
+          final redirBody = await redirResponse.stream.bytesToString();
+          debugPrint('Redirected upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
+          if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+            final data = jsonDecode(redirBody);
+            final doc = data['doc'] ?? data;
+            return doc['id']?.toString();
+          }
+        }
+      }
     }
-    return null;
+
+    String detail = 'HTTP $lastStatusCode';
+    try {
+      final data = jsonDecode(lastResponseBody);
+      if (data['errors'] != null && (data['errors'] as List).isNotEmpty) {
+        detail = data['errors'][0]['message'] ?? lastResponseBody;
+      } else if (data['message'] != null) {
+        detail = data['message'].toString();
+      }
+    } catch (_) {
+      detail = lastResponseBody;
+    }
+    throw Exception('Upload failed ($detail)');
   }
 
   Future<void> _submitBilling() async {
@@ -451,20 +565,17 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
 
       // 1. Upload Bill Copy Photo
       final billCopyAlt = 'Dealer Bill Copy for dealer $_selectedDealerId';
-      final billCopyId = await _uploadPhoto(_billCopySlot.file!, billCopyAlt, 'dealerbill');
-      if (billCopyId == null) throw Exception('Failed to upload Dealer Bill Copy photo.');
+      final billCopyId = (await _uploadPhoto(_billCopySlot.file!, billCopyAlt, 'dealerbill'))!;
 
       // 2. Upload Delivery Person Photo
       final deliveryPersonAlt = 'Delivery Person for dealer $_selectedDealerId';
-      final deliveryPersonId = await _uploadPhoto(_deliveryPersonSlot.file!, deliveryPersonAlt, 'deliveryperson');
-      if (deliveryPersonId == null) throw Exception('Failed to upload Delivery Person photo.');
+      final deliveryPersonId = (await _uploadPhoto(_deliveryPersonSlot.file!, deliveryPersonAlt, 'deliveryperson'))!;
 
       // 3. Upload Multiple Product Photos
       final List<String> productsPhotoIds = [];
       for (var i = 0; i < _productPhotos.length; i++) {
         final productsAlt = 'Dealer Product Photo ${i + 1} for dealer $_selectedDealerId';
-        final id = await _uploadPhoto(_productPhotos[i], productsAlt, 'dealerproducts');
-        if (id == null) throw Exception('Failed to upload Dealer Product Photo ${i + 1}.');
+        final id = (await _uploadPhoto(_productPhotos[i], productsAlt, 'dealerproducts'))!;
         productsPhotoIds.add(id);
       }
 
@@ -481,13 +592,28 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
 
       // 5. Compile productsList
       final List<Map<String, dynamic>> productsListData = [];
-      _selectedProductQuantities.forEach((id, data) {
-        productsListData.add({
+      for (var entry in _selectedProductQuantities.entries) {
+        final id = entry.key;
+        final data = entry.value;
+
+        String? itemPhotoMediaId;
+        final File? itemPhotoFile = data['photoFile'] as File?;
+        if (itemPhotoFile != null && itemPhotoFile.existsSync()) {
+          final altText = 'Dealer Product Photo for product $id';
+          itemPhotoMediaId = await _uploadPhoto(itemPhotoFile, altText, 'dealerproductitem');
+        }
+
+        final itemMap = <String, dynamic>{
           'product': id,
           'quantity': data['quantity'] ?? 0.0,
           'totalAmount': data['totalAmount'] ?? 0.0,
-        });
-      });
+        };
+        if (itemPhotoMediaId != null) {
+          itemMap['photo'] = itemPhotoMediaId;
+        }
+
+        productsListData.add(itemMap);
+      }
 
       // 6. Submit Dealer Billing Document
       final payload = {
@@ -600,7 +726,7 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
   }
 
   Future<void> _navigateToProductSelection() async {
-    final Map<String, Map<String, double>>? result = await Navigator.push<Map<String, Map<String, double>>>(
+    final Map<String, Map<String, dynamic>>? result = await Navigator.push<Map<String, Map<String, dynamic>>>(
       context,
       MaterialPageRoute(
         builder: (context) => ProductSelectionPage(
@@ -954,7 +1080,7 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
 
 class ProductSelectionPage extends StatefulWidget {
   final List<dynamic> products;
-  final Map<String, Map<String, double>> initialData;
+  final Map<String, Map<String, dynamic>> initialData;
 
   const ProductSelectionPage({
     super.key,
@@ -969,6 +1095,7 @@ class ProductSelectionPage extends StatefulWidget {
 class _ProductSelectionPageState extends State<ProductSelectionPage> {
   final Map<String, double> _quantities = {};
   final Map<String, double> _amounts = {};
+  final Map<String, File?> _productPhotoFiles = {};
   final Map<String, TextEditingController> _qtyControllers = {};
   final Map<String, TextEditingController> _amtControllers = {};
   String _searchQuery = '';
@@ -980,8 +1107,11 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
     for (var entry in widget.initialData.entries) {
       final id = entry.key;
       final data = entry.value;
-      _quantities[id] = data['quantity'] ?? 0.0;
-      _amounts[id] = data['totalAmount'] ?? 0.0;
+      _quantities[id] = (data['quantity'] as num?)?.toDouble() ?? 0.0;
+      _amounts[id] = (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
+      if (data['photoFile'] is File) {
+        _productPhotoFiles[id] = data['photoFile'] as File;
+      }
     }
     // Create controllers for all products
     for (var p in widget.products) {
@@ -991,6 +1121,59 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
       _qtyControllers[id] = TextEditingController(text: qty != null && qty > 0 ? qty.toString() : '');
       _amtControllers[id] = TextEditingController(text: amt != null && amt > 0 ? amt.toString() : '');
     }
+  }
+
+  Future<void> _capturePhotoForProduct(String id) async {
+    if (await Permission.camera.request().isDenied) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera permission required')),
+        );
+      }
+      return;
+    }
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No camera found')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final XFile? photo = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CameraPage(cameras: cameras),
+        fullscreenDialog: true,
+      ),
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (photo == null) return;
+
+    final bytes = await photo.readAsBytes();
+    File finalFile;
+    try {
+      final image = img_lib.decodeImage(bytes);
+      if (image != null) {
+        final compressed = img_lib.encodeJpg(image, quality: 70);
+        final tempDir = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final tempFile = File('${tempDir.path}/dealerproduct_${id}_$timestamp.jpg');
+        await tempFile.writeAsBytes(compressed);
+        finalFile = tempFile;
+      } else {
+        finalFile = File(photo.path);
+      }
+    } catch (_) {
+      finalFile = File(photo.path);
+    }
+
+    setState(() {
+      _productPhotoFiles[id] = finalFile;
+    });
   }
 
   @override
@@ -1020,7 +1203,7 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
           IconButton(
             icon: const Icon(Icons.check),
             onPressed: () {
-              final result = <String, Map<String, double>>{};
+              final result = <String, Map<String, dynamic>>{};
               bool hasInvalid = false;
 
               _quantities.forEach((id, qty) {
@@ -1031,6 +1214,7 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                   result[id] = {
                     'quantity': qty,
                     'totalAmount': amt,
+                    'photoFile': _productPhotoFiles[id],
                   };
                 }
               });
@@ -1099,6 +1283,7 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                       } else {
                                         _quantities.remove(id);
                                         _amounts.remove(id);
+                                        _productPhotoFiles.remove(id);
                                         _qtyControllers[id]?.clear();
                                         _amtControllers[id]?.clear();
                                       }
@@ -1115,50 +1300,122 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                             ),
                             if (isSelected)
                               Padding(
-                                padding: const EdgeInsets.only(left: 48.0, right: 8.0, top: 4.0, bottom: 4.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _qtyControllers[id],
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        decoration: const InputDecoration(
-                                          hintText: 'Qty',
-                                          labelText: 'Quantity',
-                                          isDense: true,
-                                          border: OutlineInputBorder(),
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                padding: const EdgeInsets.only(left: 12.0, right: 8.0, top: 4.0, bottom: 4.0),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 100,
+                                        child: TextField(
+                                          controller: _qtyControllers[id],
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          decoration: const InputDecoration(
+                                            hintText: 'Qty',
+                                            labelText: 'Quantity',
+                                            isDense: true,
+                                            border: OutlineInputBorder(),
+                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          ),
+                                          onChanged: (val) {
+                                            final qty = double.tryParse(val) ?? 0.0;
+                                            setState(() {
+                                              _quantities[id] = qty;
+                                            });
+                                          },
                                         ),
-                                        onChanged: (val) {
-                                          final qty = double.tryParse(val) ?? 0.0;
-                                          setState(() {
-                                            _quantities[id] = qty;
-                                          });
-                                        },
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _amtControllers[id],
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        decoration: const InputDecoration(
-                                          hintText: 'Amount',
-                                          labelText: 'Total Amount',
-                                          isDense: true,
-                                          prefixText: '₹ ',
-                                          border: OutlineInputBorder(),
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 110,
+                                        child: TextField(
+                                          controller: _amtControllers[id],
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          decoration: const InputDecoration(
+                                            hintText: 'Amount',
+                                            labelText: 'Total Amount',
+                                            isDense: true,
+                                            prefixText: '₹ ',
+                                            border: OutlineInputBorder(),
+                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          ),
+                                          onChanged: (val) {
+                                            final amt = double.tryParse(val) ?? 0.0;
+                                            setState(() {
+                                              _amounts[id] = amt;
+                                            });
+                                          },
                                         ),
-                                        onChanged: (val) {
-                                          final amt = double.tryParse(val) ?? 0.0;
-                                          setState(() {
-                                            _amounts[id] = amt;
-                                          });
-                                        },
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      if (_productPhotoFiles[id] != null) ...[
+                                        Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () => _capturePhotoForProduct(id),
+                                              child: Container(
+                                                width: 40,
+                                                height: 40,
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(color: Colors.grey.shade400),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  child: Image.file(_productPhotoFiles[id]!, fit: BoxFit.cover),
+                                                ),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              right: -6,
+                                              top: -6,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    try {
+                                                      _productPhotoFiles[id]?.deleteSync();
+                                                    } catch (_) {}
+                                                    _productPhotoFiles.remove(id);
+                                                  });
+                                                },
+                                                child: CircleAvatar(
+                                                  radius: 9,
+                                                  backgroundColor: Colors.red.withValues(alpha: 0.9),
+                                                  child: const Icon(Icons.close, size: 10, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ] else ...[
+                                        InkWell(
+                                          onTap: () => _capturePhotoForProduct(id),
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            height: 40,
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(color: Colors.teal.shade400),
+                                              borderRadius: BorderRadius.circular(8),
+                                              color: Colors.teal.shade50,
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.camera_alt, size: 18, color: Colors.teal),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  'Photo',
+                                                  style: TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
                               ),
                           ],

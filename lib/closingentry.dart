@@ -382,8 +382,8 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         },
         'branch': _branchId,
         'createdByName': _userName,
-        'createdBy': _userId,
         'createdByUser': _userId,
+        'createdBy': _userId,
       };
       // final uri = Uri.https(_apiHost, '/api/closing-entries');
       final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries');
@@ -727,6 +727,39 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            if (_userName != null && _userName!.isNotEmpty)
+              Card(
+                color: Colors.grey.shade100,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_circle, color: Colors.green),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Submitted By',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            _userName!,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             const SizedBox(height: 30),
           ],
         ),
