@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'common_scaffold.dart';
 import 'closingentry.dart';
 import 'expense.dart';
@@ -26,10 +28,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final Map<int, AnimationController> _controllers = {};
   final Map<int, Animation<double>> _animations = {};
 
+  String _username = 'User';
+  String _role = '';
+  String _branchName = '';
+
   @override
   void initState() {
     super.initState();
-    // Updated to 16 cards
+    _loadSessionPrefs();
+
+    // Initialize 16 controllers for animations (matching indexes 0 to 15)
     for (int i = 0; i < 16; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
@@ -49,6 +57,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _loadSessionPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('user_name') ??
+        prefs.getString('employee_name') ??
+        prefs.getString('username') ??
+        prefs.getString('email')?.split('@').first ??
+        'User';
+    final role = prefs.getString('role') ?? '';
+    final branchName = prefs.getString('branchName') ?? '';
+    if (mounted) {
+      setState(() {
+        _username = (name.isEmpty || name == 'Menu') ? 'User' : name;
+        _role = role;
+        _branchName = branchName;
+      });
+    }
+  }
+
   // --------------------------- NAVIGATION --------------------------------
 
   void _openBilling() {
@@ -64,7 +90,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       context,
       _createRoute(
         const CategoriesPage(isInstockEntry: true),
-      ), // Reuse categories with instock flag
+      ),
     );
   }
 
@@ -134,82 +160,189 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // --------------------------- CARD UI --------------------------------
+  // --------------------------- WIDGETS --------------------------------
 
-  Widget _buildCard(
-    int index,
-    IconData? icon,
-    Color start,
-    Color end,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return AnimatedBuilder(
-      animation: _animations[index]!,
-      builder: (context, _) => Transform.scale(
-        scale: _animations[index]!.value,
-        child: GestureDetector(
-          onTapDown: (_) => _controllers[index]!.forward(),
-          onTapUp: (_) {
-            _controllers[index]!.reverse();
-            onTap();
-          },
-          onTapCancel: () => _controllers[index]!.reverse(),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: [start, end],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+  Widget _buildWelcomeHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2E170F), Color(0xFF4A1A12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2E170F).withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFF8EFE6),
+            child: Text(
+              _username.isNotEmpty ? _username[0].toUpperCase() : 'U',
+              style: const TextStyle(
+                color: Color(0xFF2E170F),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: start.withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hello, $_username!',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Active Shift  •  ${_role.toUpperCase()}  •  $_branchName',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compactCard =
-                    constraints.maxWidth < 110 || constraints.maxHeight < 110;
-                final iconSize = compactCard ? 30.0 : 48.0;
-                final labelSize = compactCard ? 12.0 : 16.0;
-                final gap = compactCard ? 4.0 : 8.0;
-                final verticalPadding = compactCard ? 8.0 : 12.0;
+          ),
+        ],
+      ),
+    );
+  }
 
-                return Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: verticalPadding,
+  Widget _buildSectionHeader(String title, Color accentColor) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xFF1E293B),
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKioskGrid(BuildContext context, List<_QuickAction> actions) {
+    final double width = MediaQuery.of(context).size.width;
+    int crossCount = 3;
+    if (width > 900) {
+      crossCount = 6;
+    } else if (width > 600) {
+      crossCount = 4;
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossCount,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.0, // Clean square touch buttons
+      ),
+      itemCount: actions.length,
+      itemBuilder: (context, index) {
+        final action = actions[index];
+        return _buildKioskCard(action);
+      },
+    );
+  }
+
+  Widget _buildKioskCard(_QuickAction action) {
+    final int idx = action.index;
+    return AnimatedBuilder(
+      animation: _animations[idx]!,
+      builder: (context, _) => Transform.scale(
+        scale: _animations[idx]!.value,
+        child: GestureDetector(
+          onTapDown: (_) => _controllers[idx]!.forward(),
+          onTapUp: (_) {
+            _controllers[idx]!.reverse();
+            action.onTap();
+          },
+          onTapCancel: () => _controllers[idx]!.reverse(),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: action.accentColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (icon != null) ...[
-                        Icon(icon, size: iconSize, color: Colors.white),
-                        SizedBox(height: gap),
-                      ],
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: labelSize,
-                            fontWeight: FontWeight.bold,
-                            height: 1.15,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    action.icon,
+                    color: action.accentColor,
+                    size: 26,
                   ),
-                );
-              },
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    action.label,
+                    style: const TextStyle(
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -217,182 +350,169 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // --------------------------- MAIN UI --------------------------------
-
   @override
   Widget build(BuildContext context) {
+    // 16 simplified POS actions grouped into 4 units
+    final posActions = [
+      _QuickAction(
+        index: 1,
+        icon: Icons.description_rounded,
+        label: 'Bill Sheet',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openSheet,
+      ),
+      _QuickAction(
+        index: 14,
+        icon: Icons.business_rounded,
+        label: 'Dealer Bills',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openDealerBilling,
+      ),
+      _QuickAction(
+        index: 2,
+        icon: Icons.account_balance_wallet_rounded,
+        label: 'Close Shift',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openClosing,
+      ),
+      _QuickAction(
+        index: 3,
+        icon: Icons.payments_rounded,
+        label: 'Expenses',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openExpense,
+      ),
+      _QuickAction(
+        index: 15,
+        icon: Icons.cake_rounded,
+        label: 'Cake Orders',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openCake,
+      ),
+      _QuickAction(
+        index: 0,
+        icon: Icons.receipt_long_rounded,
+        label: 'Billing',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openBilling,
+      ),
+    ];
+
+    final stockActions = [
+      _QuickAction(
+        index: 4,
+        icon: Icons.inventory_2_rounded,
+        label: 'Stock Order',
+        accentColor: const Color(0xFF0F766E),
+        onTap: _openStock,
+      ),
+      _QuickAction(
+        index: 5,
+        icon: Icons.assignment_return_rounded,
+        label: 'Return Stock',
+        accentColor: const Color(0xFF0F766E),
+        onTap: _openReturn,
+      ),
+      _QuickAction(
+        index: 9,
+        icon: Icons.check_circle_outline_rounded,
+        label: 'Instock Entry',
+        accentColor: const Color(0xFF0F766E),
+        onTap: _openInstock,
+      ),
+      _QuickAction(
+        index: 10,
+        icon: Icons.warehouse_rounded,
+        label: 'Stock Levels',
+        accentColor: const Color(0xFF0F766E),
+        onTap: _openStockStatus,
+      ),
+      _QuickAction(
+        index: 6,
+        icon: Icons.assignment_rounded,
+        label: 'Stock Logs',
+        accentColor: const Color(0xFF0F766E),
+        onTap: _openStockReport,
+      ),
+    ];
+
+    final operationActions = [
+      _QuickAction(
+        index: 11,
+        icon: Icons.table_bar_rounded,
+        label: 'Table Map',
+        accentColor: const Color(0xFFD97706),
+        onTap: _openTableTracking,
+      ),
+      _QuickAction(
+        index: 8,
+        icon: Icons.table_restaurant_rounded,
+        label: 'Table Design',
+        accentColor: const Color(0xFFD97706),
+        onTap: _openTableCreation,
+      ),
+      _QuickAction(
+        index: 12,
+        icon: Icons.soup_kitchen_rounded,
+        label: 'Chef Screen',
+        accentColor: const Color(0xFFD97706),
+        onTap: _openChefManagement,
+      ),
+      _QuickAction(
+        index: 13,
+        icon: Icons.qr_code_2_rounded,
+        label: 'QR Control',
+        accentColor: const Color(0xFFD97706),
+        onTap: _openFavoriteRules,
+      ),
+    ];
+
+    final systemActions = [
+      _QuickAction(
+        index: 7,
+        icon: Icons.qr_code_rounded,
+        label: 'QR Sync',
+        accentColor: const Color(0xFF7C3AED),
+        onTap: _openQrUpdate,
+      ),
+    ];
+
     return CommonScaffold(
-      title: 'Dashboard',
+      title: 'Branch POS',
       pageType: PageType.home,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final crossCount = constraints.maxWidth > 600 ? 4 : 3;
-                final compactGrid = constraints.maxWidth <= 420;
-                final spacing = compactGrid ? 12.0 : 24.0;
-
-                return GridView.count(
-                  crossAxisCount: crossCount,
-                  crossAxisSpacing: spacing,
-                  mainAxisSpacing: spacing,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.0,
-                  children: [
-                    _buildCard(
-                      0,
-                      Icons.receipt_long,
-                      const Color(0xFF00C9FF),
-                      const Color(0xFF92FE9D),
-                      'Billing',
-                      _openBilling,
-                    ),
-
-                    _buildCard(
-                      1,
-                      Icons.table_chart,
-                      const Color(0xFFD32F2F),
-                      const Color(0xFFFF1744),
-                      'Sheet',
-                      _openSheet,
-                    ),
-
-                    _buildCard(
-                      2,
-                      Icons.account_balance_wallet,
-                      const Color(0xFFFFD700),
-                      const Color(0xFFFFA500),
-                      'Closing',
-                      _openClosing,
-                    ),
-
-                    _buildCard(
-                      3,
-                      Icons.payments,
-                      const Color(0xFFE91E63),
-                      const Color(0xFFFF4081),
-                      'Expense',
-                      _openExpense,
-                    ),
-
-                    _buildCard(
-                      4,
-                      Icons.inventory_2,
-                      const Color(0xFF4FACFE),
-                      const Color(0xFF00F2FE),
-                      'Stock',
-                      _openStock,
-                    ),
-
-                    _buildCard(
-                      9, // New Instock Card
-                      Icons.check_circle_outline, // Distinct icon
-                      const Color(0xFF11998e),
-                      const Color(0xFF38ef7d),
-                      'Instock',
-                      _openInstock,
-                    ),
-
-                    _buildCard(
-                      5,
-                      Icons.assignment_return,
-                      const Color(0xFFFF5E7E),
-                      const Color(0xFFFF9A9E),
-                      'Return',
-                      _openReturn,
-                    ),
-
-                    _buildCard(
-                      6,
-                      Icons.assignment,
-                      const Color(0xFFFF9966),
-                      const Color(0xFFFF5E62),
-                      'Stock Report',
-                      _openStockReport,
-                    ),
-
-                    _buildCard(
-                      7,
-                      Icons.qr_code,
-                      const Color(0xFF7F00FF),
-                      const Color(0xFFE100FF),
-                      'QR Update',
-                      _openQrUpdate,
-                    ),
-
-                    _buildCard(
-                      10,
-                      Icons.inventory,
-                      const Color(0xFF1565C0),
-                      const Color(0xFF42A5F5),
-                      'Stock Status',
-                      _openStockStatus,
-                    ),
-
-                    _buildCard(
-                      11,
-                      Icons.table_bar,
-                      const Color(0xFF546E7A),
-                      const Color(0xFF78909C),
-                      'Table',
-                      _openTableTracking,
-                    ),
-
-                    _buildCard(
-                      8,
-                      Icons.table_restaurant,
-                      const Color(0xFF607D8B),
-                      const Color(0xFF90A4AE),
-                      'Table Creation',
-                      _openTableCreation,
-                    ),
-
-                    _buildCard(
-                      12,
-                      Icons.soup_kitchen,
-                      const Color(0xFF795548),
-                      const Color(0xFFA1887F),
-                      'Chef',
-                      _openChefManagement,
-                    ),
-
-                    _buildCard(
-                      13,
-                      Icons.qr_code_2,
-                      const Color(0xFFFFB75E),
-                      const Color(0xFFED8F03),
-                      'QRC',
-                      _openFavoriteRules,
-                    ),
-
-                    _buildCard(
-                      14,
-                      Icons.business,
-                      const Color(0xFF00796B),
-                      const Color(0xFF00BFA5),
-                      'Dealer Billing',
-                      _openDealerBilling,
-                    ),
-
-                    _buildCard(
-                      15,
-                      Icons.cake,
-                      const Color(0xFFD81B60),
-                      const Color(0xFFF48FB1),
-                      'Cake',
-                      _openCake,
-                    ),
-                  ],
-                );
-              },
-            ),
+            _buildWelcomeHeader(context),
+            _buildSectionHeader('Sales & Checkout', const Color(0xFFEF4444)),
+            _buildKioskGrid(context, posActions),
+            _buildSectionHeader('Stock & Inventory', const Color(0xFF0F766E)),
+            _buildKioskGrid(context, stockActions),
+            _buildSectionHeader('Dining & Kitchen', const Color(0xFFD97706)),
+            _buildKioskGrid(context, operationActions),
+            _buildSectionHeader('Others', const Color(0xFF7C3AED)),
+            _buildKioskGrid(context, systemActions),
           ],
         ),
       ),
     );
   }
+}
+
+class _QuickAction {
+  final int index;
+  final IconData icon;
+  final String label;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  const _QuickAction({
+    required this.index,
+    required this.icon,
+    required this.label,
+    required this.accentColor,
+    required this.onTap,
+  });
 }

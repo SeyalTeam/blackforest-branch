@@ -419,8 +419,8 @@ class _ProductsPageState extends State<ProductsPage> {
 
       final filename = 'product_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=product',
         '${ApiConfig.baseUrl}/media?prefix=product',
+        '${ApiConfig.baseUrl}/media/?prefix=product',
       ];
 
       for (final urlStr in urlsToTry) {

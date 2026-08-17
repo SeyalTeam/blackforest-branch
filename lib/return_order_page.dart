@@ -395,8 +395,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
 
       final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
         '${ApiConfig.baseUrl}/media?prefix=returnorder',
+        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
       ];
 
       for (final urlStr in urlsToTry) {

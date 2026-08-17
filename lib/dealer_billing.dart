@@ -435,10 +435,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
 
     final filename = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.jpg';
     
-    // Try both without and with trailing slash if needed
+    // Try both without and with trailing slash if needed (non-trailing slash first to avoid Vercel 308 redirect)
     final urlsToTry = [
-      '${ApiConfig.baseUrl}/media/?prefix=$prefix',
       '${ApiConfig.baseUrl}/media?prefix=$prefix',
+      '${ApiConfig.baseUrl}/media/?prefix=$prefix',
     ];
 
     String lastResponseBody = '';
@@ -615,10 +615,15 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
         productsListData.add(itemMap);
       }
 
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+
       // 6. Submit Dealer Billing Document
       final payload = {
         'dealer': _selectedDealerId,
         'branch': branchId,
+        'cashierId': cashierId,
+        'cashierName': cashierName,
         'bills': billsData,
         'total': _calculateTotal(),
         'billCopyPhoto': billCopyId,

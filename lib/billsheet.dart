@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'common_scaffold.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -6,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/api_config.dart';
 import 'dart:async';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
-import 'package:branch/printer/printer_settings_action.dart';
 import 'package:branch/printer/unified_printer.dart';
 
 class Bill {
@@ -31,6 +32,7 @@ class Bill {
   final String paymentMethod;
   final String createdBy;
   final String waiterName;
+  final String cashierName;
   final String company;
   final String companyName;
   final String customerName;
@@ -68,6 +70,7 @@ class Bill {
     required this.paymentMethod,
     required this.createdBy,
     required this.waiterName,
+    required this.cashierName,
     required this.company,
     required this.companyName,
     required this.customerName,
@@ -126,14 +129,12 @@ class Bill {
 
       String formatAssigneeLabel(String value) {
         final trimmed = value.trim();
-        final normalized = trimmed.toLowerCase();
-        const assigneeLabelMap = {
-          'ettroad@bf.com': 'Ettayapuram Road',
-          'ettroad': 'Ettayapuram Road',
-          'ettayapuram road': 'Ettayapuram Road',
-          'etp-ettayapuram road': 'Ettayapuram Road',
-        };
-        return assigneeLabelMap[normalized] ?? trimmed;
+        if (trimmed.isEmpty) return '';
+        if (trimmed.contains('@')) {
+          final prefix = trimmed.split('@').first.trim();
+          if (prefix.isNotEmpty) return prefix;
+        }
+        return trimmed;
       }
 
       final id = getId(json['_id'] ?? json['id']);
@@ -249,6 +250,25 @@ class Bill {
         parsedDate = DateTime.now();
       }
 
+      String cashierName = (json['cashierName'] ?? '').toString().trim();
+      if (cashierName.isEmpty) {
+        final settledByJson = json['settledBy'];
+        if (settledByJson is Map<String, dynamic>) {
+          final employee = settledByJson['employee'];
+          if (employee is Map<String, dynamic> && employee['name'] != null) {
+            cashierName = formatAssigneeLabel(employee['name'].toString());
+          } else if (settledByJson['name'] != null) {
+            cashierName = formatAssigneeLabel(settledByJson['name'].toString());
+          } else if (settledByJson['username'] != null) {
+            cashierName =
+                formatAssigneeLabel(settledByJson['username'].toString());
+          } else if (settledByJson['email'] != null) {
+            cashierName =
+                formatAssigneeLabel(settledByJson['email'].toString());
+          }
+        }
+      }
+
       return Bill(
         id: id,
         invoiceNumber: invoiceNumber,
@@ -273,6 +293,7 @@ class Bill {
         paymentMethod: paymentMethod,
         createdBy: createdById,
         waiterName: waiterName,
+        cashierName: cashierName,
         company: companyId,
         companyName: companyName,
         customerName: customerName,
@@ -355,8 +376,9 @@ class BillUpdateResult {
 Future<BillUpdateResult> settleBill(
   String billId,
   String paymentMethod,
-  String? token,
-) async {
+  String? token, {
+  String? cashierName,
+}) async {
   if (billId.isEmpty) {
     return const BillUpdateResult(success: false, message: 'Invalid bill ID.');
   }
@@ -371,13 +393,18 @@ Future<BillUpdateResult> settleBill(
   }
 
   try {
+    final Map<String, dynamic> bodyData = {
+      'status': 'settled',
+      'paymentMethod': normalizedMethod,
+    };
+    if (cashierName != null && cashierName.trim().isNotEmpty) {
+      bodyData['cashierName'] = cashierName.trim();
+    }
+
     final response = await http.patch(
       Uri.parse('${ApiConfig.baseUrl}/billings/$billId'),
       headers: ApiConfig.getHeaders(token),
-      body: json.encode({
-        'status': 'settled',
-        'paymentMethod': normalizedMethod,
-      }),
+      body: json.encode(bodyData),
     );
 
     if (response.statusCode == 200) {
@@ -795,6 +822,16 @@ class _BillSheetPageState extends State<BillSheetPage> {
         _companyName = company['name'] ?? 'Unknown Company';
       }
     } catch (_) {}
+  }
+
+  String _formatAssigneeLabel(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    if (trimmed.contains('@')) {
+      final prefix = trimmed.split('@').first.trim();
+      if (prefix.isNotEmpty) return prefix;
+    }
+    return trimmed;
   }
 
   bool get _canUpdateOrSettleBills =>
@@ -2452,7 +2489,13 @@ class _BillSheetPageState extends State<BillSheetPage> {
     );
   }
 
-  Future<void> _printReceipt(Bill bill, {String? paymentMethodOverride}) async {
+  Future<void> _printReceipt(Bill bill,
+      {String? paymentMethodOverride, String? cashierNameOverride}) async {
+    await _printFullReceipt(bill, paymentMethodOverride: paymentMethodOverride);
+  }
+
+  Future<void> _printFullReceipt(Bill bill,
+      {String? paymentMethodOverride}) async {
     try {
       const PaperSize paper = PaperSize.mm80;
       final profile = await CapabilityProfile.load();
@@ -2483,6 +2526,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
       );
 
       if (printer != null) {
+        final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
+        if (openDrawer) {
+          printer.rawBytes(const [27, 112, 0, 25, 250]);
+        }
         DateTime now = DateTime.now();
         final dateStr = _buildReceiptDate(now);
         final billNo = _buildBillNo(bill);
@@ -2727,8 +2774,101 @@ class _BillSheetPageState extends State<BillSheetPage> {
       } else {
         final message =
             hasBluetoothPrinter || ((_printerIp ?? '').trim().isNotEmpty)
-            ? 'Could not connect to the printer. Check Bluetooth or network printer.'
-            : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
+                ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+                : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
+        _showMessage(message);
+      }
+    } catch (e) {
+      _showMessage('Print failed: $e');
+    }
+  }
+
+  Future<void> _printSettlementReceipt(Bill bill,
+      {String? cashierNameOverride}) async {
+    try {
+      const PaperSize paper = PaperSize.mm80;
+      final profile = await CapabilityProfile.load();
+      final prefs = await SharedPreferences.getInstance();
+      final hasBluetoothPrinter = (prefs.getString('bt_printer_mac') ?? '')
+          .trim()
+          .isNotEmpty;
+
+      if (!hasBluetoothPrinter &&
+          _printerProtocol != null &&
+          _printerProtocol!.isNotEmpty &&
+          _printerProtocol != 'esc_pos') {
+        _showMessage('Unsupported printer protocol: $_printerProtocol');
+        return;
+      }
+
+      final candidatePorts = <int>[
+        _printerPort,
+        9100,
+        9101,
+      ].toSet().toList(growable: false);
+      final printer = await UnifiedPrinter.connect(
+        printerIp: _printerIp?.trim(),
+        candidatePorts: candidatePorts,
+        paperSize: paper,
+        profile: profile,
+        purpose: PrintPurpose.billing,
+      );
+
+      if (printer != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
+        if (openDrawer) {
+          printer.rawBytes(const [27, 112, 0, 25, 250]);
+        }
+        String cashier = (cashierNameOverride ?? bill.cashierName).trim();
+        if (cashier.isEmpty || cashier == 'Unknown') {
+          cashier = (prefs.getString('employee_name') ??
+                  prefs.getString('user_name') ??
+                  prefs.getString('email') ??
+                  '')
+              .trim();
+        }
+
+        final displayCashier = _formatAssigneeLabel(cashier);
+
+        try {
+          final ByteData bytes =
+              await rootBundle.load('assets/settlement_tamil_text.png');
+          final Uint8List list = bytes.buffer.asUint8List();
+          img.Image? decodedImage = img.decodeImage(list);
+
+          if (decodedImage != null) {
+            final maxWidth = paper == PaperSize.mm58 ? 384 : 512;
+            if (decodedImage.width > maxWidth) {
+              decodedImage = img.copyResize(decodedImage, width: maxWidth);
+            }
+            printer.image(decodedImage, align: PosAlign.center);
+          }
+        } catch (e) {
+          debugPrint('Error loading settlement image: $e');
+        }
+
+        if (displayCashier.isNotEmpty) {
+          printer.text(
+            displayCashier,
+            styles: const PosStyles(
+              align: PosAlign.center,
+              bold: true,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2,
+            ),
+          );
+        }
+
+        printer.cut();
+        await printer.disconnectAndPrint();
+
+        _showMessage('Settlement receipt printed successfully');
+      } else {
+        final message =
+            hasBluetoothPrinter || ((_printerIp ?? '').trim().isNotEmpty)
+                ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+                : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
         _showMessage(message);
       }
     } catch (e) {
@@ -2966,15 +3106,15 @@ class _BillSheetPageState extends State<BillSheetPage> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            onPressed: () async {
-                              await _printReceipt(
-                                bill,
-                                paymentMethodOverride: pay,
-                              );
-                              if (mounted && sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                            },
+                             onPressed: () async {
+                               await _printFullReceipt(
+                                 bill,
+                                 paymentMethodOverride: pay,
+                               );
+                               if (mounted && sheetContext.mounted) {
+                                 Navigator.pop(sheetContext);
+                               }
+                             },
                             child: Icon(Icons.print, size: 20),
                           ),
                         ),
@@ -3013,10 +3153,19 @@ class _BillSheetPageState extends State<BillSheetPage> {
 
                                       sheetSetState(() => isSettling = true);
 
+                                      final prefs =
+                                          await SharedPreferences.getInstance();
+                                      final currentCashierName =
+                                          prefs.getString('employee_name') ??
+                                          prefs.getString('user_name') ??
+                                          prefs.getString('email') ??
+                                          '';
+
                                       final result = await settleBill(
                                         bill.id,
                                         paymentMethod,
                                         token,
+                                        cashierName: currentCashierName,
                                       );
                                       if (!mounted ||
                                           !statefulContext.mounted) {
@@ -3033,10 +3182,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
                                         );
                                         unawaited(_fetchBills());
                                         unawaited(
-                                          _printReceipt(
+                                          _printSettlementReceipt(
                                             bill,
-                                            paymentMethodOverride:
-                                                paymentMethod,
+                                            cashierNameOverride:
+                                                currentCashierName,
                                           ),
                                         );
                                       } else {
@@ -3163,7 +3312,6 @@ class _BillSheetPageState extends State<BillSheetPage> {
     return CommonScaffold(
       title: "Bill Sheet",
       pageType: PageType.billsheet,
-      actions: const [PrinterSettingsAction()],
       body: isLoading
           ? Center(child: CircularProgressIndicator())
           : visibleBills.isEmpty

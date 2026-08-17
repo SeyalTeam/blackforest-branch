@@ -161,23 +161,27 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
     setState(() => _isSubmitting = true);
 
-    final expenseData = {
-      'branch': _branchId,
-      'details': _expenseItems.map((e) {
-        return {
-          'source': e.source,
-          'reason': e.reason.text.trim(),
-          'amount': double.tryParse(e.amount.text) ?? 0.0,
-          'image': e.imageId,
-        };
-      }).toList(),
-      'total': double.tryParse(_totalExpensesController.text) ?? 0.0,
-      'date': _selectedDate.toIso8601String(),
-    };
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+
+      final expenseData = {
+        'branch': _branchId,
+        'cashierId': cashierId,
+        'cashierName': cashierName,
+        'details': _expenseItems.map((e) {
+          return {
+            'source': e.source,
+            'reason': e.reason.text.trim(),
+            'amount': double.tryParse(e.amount.text) ?? 0.0,
+            'image': e.imageId,
+          };
+        }).toList(),
+        'total': double.tryParse(_totalExpensesController.text) ?? 0.0,
+        'date': _selectedDate.toIso8601String(),
+      };
 
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/expenses'),
@@ -321,8 +325,8 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
       final filename = 'expense_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=expense',
         '${ApiConfig.baseUrl}/media?prefix=expense',
+        '${ApiConfig.baseUrl}/media/?prefix=expense',
       ];
 
       for (final urlStr in urlsToTry) {

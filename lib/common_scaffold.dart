@@ -16,6 +16,7 @@ import 'package:branch/home.dart';
 import 'package:branch/billsheet.dart';
 import 'package:branch/auth_service.dart'; // ADDED
 import 'package:branch/stock_alert_helper.dart';
+import 'package:branch/printer/bluetooth_printer_settings_page.dart';
 
 /// ✅ UPDATED ENUM — added stock & returnorder
 enum PageType {
@@ -70,6 +71,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
   bool _isStockAlertDialogOpen = false;
   final Set<String> _seenStockAlertIds = {};
 
+  bool _cashDrawerEnabled = true;
+
   @override
   void initState() {
     super.initState();
@@ -94,11 +97,13 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         'User';
     final role = prefs.getString('role') ?? '';
     final branchName = prefs.getString('branchName') ?? '';
+    final cashDrawerEnabled = prefs.getBool('cash_drawer_enabled') ?? true;
     if (mounted) {
       setState(() {
         _username = (name.isEmpty || name == 'Menu') ? 'User' : name;
         _role = role;
         _branchName = branchName;
+        _cashDrawerEnabled = cashDrawerEnabled;
       });
     }
   }
@@ -732,6 +737,32 @@ class _CommonScaffoldState extends State<CommonScaffold> {
               ),
 
               ListTile(
+                leading: const Icon(Icons.print_outlined, color: Colors.black),
+                title: const Text('Printer Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BluetoothPrinterSettingsPage(),
+                    ),
+                  );
+                },
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.account_balance_wallet_outlined, color: Colors.black),
+                title: const Text('Cash Drawer'),
+                subtitle: const Text('Open automatically on print'),
+                value: _cashDrawerEnabled,
+                onChanged: (bool value) async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('cash_drawer_enabled', value);
+                  setState(() {
+                    _cashDrawerEnabled = value;
+                  });
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.logout, color: Colors.black),
                 title: const Text('Logout'),
                 onTap: () {
@@ -751,7 +782,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                 : Container(
                   decoration: const BoxDecoration(
                     border: Border(
-                      top: BorderSide(color: Colors.grey, width: 1),
+                      top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
                     ),
                   ),
                   child: BottomAppBar(
@@ -761,7 +792,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                       children: [
                         /// HOME
                         _buildNavItem(
-                          icon: Icons.home_outlined,
+                          icon: Icons.home_rounded,
                           label: "Home",
                           page: const HomePage(),
                           type: PageType.home,
@@ -769,7 +800,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
                         /// BILLING
                         _buildNavItem(
-                          icon: Icons.receipt_long_outlined,
+                          icon: Icons.receipt_long_rounded,
                           label: "Billing",
                           page: const CategoriesPage(),
                           type: PageType.billing,
@@ -782,18 +813,25 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                             mainAxisSize: MainAxisSize.min,
                             children: const [
                               Icon(
-                                Icons.qr_code_scanner_outlined,
-                                color: Colors.black,
+                                Icons.qr_code_scanner_rounded,
+                                color: Color(0xFF64748B),
                                 size: 32,
                               ),
-                              Text("Scan", style: TextStyle(fontSize: 10)),
+                              Text(
+                                "Scan",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ),
 
                         /// BILLSHEET
                         _buildNavItem(
-                          icon: Icons.description_outlined,
+                          icon: Icons.description_rounded,
                           label: "BillSheet",
                           page: const BillSheetPage(),
                           type: PageType.billsheet,
@@ -812,6 +850,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     required Widget page,
     required PageType type,
   }) {
+    final bool isSelected = widget.pageType == type;
+    final Color itemColor = isSelected ? const Color(0xFF4A1A12) : const Color(0xFF64748B);
     return GestureDetector(
       onTap: () {
         _resetTimer();
@@ -827,13 +867,14 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           Icon(
             icon,
             size: 32,
-            color: widget.pageType == type ? Colors.blue : Colors.black,
+            color: itemColor,
           ),
           Text(
             label,
             style: TextStyle(
-              color: widget.pageType == type ? Colors.blue : Colors.black,
+              color: itemColor,
               fontSize: 10,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
             ),
           ),
         ],

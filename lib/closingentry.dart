@@ -198,7 +198,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       double total = 0.0;
       for (final bill in docs) {
         final status = bill['status']?.toString().toLowerCase();
-        if (status == 'completed' || status == 'settled') {
+        if (status == 'settled') {
           final amount =
               bill['grandTotal'] ??
               bill['total'] ??

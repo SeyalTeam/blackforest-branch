@@ -194,8 +194,8 @@ class ReturnProvider extends ChangeNotifier {
 
       final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
         '${ApiConfig.baseUrl}/media?prefix=returnorder',
+        '${ApiConfig.baseUrl}/media/?prefix=returnorder',
       ];
 
       for (final urlStr in urlsToTry) {
@@ -322,6 +322,9 @@ class ReturnProvider extends ChangeNotifier {
         );
         return;
       }
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+
       final returnData = {
         'items': _items
             .map((item) => {
@@ -335,6 +338,8 @@ class ReturnProvider extends ChangeNotifier {
             .toList(),
         'totalAmount': total,
         'branch': branchId,
+        'cashierId': cashierId,
+        'cashierName': cashierName,
         'status': 'returned',
         'notes': '',
       };

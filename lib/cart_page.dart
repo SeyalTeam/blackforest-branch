@@ -577,6 +577,9 @@ class _CartPageState extends State<CartPage> {
         return;
       }
 
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+
       final billingData = {
         'items': cartProvider.cartItems
             .map(
@@ -592,6 +595,8 @@ class _CartPageState extends State<CartPage> {
             .toList(),
         'totalAmount': cartProvider.total,
         'branch': _branchId,
+        'cashierId': cashierId,
+        'cashierName': cashierName,
         'customerDetails': {
           'phone': customerDetails['phone'] ?? '',
           'name': customerDetails['name'] ?? '',
@@ -715,6 +720,10 @@ class _CartPageState extends State<CartPage> {
       );
 
       if (printer != null) {
+        final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
+        if (openDrawer) {
+          printer.rawBytes(const [27, 112, 0, 25, 250]);
+        }
         String invoiceNumber =
             billingResponse['invoiceNumber'] ??
             billingResponse['doc']?['invoiceNumber'] ??

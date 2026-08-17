@@ -497,8 +497,8 @@ class InstockProvider extends ChangeNotifier {
 
       final filename = 'product_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=product',
         '${ApiConfig.baseUrl}/media?prefix=product',
+        '${ApiConfig.baseUrl}/media/?prefix=product',
       ];
 
       for (final urlStr in urlsToTry) {
@@ -595,6 +595,8 @@ class InstockProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token");
       if (token == null) return;
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
 
       final List<Map<String, dynamic>> items = [];
       _inStockQuery.forEach((pid, qty) {
@@ -610,6 +612,8 @@ class InstockProvider extends ChangeNotifier {
 
       final payload = jsonEncode({
         "branch": _branchId,
+        "cashierId": cashierId,
+        "cashierName": cashierName,
         "date": now.toUtc().toIso8601String(),
         "items": items
             .map(

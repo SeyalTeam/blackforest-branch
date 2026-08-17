@@ -71,7 +71,7 @@ class _StockStatusPageState extends State<StockStatusPage> {
       String query = 'where[isStock][equals]=true';
 
       if (_userRole != 'superadmin') {
-        if (_userRole == 'waiter') {
+        if (_userRole == 'waiter' || _userRole == 'cashier') {
           final ip = await _deviceIp();
           final matches = await _matchingCompanies(_token!, ip);
           if (matches.isNotEmpty) {

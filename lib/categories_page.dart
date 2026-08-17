@@ -468,8 +468,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       final filename = 'category_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
-        '${ApiConfig.baseUrl}/media/?prefix=category',
         '${ApiConfig.baseUrl}/media?prefix=category',
+        '${ApiConfig.baseUrl}/media/?prefix=category',
       ];
 
       for (final urlStr in urlsToTry) {

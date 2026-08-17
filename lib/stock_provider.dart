@@ -506,8 +506,13 @@ class StockProvider extends ChangeNotifier {
         return null;
       }
 
+      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+
       final body = jsonEncode({
         "branch": branchId,
+        "cashierId": cashierId,
+        "cashierName": cashierName,
         "deliveryDate": _deliveryDate!.toUtc().toIso8601String(),
         "items": items,
       });
