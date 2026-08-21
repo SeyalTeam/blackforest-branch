@@ -124,15 +124,8 @@ class _LoginPageState extends State<LoginPage> {
   static const Duration _loginRequestTimeout = Duration(seconds: 20);
   static const int _loginTimeoutRetryCount = 2;
   static const Set<String> _staffRoles = <String>{
-    'waiter',
-    'cashier',
-    'supervisor',
     'branch',
-    'kitchen',
-    'delivery',
-    'driver',
-    'chef',
-    'manager',
+    'cashier',
   };
   static const String _waiterDefaultPassword = '12345';
 

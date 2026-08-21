@@ -378,6 +378,7 @@ Future<BillUpdateResult> settleBill(
   String paymentMethod,
   String? token, {
   String? cashierName,
+  String? cashierId,
 }) async {
   if (billId.isEmpty) {
     return const BillUpdateResult(success: false, message: 'Invalid bill ID.');
@@ -399,6 +400,9 @@ Future<BillUpdateResult> settleBill(
     };
     if (cashierName != null && cashierName.trim().isNotEmpty) {
       bodyData['cashierName'] = cashierName.trim();
+    }
+    if (cashierId != null && cashierId.trim().isNotEmpty) {
+      bodyData['cashierId'] = cashierId.trim();
     }
 
     final response = await http.patch(
@@ -2526,10 +2530,6 @@ class _BillSheetPageState extends State<BillSheetPage> {
       );
 
       if (printer != null) {
-        final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
-        if (openDrawer) {
-          printer.rawBytes(const [27, 112, 0, 25, 250]);
-        }
         DateTime now = DateTime.now();
         final dateStr = _buildReceiptDate(now);
         final billNo = _buildBillNo(bill);
@@ -2539,6 +2539,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
                     _normalizePaymentMethod(bill.paymentMethod) ??
                     bill.paymentMethod)
                 .toUpperCase();
+        final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
+        if (openDrawer && paidBy.toLowerCase() == 'cash') {
+          printer.rawBytes(const [27, 112, 0, 25, 250]);
+        }
         final hasTableOrder =
             (bill.tableNumber?.trim().isNotEmpty ?? false) ||
             (bill.section?.trim().isNotEmpty ?? false);
@@ -2817,7 +2821,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
       if (printer != null) {
         final prefs = await SharedPreferences.getInstance();
         final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
-        if (openDrawer) {
+        final isCashPayment = bill.paymentMethod.toLowerCase() == 'cash';
+        if (openDrawer && isCashPayment) {
           printer.rawBytes(const [27, 112, 0, 25, 250]);
         }
         String cashier = (cashierNameOverride ?? bill.cashierName).trim();
@@ -3152,7 +3157,6 @@ class _BillSheetPageState extends State<BillSheetPage> {
                                       }
 
                                       sheetSetState(() => isSettling = true);
-
                                       final prefs =
                                           await SharedPreferences.getInstance();
                                       final currentCashierName =
@@ -3160,12 +3164,16 @@ class _BillSheetPageState extends State<BillSheetPage> {
                                           prefs.getString('user_name') ??
                                           prefs.getString('email') ??
                                           '';
+                                      final currentCashierId =
+                                          prefs.getString('user_id') ??
+                                          prefs.getString('employee_id');
 
                                       final result = await settleBill(
                                         bill.id,
                                         paymentMethod,
                                         token,
                                         cashierName: currentCashierName,
+                                        cashierId: currentCashierId,
                                       );
                                       if (!mounted ||
                                           !statefulContext.mounted) {

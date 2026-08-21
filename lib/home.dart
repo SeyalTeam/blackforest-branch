@@ -16,6 +16,7 @@ import 'kitchen_chef_page.dart';
 import 'favorite_rules_page.dart';
 import 'dealer_billing.dart';
 import 'cake_order_page.dart';
+import 'employee_photo_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -37,8 +38,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.initState();
     _loadSessionPrefs();
 
-    // Initialize 16 controllers for animations (matching indexes 0 to 15)
-    for (int i = 0; i < 16; i++) {
+    // Initialize 17 controllers for animations (matching indexes 0 to 16)
+    for (int i = 0; i < 17; i++) {
       _controllers[i] = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 150),
@@ -150,6 +151,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _openCake() {
     Navigator.push(context, _createRoute(const CakeOrderPage()));
+  }
+
+  void _openEmployeePhoto() {
+    Navigator.push(context, _createRoute(const EmployeePhotoPage()));
   }
 
   Route _createRoute(Widget page) {
@@ -474,6 +479,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         label: 'QR Sync',
         accentColor: const Color(0xFF7C3AED),
         onTap: _openQrUpdate,
+      ),
+      _QuickAction(
+        index: 16,
+        icon: Icons.portrait_rounded,
+        label: 'Employee Photo',
+        accentColor: const Color(0xFF7C3AED),
+        onTap: _openEmployeePhoto,
       ),
     ];
 

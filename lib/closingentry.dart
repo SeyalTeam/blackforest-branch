@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:branch/api_config.dart';
+import 'package:branch/auth_service.dart';
 
 class ClosingEntryPage extends StatefulWidget {
   const ClosingEntryPage({Key? key}) : super(key: key);
@@ -402,7 +403,7 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context);
+          await AuthService.logout();
         }
       } else {
         if (mounted) {

@@ -721,7 +721,8 @@ class _CartPageState extends State<CartPage> {
 
       if (printer != null) {
         final openDrawer = prefs.getBool('cash_drawer_enabled') ?? true;
-        if (openDrawer) {
+        final isCashPayment = paymentMethod.toLowerCase() == 'cash';
+        if (openDrawer && isCashPayment) {
           printer.rawBytes(const [27, 112, 0, 25, 250]);
         }
         String invoiceNumber =
