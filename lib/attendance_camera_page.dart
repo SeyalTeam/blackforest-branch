@@ -63,6 +63,18 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
       _initialCameraSet = true;
     }
 
+    if (_controller != null) {
+      // Camera already initialized, just restart stream if needed
+      if (!_controller!.value.isStreamingImages) {
+        try {
+          await _controller!.startImageStream(_processCameraImage);
+        } catch (e) {
+          debugPrint('Error restarting stream: $e');
+        }
+      }
+      return;
+    }
+
     final controller = CameraController(
       widget.cameras[_selectedCameraIndex],
       ResolutionPreset.medium,
@@ -79,6 +91,28 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
       }
     } catch (e) {
       debugPrint('Camera init error: $e');
+    }
+  }
+
+  Future<void> _swapCamera() async {
+    final oldController = _controller;
+    if (oldController != null) {
+      try {
+        if (oldController.value.isStreamingImages) {
+          await oldController.stopImageStream();
+        }
+        await oldController.dispose();
+      } catch (e) {
+        debugPrint('Error disposing old controller: $e');
+      }
+      _controller = null;
+    }
+
+    if (mounted) {
+      setState(() {
+        _selectedCameraIndex = (_selectedCameraIndex + 1) % widget.cameras.length;
+      });
+      _initCamera();
     }
   }
 
@@ -155,8 +189,16 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
     });
 
     final controller = _controller;
-    if (controller != null && controller.value.isStreamingImages) {
-      await controller.stopImageStream();
+    if (controller != null) {
+      if (controller.value.isStreamingImages) {
+        try {
+          await controller.stopImageStream();
+        } catch (e) {
+          debugPrint('Error stopping image stream: $e');
+        }
+      }
+      // Add a small delay to let the camera session stabilize
+      await Future.delayed(const Duration(milliseconds: 300));
     }
     
     try {
