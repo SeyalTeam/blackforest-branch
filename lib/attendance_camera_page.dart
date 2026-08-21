@@ -279,7 +279,16 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    final controller = _controller;
+    if (controller != null) {
+      if (controller.value.isStreamingImages) {
+        controller.stopImageStream().whenComplete(() {
+          controller.dispose();
+        });
+      } else {
+        controller.dispose();
+      }
+    }
     _faceDetector?.close();
     super.dispose();
   }
