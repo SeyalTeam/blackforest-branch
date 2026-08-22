@@ -165,12 +165,7 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
     for (final urlStr in urlsToTry) {
       try {
         final request = http.MultipartRequest('POST', Uri.parse(urlStr));
-        request.followRedirects = false;
         request.headers['Authorization'] = 'Bearer $token';
-        request.fields['_payload'] = jsonEncode({
-          'alt': 'Employee Photo',
-          'prefix': 'employee',
-        });
         request.fields['alt'] = 'Employee Photo';
         request.fields['prefix'] = 'employee';
 
@@ -189,6 +184,8 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
           final data = jsonDecode(body);
           final doc = data['doc'] ?? data;
           return doc['id']?.toString();
+        } else {
+          debugPrint('Media upload failed (${response.statusCode}): $body');
         }
       } catch (e) {
         debugPrint('Upload error: $e');
@@ -233,8 +230,13 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
           _isLoading = false;
         });
       } else {
+        String errorDetail = 'Status ${response.statusCode}';
+        try {
+          final errBody = jsonDecode(response.body);
+          errorDetail = errBody['message']?.toString() ?? errBody['errors']?.toString() ?? errorDetail;
+        } catch (_) {}
         setState(() {
-          _errorMessage = 'Failed to update employee record: ${response.statusCode}';
+          _errorMessage = 'Failed to update employee: $errorDetail';
           _isLoading = false;
         });
       }

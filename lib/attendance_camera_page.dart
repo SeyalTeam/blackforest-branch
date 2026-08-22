@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -39,6 +40,7 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
   String? _verifiedName;
   String? _punchAction;
   String? _punchTime;
+  double _confidence = 0;
   bool _isRecognized = false;
 
   @override
@@ -220,7 +222,9 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
         await http.MultipartFile.fromPath('image', file.path),
       );
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
       final responseBody = await streamedResponse.stream.bytesToString();
       final data = jsonDecode(responseBody);
 
@@ -235,6 +239,7 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
           _verifiedName = name;
           _punchAction = action;
           _punchTime = DateFormat('hh:mm a').format(DateTime.now());
+          _confidence = (data['confidence'] as num?)?.toDouble() ?? 0;
         });
         
         // Auto reset after 4 seconds
@@ -262,6 +267,24 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
         await Future.delayed(const Duration(seconds: 1));
         _initCamera();
       }
+    } on TimeoutException {
+      debugPrint('Face recognition request timed out');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Server took too long to respond. Please try again.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      setState(() {
+        _isVerifying = false;
+        _blinkState = 0;
+        _isFaceDetected = false;
+      });
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) _initCamera();
     } catch (e) {
       debugPrint('Verification error: $e');
       if (mounted) {
@@ -375,6 +398,11 @@ class _AttendanceCameraPageState extends State<AttendanceCameraPage> {
                     Text(
                       _punchTime ?? '',
                       style: const TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Confidence: ${(_confidence * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                     ),
                   ],
                 ),
