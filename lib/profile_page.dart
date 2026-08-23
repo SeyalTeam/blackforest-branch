@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:image/image.dart' as img_lib;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_config.dart';
 import 'auth_service.dart';
+import 'camera_page.dart';
 import 'common_scaffold.dart';
 import 'settings_page.dart';
 
@@ -26,6 +33,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _employeePhotoUrl;
   String? _branchName;
   bool _isLoggingOut = false;
+  bool _isProcessingPunch = false;
+  String? _attendanceDocId;
+  bool _hasActiveSession = false;
+  List<dynamic> _rawActivities = [];
 
   Timer? _timer;
   Duration _workDuration = Duration.zero;
@@ -80,8 +91,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _profileLoading = false;
 
       if (loginTimeMs != null && _workDuration == Duration.zero) {
-        final loginTime = DateTime.fromMillisecondsSinceEpoch(loginTimeMs);
-        _workDuration = DateTime.now().difference(loginTime);
+        // We no longer calculate _workDuration from login time.
+        // It will strictly rely on actual attendance session duration.
       }
     });
 
@@ -153,6 +164,26 @@ class _ProfilePageState extends State<ProfilePage> {
       var totalWork = Duration.zero;
       var totalBreak = Duration.zero;
       var activeSessionFound = false;
+
+      // Extract raw activities from the first doc (today's doc) to use for Punch In/Out updates.
+      if (docs.isNotEmpty && docs.first is Map<String, dynamic>) {
+        final firstDoc = docs.first as Map<String, dynamic>;
+        final docDateStr = firstDoc['dateString']?.toString() ?? '';
+        final queryDateStr = localMidnight.toIso8601String().split('T')[0];
+        
+        // Ensure the doc we found is actually for today
+        if (docDateStr == queryDateStr || 
+            (firstDoc['date']?.toString().startsWith(queryDateStr) == true)) {
+          _attendanceDocId = firstDoc['id']?.toString();
+          _rawActivities = (firstDoc['activities'] as List?) ?? [];
+        } else {
+          _attendanceDocId = null;
+          _rawActivities = [];
+        }
+      } else {
+        _attendanceDocId = null;
+        _rawActivities = [];
+      }
 
       for (final dynamic doc in docs) {
         final activities = (doc is Map<String, dynamic> ? doc['activities'] : null)
@@ -253,11 +284,253 @@ class _ProfilePageState extends State<ProfilePage> {
         _activities = allActivities;
         _workDuration = totalWork;
         _breakDuration = totalBreak;
+        _hasActiveSession = activeSessionFound;
       });
     } catch (_) {}
   }
 
   String _formatTwoDigits(int n) => n.toString().padLeft(2, '0');
+
+  static Future<List<int>?> _compressImageIsolate(List<int> bytes) async {
+    try {
+      final image = img_lib.decodeImage(Uint8List.fromList(bytes));
+      if (image == null) return null;
+
+      img_lib.Image resized = image;
+      if (image.width > 1280 || image.height > 1280) {
+        if (image.width > image.height) {
+          resized = img_lib.copyResize(image, width: 1280);
+        } else {
+          resized = img_lib.copyResize(image, height: 1280);
+        }
+      }
+      return img_lib.encodeJpg(resized, quality: 70);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<File> _prepareImageForUpload(File originalFile) async {
+    try {
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length < 1500 * 1024) return originalFile;
+
+      final bytes = await originalFile.readAsBytes();
+      
+      final compressedBytes = await compute(_compressImageIsolate, bytes);
+      
+      if (compressedBytes == null) return originalFile;
+
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFile = File('${tempDir.path}/opt_selfie_$timestamp.jpg');
+      await tempFile.writeAsBytes(compressedBytes);
+      return tempFile;
+    } catch (_) {
+      return originalFile;
+    }
+  }
+
+  Future<String?> _uploadMedia(File file) async {
+    final uploadFile = await _prepareImageForUpload(file);
+    if (!await uploadFile.exists()) return null;
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    if (token == null) return null;
+
+    final filename = 'selfie_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final urlStr = '${ApiConfig.baseUrl}/media?prefix=attendance';
+
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse(urlStr));
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['alt'] = 'Attendance Selfie';
+      request.fields['prefix'] = 'attendance';
+
+      final multipartFile = await http.MultipartFile.fromPath(
+        'file',
+        uploadFile.path,
+        filename: filename,
+        contentType: MediaType('image', 'jpeg'),
+      );
+      request.files.add(multipartFile);
+
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(body);
+        final doc = data['doc'] ?? data;
+        return doc['id']?.toString();
+      }
+    } catch (e) {
+      debugPrint('Upload error: $e');
+    }
+    return null;
+  }
+
+  Future<void> _takePhotoAndPunchIn() async {
+    if (_hasActiveSession || _isProcessingPunch) {
+       ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('You are already punched in.')),
+       );
+       return;
+    }
+
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No camera found')),
+      );
+      return;
+    }
+
+    final XFile? capturedFile = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CameraPage(cameras: cameras, isFaceCapture: false),
+      ),
+    );
+
+    if (capturedFile != null) {
+      setState(() {
+        _isProcessingPunch = true;
+      });
+
+      final mediaId = await _uploadMedia(File(capturedFile.path));
+      if (mediaId != null) {
+        await _punchIn(mediaId);
+      } else {
+        setState(() {
+          _isProcessingPunch = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to upload selfie')),
+        );
+      }
+    }
+  }
+
+  Future<void> _punchIn(String mediaId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    final userId = prefs.getString('user_id');
+    if (token == null || userId == null) return;
+
+    final now = DateTime.now();
+    final newActivity = {
+      'type': 'session',
+      'punchIn': now.toUtc().toIso8601String(),
+      'status': 'active',
+      'capturedImage': mediaId,
+    };
+
+    try {
+      if (_attendanceDocId != null) {
+        // PATCH existing
+        final updatedActivities = List.from(_rawActivities)..add(newActivity);
+        final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+        final response = await http.patch(
+          Uri.parse(url),
+          headers: ApiConfig.getHeaders(token),
+          body: jsonEncode({'activities': updatedActivities}),
+        );
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Successfully punched in!')),
+          );
+          await _fetchAttendance();
+        }
+      } else {
+        // POST new
+        final localMidnight = DateTime(now.year, now.month, now.day);
+        final dateString = DateFormat('yyyy-MM-dd').format(localMidnight);
+        
+        // Find employee id from current user if needed, but attendance can just have user and no employee, or we fetch employee id.
+        // Actually the backend payload config creates attendance with `user`. We will just omit `employee` if we don't have it.
+        final url = '${ApiConfig.baseUrl}/attendance';
+        final response = await http.post(
+          Uri.parse(url),
+          headers: ApiConfig.getHeaders(token),
+          body: jsonEncode({
+            'user': userId,
+            'date': localMidnight.toUtc().toIso8601String(),
+            'dateString': dateString,
+            'activities': [newActivity],
+          }),
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Successfully punched in!')),
+          );
+          await _fetchAttendance();
+        }
+      }
+    } catch (e) {
+      debugPrint('Punch In Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingPunch = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _punchOut() async {
+    if (!_hasActiveSession || _attendanceDocId == null || _isProcessingPunch) return;
+    
+    setState(() {
+      _isProcessingPunch = true;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    if (token == null) return;
+
+    try {
+      final updatedActivities = List.from(_rawActivities);
+      
+      // Find the active session and close it
+      for (var i = updatedActivities.length - 1; i >= 0; i--) {
+        final activity = updatedActivities[i];
+        if (activity['type'] == 'session' && activity['status'] == 'active') {
+           final punchInTime = DateTime.parse(activity['punchIn']);
+           final punchOutTime = DateTime.now();
+           final durationSecs = punchOutTime.difference(punchInTime).inSeconds;
+           
+           activity['punchOut'] = punchOutTime.toUtc().toIso8601String();
+           activity['status'] = 'closed';
+           activity['durationSeconds'] = durationSecs;
+           break;
+        }
+      }
+
+      final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: ApiConfig.getHeaders(token),
+        body: jsonEncode({'activities': updatedActivities}),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Successfully punched out!')),
+        );
+        await _fetchAttendance();
+      }
+    } catch (e) {
+      debugPrint('Punch Out Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingPunch = false;
+        });
+      }
+    }
+  }
 
   Future<void> _confirmLogout() async {
     if (_isLoggingOut || !mounted) return;
@@ -330,30 +603,56 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding: const EdgeInsets.fromLTRB(24, 10, 24, 40),
                 child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey[300]!, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 20,
-                            spreadRadius: 5,
+                    GestureDetector(
+                      onTap: _takePhotoAndPunchIn,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _hasActiveSession ? Colors.green : Colors.grey[300]!,
+                                width: _hasActiveSession ? 3 : 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Colors.white,
+                              backgroundImage:
+                                  _employeePhotoUrl != null &&
+                                      _employeePhotoUrl!.isNotEmpty
+                                  ? NetworkImage(_employeePhotoUrl!)
+                                  : null,
+                              child: _employeePhotoUrl == null || _employeePhotoUrl!.isEmpty
+                                  ? Icon(Icons.person, size: 50, color: Colors.grey[400])
+                                  : null,
+                            ),
                           ),
+                          if (!_hasActiveSession && !_isProcessingPunch)
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          if (_isProcessingPunch)
+                            const CircularProgressIndicator(),
                         ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.white,
-                        backgroundImage:
-                            _employeePhotoUrl != null &&
-                                _employeePhotoUrl!.isNotEmpty
-                            ? NetworkImage(_employeePhotoUrl!)
-                            : null,
-                        child: _employeePhotoUrl == null || _employeePhotoUrl!.isEmpty
-                            ? Icon(Icons.person, size: 50, color: Colors.grey[400])
-                            : null,
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -562,15 +861,17 @@ class _ProfilePageState extends State<ProfilePage> {
                       width: double.infinity,
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFD32F2F),
+                          backgroundColor: _hasActiveSession ? Colors.orange[800] : const Color(0xFFD32F2F),
                           foregroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        onPressed: _isLoggingOut ? null : _confirmLogout,
-                        icon: _isLoggingOut
+                        onPressed: (_isLoggingOut || _isProcessingPunch) 
+                            ? null 
+                            : (_hasActiveSession ? _punchOut : _confirmLogout),
+                        icon: (_isLoggingOut || _isProcessingPunch)
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
@@ -581,9 +882,16 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ),
                                 ),
                               )
-                            : const Icon(Icons.logout_rounded, size: 20),
+                            : Icon(
+                                _hasActiveSession ? Icons.punch_clock : Icons.logout_rounded, 
+                                size: 20
+                              ),
                         label: Text(
-                          _isLoggingOut ? 'Logging out...' : 'Logout',
+                          _isProcessingPunch 
+                              ? 'Processing...' 
+                              : _isLoggingOut 
+                                  ? 'Logging out...' 
+                                  : (_hasActiveSession ? 'Punch Out' : 'Logout'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
