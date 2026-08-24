@@ -1,3 +1,5 @@
+import 'package:geolocator/geolocator.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -487,12 +489,25 @@ class _ProfilePageState extends State<ProfilePage> {
     final userId = prefs.getString('user_id');
     if (token == null || userId == null) return;
 
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      ).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('PunchIn location error: $e');
+    }
+
     final now = DateTime.now();
     final newActivity = {
       'type': 'session',
       'punchIn': now.toUtc().toIso8601String(),
       'status': 'active',
       'capturedImage': mediaId,
+      if (position != null) 'latitude': position.latitude,
+      if (position != null) 'longitude': position.longitude,
     };
 
     try {
