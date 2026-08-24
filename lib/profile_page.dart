@@ -36,6 +36,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isProcessingPunch = false;
   String? _attendanceDocId;
   bool _hasActiveSession = false;
+  File? _capturedPunchInPhoto;
   List<dynamic> _rawActivities = [];
 
   Timer? _timer;
@@ -371,7 +372,8 @@ class _ProfilePageState extends State<ProfilePage> {
     return null;
   }
 
-  Future<void> _takePhotoAndPunchIn() async {
+  
+  Future<void> _capturePhoto() async {
     if (_hasActiveSession || _isProcessingPunch) {
        ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('You are already punched in.')),
@@ -396,19 +398,41 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (capturedFile != null) {
       setState(() {
-        _isProcessingPunch = true;
+        _capturedPunchInPhoto = File(capturedFile.path);
       });
+    }
+  }
 
-      final mediaId = await _uploadMedia(File(capturedFile.path));
+  Future<void> _submitPunchIn() async {
+    if (_capturedPunchInPhoto == null || _hasActiveSession || _isProcessingPunch) return;
+    
+    setState(() {
+      _isProcessingPunch = true;
+    });
+
+    try {
+      final mediaId = await _uploadMedia(_capturedPunchInPhoto!);
       if (mediaId != null) {
         await _punchIn(mediaId);
+        if (mounted) {
+          setState(() {
+            _capturedPunchInPhoto = null;
+          });
+        }
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to upload selfie.')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Submit Punch In Error: $e');
+    } finally {
+      if (mounted) {
         setState(() {
           _isProcessingPunch = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to upload selfie')),
-        );
       }
     }
   }
@@ -638,7 +662,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   children: [
                     GestureDetector(
-                      onTap: _takePhotoAndPunchIn,
+                      onTap: _hasActiveSession ? null : _capturePhoto,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
@@ -661,12 +685,12 @@ class _ProfilePageState extends State<ProfilePage> {
                             child: CircleAvatar(
                               radius: 50,
                               backgroundColor: Colors.white,
-                              backgroundImage:
-                                  _employeePhotoUrl != null &&
-                                      _employeePhotoUrl!.isNotEmpty
-                                  ? NetworkImage(_employeePhotoUrl!)
-                                  : null,
-                              child: _employeePhotoUrl == null || _employeePhotoUrl!.isEmpty
+                              backgroundImage: _capturedPunchInPhoto != null
+                                  ? FileImage(_capturedPunchInPhoto!) as ImageProvider
+                                  : (_employeePhotoUrl != null && _employeePhotoUrl!.isNotEmpty
+                                      ? NetworkImage(_employeePhotoUrl!)
+                                      : null),
+                              child: _capturedPunchInPhoto == null && (_employeePhotoUrl == null || _employeePhotoUrl!.isEmpty)
                                   ? Icon(Icons.person, size: 50, color: Colors.grey[400])
                                   : null,
                             ),
@@ -684,8 +708,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                 child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
                               ),
                             ),
-                          if (_isProcessingPunch)
-                            const CircularProgressIndicator(),
                         ],
                       ),
                     ),
@@ -745,7 +767,42 @@ class _ProfilePageState extends State<ProfilePage> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+
                     const SizedBox(height: 16),
+                    if (!_hasActiveSession && _capturedPunchInPhoto != null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _isProcessingPunch ? null : _submitPunchIn,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: _isProcessingPunch
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.login, size: 20),
+                          label: Text(
+                            _isProcessingPunch ? 'Punching in...' : 'Punch In',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -855,7 +912,42 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                     ),
+
                     const SizedBox(height: 16),
+                    if (!_hasActiveSession && _capturedPunchInPhoto != null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _isProcessingPunch ? null : _submitPunchIn,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: _isProcessingPunch
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.login, size: 20),
+                          label: Text(
+                            _isProcessingPunch ? 'Punching in...' : 'Punch In',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
