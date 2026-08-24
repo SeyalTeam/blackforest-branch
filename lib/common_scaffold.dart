@@ -13,6 +13,7 @@ import 'package:branch/stock_provider.dart';
 import 'package:branch/instock_provider.dart';
 import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
+import 'package:branch/profile_page.dart';
 import 'package:branch/billsheet.dart';
 import 'package:branch/auth_service.dart'; // ADDED
 import 'package:branch/stock_alert_helper.dart';
@@ -603,6 +604,17 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           ),
                         ),
                     ],
+                  );
+                },
+              )
+            else if (widget.pageType == PageType.home)
+              IconButton(
+                icon: const Icon(Icons.person_outline),
+                onPressed: () {
+                  _resetTimer();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfilePage()),
                   );
                 },
               )
