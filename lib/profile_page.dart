@@ -390,7 +390,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final XFile? capturedFile = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CameraPage(cameras: cameras, isFaceCapture: false),
+        builder: (context) => CameraPage(cameras: cameras, isFaceCapture: true),
       ),
     );
 
