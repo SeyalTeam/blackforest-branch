@@ -66,6 +66,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
   Timer? _inactivityTimer;
   Timer? _stockAlertTimer;
   String _username = 'User';
+  String? _photoUrl;
   String _role = '';
   String _branchName = '';
   String? _stockAlertToken;
@@ -101,14 +102,17 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     final role = prefs.getString('role') ?? '';
     final branchName = prefs.getString('branchName') ?? '';
     final cashDrawerEnabled = prefs.getBool('cash_drawer_enabled') ?? true;
+    final photoUrl = prefs.getString('employee_photo_url');
     if (mounted) {
       setState(() {
         _username = (name.isEmpty || name == 'Menu') ? 'User' : name;
         _role = role;
         _branchName = branchName;
         _cashDrawerEnabled = cashDrawerEnabled;
+        _photoUrl = photoUrl;
       });
     }
+
   }
 
   Future<void> _initStockAlerts() async {
@@ -610,8 +614,14 @@ class _CommonScaffoldState extends State<CommonScaffold> {
               )
             else if (widget.pageType == PageType.home)
               IconButton(
-                icon: const Icon(Icons.person_outline),
+                icon: _photoUrl != null && _photoUrl!.isNotEmpty
+                    ? CircleAvatar(
+                        radius: 14,
+                        backgroundImage: NetworkImage(_photoUrl!),
+                      )
+                    : const Icon(Icons.person_outline),
                 onPressed: () {
+
                   _resetTimer();
                   Navigator.push(
                     context,
