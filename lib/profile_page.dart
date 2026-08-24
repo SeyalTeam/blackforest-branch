@@ -467,21 +467,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           await _fetchAttendance();
 
-        // POST to new punchin collection
-        try {
-          final punchInUrl = '${ApiConfig.baseUrl}/punchin';
-          await http.post(
-            Uri.parse(punchInUrl),
-            headers: ApiConfig.getHeaders(token),
-            body: jsonEncode({
-              'user': userId,
-              'date': now.toUtc().toIso8601String(),
-              'photo': mediaId,
-            }),
-          );
-        } catch (e) {
-          debugPrint('Error creating punchin record: $e');
-        }
 
         }
       } else {
@@ -508,21 +493,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           await _fetchAttendance();
 
-        // POST to new punchin collection
-        try {
-          final punchInUrl = '${ApiConfig.baseUrl}/punchin';
-          await http.post(
-            Uri.parse(punchInUrl),
-            headers: ApiConfig.getHeaders(token),
-            body: jsonEncode({
-              'user': userId,
-              'date': now.toUtc().toIso8601String(),
-              'photo': mediaId,
-            }),
-          );
-        } catch (e) {
-          debugPrint('Error creating punchin record: $e');
-        }
 
         }
       }
