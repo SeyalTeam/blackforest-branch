@@ -279,6 +279,21 @@ class _LoginPageState extends State<LoginPage> {
                 await prefs.setString('employee_name', empName);
               }
 
+              final photo = emp['photo'];
+              String? photoUrl;
+              if (photo is Map) {
+                photoUrl = photo['thumbnailURL']?.toString() ??
+                           photo['thumbnailUrl']?.toString() ??
+                           photo['url']?.toString();
+              } else if (photo is String) {
+                photoUrl = photo;
+              }
+              if (photoUrl != null && photoUrl.isNotEmpty) {
+                final resolvedPhotoUrl = resolveApiAssetUrl(photoUrl);
+                await prefs.setString('employee_photo_url', resolvedPhotoUrl);
+              }
+
+
               final empCode =
                   emp['employeeId']?.toString() ??
                   emp['employeeID']?.toString() ??
@@ -1452,6 +1467,21 @@ class _LoginPageState extends State<LoginPage> {
             if (empName != null && empName.isNotEmpty) {
               backgroundWrites.add(prefs.setString('employee_name', empName));
             }
+            
+            final photo = emp['photo'];
+            String? photoUrl;
+            if (photo is Map) {
+              photoUrl = photo['thumbnailURL']?.toString() ??
+                         photo['thumbnailUrl']?.toString() ??
+                         photo['url']?.toString();
+            } else if (photo is String) {
+              photoUrl = photo;
+            }
+            if (photoUrl != null && photoUrl.isNotEmpty) {
+              final resolvedPhotoUrl = resolveApiAssetUrl(photoUrl);
+              backgroundWrites.add(prefs.setString('employee_photo_url', resolvedPhotoUrl));
+            }
+
             final empCode =
                 emp['employeeId']?.toString() ??
                 emp['employeeID']?.toString() ??

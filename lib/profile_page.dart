@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_config.dart';
+import 'api_server_prefs.dart';
 import 'auth_service.dart';
 import 'camera_page.dart';
 import 'common_scaffold.dart';
@@ -97,6 +98,7 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     });
 
+    await _fetchEmployeeProfile();
     await _fetchAttendance();
   }
 
@@ -133,7 +135,49 @@ class _ProfilePageState extends State<ProfilePage> {
     return 0;
   }
 
+
+  Future<void> _fetchEmployeeProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    final employeeId = prefs.getString('employee_id');
+
+    if (token == null || employeeId == null) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/employees/$employeeId'),
+        headers: ApiConfig.getHeaders(token),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final photo = data['photo'];
+        String? photoUrl;
+        if (photo is Map) {
+          photoUrl = photo['thumbnailURL']?.toString() ??
+                     photo['thumbnailUrl']?.toString() ??
+                     photo['url']?.toString();
+        } else if (photo is String) {
+          photoUrl = photo;
+        }
+
+        if (photoUrl != null && photoUrl.isNotEmpty) {
+          final resolvedUrl = resolveApiAssetUrl(photoUrl);
+          await prefs.setString('employee_photo_url', resolvedUrl);
+          if (mounted) {
+            setState(() {
+              _employeePhotoUrl = resolvedUrl;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching employee profile: $e');
+    }
+  }
+
   Future<void> _fetchAttendance() async {
+
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
     final userId = prefs.getString('user_id');
@@ -465,7 +509,8 @@ class _ProfilePageState extends State<ProfilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Successfully punched in!')),
           );
-          await _fetchAttendance();
+          await _fetchEmployeeProfile();
+    await _fetchAttendance();
 
 
         }
@@ -491,7 +536,8 @@ class _ProfilePageState extends State<ProfilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Successfully punched in!')),
           );
-          await _fetchAttendance();
+          await _fetchEmployeeProfile();
+    await _fetchAttendance();
 
 
         }
@@ -547,7 +593,8 @@ class _ProfilePageState extends State<ProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Successfully punched out!')),
         );
-        await _fetchAttendance();
+        await _fetchEmployeeProfile();
+    await _fetchAttendance();
       }
     } catch (e) {
       debugPrint('Punch Out Error: $e');
