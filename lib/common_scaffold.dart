@@ -35,6 +35,7 @@ enum PageType {
   dealerBilling, // NEW
   cake, // NEW
   employee,
+  profile,
 }
 
 enum _StockAlertDialogAction { acknowledge, updateOutOfStock }
@@ -618,7 +619,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                   );
                 },
               )
-            else if (widget.pageType != PageType.stockstatus && widget.pageType != PageType.employee)
+            else if (widget.pageType != PageType.stockstatus && widget.pageType != PageType.employee&& widget.pageType != PageType.employee widget.pageType != PageType.employee && widget.pageType != PageType.profile)
               Consumer<CartProvider>(
                 builder: (_, cartProvider, __) {
                   final int count = cartProvider.cartItems.length;
