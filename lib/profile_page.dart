@@ -801,40 +801,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
 
                     const SizedBox(height: 16),
-                    if (!_hasActiveSession && _capturedPunchInPhoto != null) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: _isProcessingPunch ? null : _submitPunchIn,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          icon: _isProcessingPunch
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.login, size: 20),
-                          label: Text(
-                            _isProcessingPunch ? 'Punching in...' : 'Punch In',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
@@ -13,7 +14,6 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'api_config.dart';
 import 'camera_page.dart';
 import 'common_scaffold.dart';
-import 'attendance_camera_page.dart';
 
 class EmployeePhotoPage extends StatefulWidget {
   const EmployeePhotoPage({super.key});
@@ -119,15 +119,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
     return _extractRole(_employeeDoc!);
   }
 
-  Future<File> _prepareImageForUpload(File originalFile) async {
+  static Future<List<int>?> _compressImageIsolate(List<int> bytes) async {
     try {
-      if (!await originalFile.exists()) return originalFile;
-      final length = await originalFile.length();
-      if (length < 1500 * 1024) return originalFile;
-
-      final bytes = await originalFile.readAsBytes();
-      final image = img_lib.decodeImage(bytes);
-      if (image == null) return originalFile;
+      final image = img_lib.decodeImage(Uint8List.fromList(bytes));
+      if (image == null) return null;
 
       img_lib.Image resized = image;
       if (image.width > 1280 || image.height > 1280) {
@@ -137,7 +132,25 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
           resized = img_lib.copyResize(image, height: 1280);
         }
       }
-      final compressedBytes = img_lib.encodeJpg(resized, quality: 70);
+      return img_lib.encodeJpg(resized, quality: 70);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<File> _prepareImageForUpload(File originalFile) async {
+    try {
+      if (!await originalFile.exists()) return originalFile;
+      final length = await originalFile.length();
+      if (length < 1500 * 1024) return originalFile;
+
+      final bytes = await originalFile.readAsBytes();
+      
+      // Run the heavy image decode/encode in a background isolate
+      final compressedBytes = await compute(_compressImageIsolate, bytes);
+      
+      if (compressedBytes == null) return originalFile;
+
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final tempFile = File('${tempDir.path}/opt_employee_$timestamp.jpg');
@@ -332,37 +345,6 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ElevatedButton.icon(
-              onPressed: () async {
-                final cameras = await availableCameras();
-                if (cameras.isEmpty) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('No camera found on this device')),
-                    );
-                  }
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AttendanceCameraPage(
-                      cameras: cameras,
-                      employees: _allEmployees,
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.fingerprint), // or face icon
-              label: const Text('Take Attendance (Face Scan)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 24),
             
             const Text(
               'Search for an Employee to update their photo',

@@ -56,6 +56,24 @@ class _CameraPageState extends State<CameraPage> {
       _initialCameraSet = true;
     }
 
+    // Dispose old controller if exists to free resources before initializing new one
+    final oldController = _controller;
+    if (oldController != null) {
+      _controller = null;
+      try {
+        if (oldController.value.isStreamingImages) {
+          await oldController.stopImageStream();
+        }
+      } catch (e) {
+        debugPrint('Error stopping image stream: $e');
+      }
+      try {
+        await oldController.dispose();
+      } catch (e) {
+        debugPrint('Error disposing old controller: $e');
+      }
+    }
+
     final controller = CameraController(
       widget.cameras[_selectedCameraIndex],
       ResolutionPreset.medium,
@@ -212,7 +230,13 @@ class _CameraPageState extends State<CameraPage> {
 
     try {
       if (widget.isFaceCapture && controller.value.isStreamingImages) {
-        await controller.stopImageStream();
+        try {
+          await controller.stopImageStream();
+        } catch (e) {
+          debugPrint('Error stopping image stream: $e');
+        }
+        // Add a small delay to let the camera session stabilize
+        await Future.delayed(const Duration(milliseconds: 300));
       }
       final XFile file = await controller.takePicture();
       if (mounted) {

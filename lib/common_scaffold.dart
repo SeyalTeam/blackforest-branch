@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart'; // Added for camera permission handling
 
+import 'package:branch/api_config.dart';
 import 'package:branch/categories_page.dart';
 import 'package:branch/cart_page.dart';
 import 'package:branch/cart_provider.dart';
@@ -15,6 +18,7 @@ import 'package:branch/return_provider.dart'; // Re-adding ReturnProvider import
 import 'package:branch/home.dart';
 import 'package:branch/profile_page.dart';
 import 'package:branch/billsheet.dart';
+import 'package:branch/chat_page.dart';
 import 'package:branch/auth_service.dart'; // ADDED
 import 'package:branch/stock_alert_helper.dart';
 import 'package:branch/printer/bluetooth_printer_settings_page.dart';
@@ -36,17 +40,26 @@ enum PageType {
   cake, // NEW
   employee,
   profile,
+  chat,
 }
 
 enum _StockAlertDialogAction { acknowledge, updateOutOfStock }
 
 class CommonScaffold extends StatefulWidget {
+  static final ValueNotifier<int> unreadChatNotifier = ValueNotifier<int>(0);
+
+  static void setUnreadChatCount(int count) {
+    unreadChatNotifier.value = count;
+  }
+
   final String title;
   final Widget body;
   final Function(String)? onScanCallback;
   final PageType pageType;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom; // NEW
+  final bool showAppBar;
+  final bool hideBottomNavigationBar;
 
   const CommonScaffold({
     super.key,
@@ -56,6 +69,8 @@ class CommonScaffold extends StatefulWidget {
     required this.pageType,
     this.actions,
     this.bottom, // NEW
+    this.showAppBar = true,
+    this.hideBottomNavigationBar = false,
   });
 
   @override
@@ -65,6 +80,8 @@ class CommonScaffold extends StatefulWidget {
 class _CommonScaffoldState extends State<CommonScaffold> {
   Timer? _inactivityTimer;
   Timer? _stockAlertTimer;
+  Timer? _chatUnreadTimer;
+  static String? _cachedChatThreadId;
   String _username = 'User';
   String? _photoUrl;
   String _role = '';
@@ -83,12 +100,14 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     _loadUsername();
     _resetTimer();
     _initStockAlerts();
+    _initChatUnreadCheck();
   }
 
   @override
   void dispose() {
     _inactivityTimer?.cancel();
     _stockAlertTimer?.cancel();
+    _chatUnreadTimer?.cancel();
     super.dispose();
   }
 
@@ -130,6 +149,95 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     _stockAlertTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _checkStockAlerts();
     });
+  }
+
+  Future<void> _initChatUnreadCheck() async {
+    if (widget.pageType == PageType.chat) {
+      CommonScaffold.setUnreadChatCount(0);
+      return;
+    }
+    await _checkUnreadChatMessages();
+    _chatUnreadTimer?.cancel();
+    _chatUnreadTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && widget.pageType != PageType.chat) {
+        _checkUnreadChatMessages();
+      }
+    });
+  }
+
+  Future<void> _checkUnreadChatMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token')?.trim();
+      if (token == null || token.isEmpty) return;
+
+      var userId = prefs.getString('user_id')?.trim();
+      if (userId == null || userId.isEmpty) {
+        final meRes = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/users/me?depth=0'),
+          headers: ApiConfig.getHeaders(token),
+        );
+        if (meRes.statusCode == 200) {
+          final decoded = jsonDecode(meRes.body);
+          final rawUser = decoded is Map ? (decoded['user'] ?? decoded) : null;
+          if (rawUser is Map) {
+            userId = (rawUser['id'] ?? rawUser['_id'])?.toString().trim();
+            if (userId != null && userId.isNotEmpty) {
+              await prefs.setString('user_id', userId);
+            }
+          }
+        }
+      }
+
+      if (userId == null || userId.isEmpty) return;
+
+      if (_cachedChatThreadId == null || _cachedChatThreadId!.isEmpty) {
+        final threadRes = await http.get(
+          Uri.parse(
+            '${ApiConfig.baseUrl}/message-threads?limit=1&depth=0&where[staffUser][equals]=$userId',
+          ),
+          headers: ApiConfig.getHeaders(token),
+        );
+        if (threadRes.statusCode == 200) {
+          final data = jsonDecode(threadRes.body);
+          final docs = data['docs'] as List?;
+          if (docs != null && docs.isNotEmpty) {
+            _cachedChatThreadId =
+                (docs.first['id'] ?? docs.first['_id'])?.toString().trim();
+          }
+        }
+      }
+
+      final queryParams = <String, String>{
+        'limit': '100',
+        'depth': '0',
+        'where[recipientAudience][equals]': 'staff',
+        'where[status][not_equals]': 'read',
+      };
+      if (_cachedChatThreadId != null && _cachedChatThreadId!.isNotEmpty) {
+        queryParams['where[thread][equals]'] = _cachedChatThreadId!;
+      }
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/message-receipts').replace(
+        queryParameters: queryParams,
+      );
+
+      final receiptsRes = await http.get(
+        uri,
+        headers: ApiConfig.getHeaders(token),
+      );
+
+      if (receiptsRes.statusCode == 200) {
+        final data = jsonDecode(receiptsRes.body);
+        final count =
+            data['totalDocs'] as int? ?? (data['docs'] as List?)?.length ?? 0;
+        if (mounted && widget.pageType != PageType.chat) {
+          CommonScaffold.setUnreadChatCount(count);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking unread chat messages: $e');
+    }
   }
 
   void _resetTimer() {
@@ -451,21 +559,22 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     return GestureDetector(
       onTap: _resetTimer,
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 1,
-          title: Text(
-            widget.title,
-            style: const TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          iconTheme: const IconThemeData(color: Colors.black),
-          actionsIconTheme: const IconThemeData(color: Colors.black),
-          bottom: widget.bottom, // NEW
-          actions: [
-            ...?widget.actions,
+        appBar: widget.showAppBar
+            ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 1,
+                title: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                iconTheme: const IconThemeData(color: Colors.black),
+                actionsIconTheme: const IconThemeData(color: Colors.black),
+                bottom: widget.bottom, // NEW
+                actions: [
+                  ...?widget.actions,
             if (widget.pageType == PageType.instock)
               Consumer<InstockProvider>(
                 // NEW CONSUMER for Instock
@@ -629,7 +738,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                   );
                 },
               )
-            else if (widget.pageType != PageType.stockstatus && widget.pageType != PageType.employee && widget.pageType != PageType.profile)
+            else if (widget.pageType != PageType.stockstatus && widget.pageType != PageType.employee && widget.pageType != PageType.profile && widget.pageType != PageType.chat)
               Consumer<CartProvider>(
                 builder: (_, cartProvider, __) {
                   final int count = cartProvider.cartItems.length;
@@ -674,7 +783,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                 },
               ),
           ],
-        ),
+        )
+      : null,
 
         drawer: Drawer(
           child: ListView(
@@ -801,7 +911,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         body: widget.body,
 
         bottomNavigationBar:
-            (widget.pageType == PageType.stock)
+            (widget.hideBottomNavigationBar ||
+                    widget.pageType == PageType.stock ||
+                    widget.pageType == PageType.chat)
                 ? null
                 : Container(
                   decoration: const BoxDecoration(
@@ -853,12 +965,18 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                           ),
                         ),
 
-                        /// BILLSHEET
-                        _buildNavItem(
-                          icon: Icons.description_rounded,
-                          label: "BillSheet",
-                          page: const BillSheetPage(),
-                          type: PageType.billsheet,
+                        /// CHAT
+                        ValueListenableBuilder<int>(
+                          valueListenable: CommonScaffold.unreadChatNotifier,
+                          builder: (context, unreadCount, _) {
+                            return _buildNavItem(
+                              icon: Icons.forum_rounded,
+                              label: "Chat",
+                              page: const ChatPage(),
+                              type: PageType.chat,
+                              badgeCount: unreadCount,
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -873,9 +991,11 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     required String label,
     required Widget page,
     required PageType type,
+    int badgeCount = 0,
   }) {
     final bool isSelected = widget.pageType == type;
-    final Color itemColor = isSelected ? const Color(0xFF4A1A12) : const Color(0xFF64748B);
+    final Color itemColor =
+        isSelected ? const Color(0xFF4A1A12) : const Color(0xFF64748B);
     return GestureDetector(
       onTap: () {
         _resetTimer();
@@ -888,10 +1008,52 @@ class _CommonScaffoldState extends State<CommonScaffold> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 32,
-            color: itemColor,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                icon,
+                size: 32,
+                color: itemColor,
+              ),
+              if (badgeCount > 0)
+                Positioned(
+                  right: -6,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        height: 1.1,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           Text(
             label,
