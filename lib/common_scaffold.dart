@@ -152,14 +152,10 @@ class _CommonScaffoldState extends State<CommonScaffold> {
   }
 
   Future<void> _initChatUnreadCheck() async {
-    if (widget.pageType == PageType.chat) {
-      CommonScaffold.setUnreadChatCount(0);
-      return;
-    }
     await _checkUnreadChatMessages();
     _chatUnreadTimer?.cancel();
     _chatUnreadTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted && widget.pageType != PageType.chat) {
+      if (mounted) {
         _checkUnreadChatMessages();
       }
     });
@@ -231,7 +227,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         final data = jsonDecode(receiptsRes.body);
         final count =
             data['totalDocs'] as int? ?? (data['docs'] as List?)?.length ?? 0;
-        if (mounted && widget.pageType != PageType.chat) {
+        if (mounted) {
           CommonScaffold.setUnreadChatCount(count);
         }
       }
