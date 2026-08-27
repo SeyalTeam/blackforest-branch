@@ -1,7 +1,7 @@
 import 'dart:async';
 
-const String apiHostPrimary = 'dev1-blacforest.vseyal.com';
-const String apiHostFallback = 'dev1-blacforest.vseyal.com';
+const String apiHostPrimary = 'blackforest.vseyal.com';
+const String apiHostFallback = 'blackforest.vseyal.com';
 
 String _normalizeHost(String? value) {
   var normalized = (value ?? '').trim().toLowerCase();
