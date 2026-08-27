@@ -54,7 +54,7 @@ class ChatPage extends StatefulWidget {
         return count;
       }
     } catch (e) {
-      debugPrint('Error checking unread chat messages in branch: $e');
+      debugPrint('Error checking unread chat messages in branch: ' + e.toString());
     }
     return 0;
   }
@@ -205,7 +205,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         if (thread != null) return thread;
       }
     } catch (e) {
-      debugPrint('Error creating message thread: $e');
+      debugPrint('Error creating message thread: ' + e.toString());
     }
 
     return await _fetchThreadByStaffUser(token, currentUserId);
@@ -420,14 +420,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     try {
       final response = await http.patch(
-        _apiUri('/api/message-receipts/${receipt.id}'),
+        _apiUri('/api/message-receipts/' + receipt.id),
         headers: _authHeaders(token, json: true),
         body: jsonEncode({'status': status}),
       );
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         debugPrint(
-          'Chat receipt update failed for ${receipt.id}: ${response.statusCode}',
+          'Chat receipt update failed for ' + receipt.id + ': ' + response.statusCode.toString(),
         );
         return null;
       }
@@ -435,7 +435,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return _MessageReceiptSummary.fromJson(_decodeResponse(response)) ??
           receipt.copyWith(status: status);
     } catch (error) {
-      debugPrint('Chat receipt update error for ${receipt.id}: $error');
+      debugPrint('Chat receipt update error for ' + receipt.id + ': ' + error.toString());
       return null;
     }
   }
@@ -587,7 +587,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     final threadId = thread.id;
     final localSeq = _nextOptimisticSeq();
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}-$localSeq';
+    final localId = 'local-' + DateTime.now().microsecondsSinceEpoch.toString() + '-' + localSeq.toString();
     final optimisticMessage = _ChatMessage(
       id: localId,
       threadId: threadId,
@@ -858,7 +858,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
               SizedBox(height: 6),
               Text(
-                'Send a message to reach management directly.\nMessages will appear in real time.',
+                'Send a message to reach management directly.
+Messages will appear in real time.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
               ),
@@ -1350,13 +1351,13 @@ Future<_MessageThreadSummary?> _fetchThreadByStaffUser(
 }
 
 Uri _apiUri(String path, {Map<String, String>? queryParameters}) {
-  final cleanPath = path.startsWith('/') ? path : '/$path';
+  final cleanPath = path.startsWith('/') ? path : '/' + path;
   return Uri.https(apiHostPrimary, cleanPath, queryParameters);
 }
 
 Map<String, String> _authHeaders(String token, {bool json = false}) {
   return {
-    'Authorization': 'Bearer $token',
+    'Authorization': 'Bearer ' + token,
     if (json) 'Content-Type': 'application/json',
   };
 }
@@ -1375,7 +1376,7 @@ Map<String, dynamic>? _decodeResponse(http.Response response) {
 
 String _responseMessage(http.Response response, String fallback) {
   final decoded = _decodeResponse(response);
-  if (decoded == null) return '$fallback (${response.statusCode})';
+  if (decoded == null) return fallback + ' (' + response.statusCode.toString() + ')';
 
   final directMessage = _stringValue(decoded['message']);
   if (directMessage != null && directMessage.isNotEmpty) {
@@ -1394,7 +1395,7 @@ String _responseMessage(http.Response response, String fallback) {
     }
   }
 
-  return '$fallback (${response.statusCode})';
+  return fallback + ' (' + response.statusCode.toString() + ')';
 }
 
 String _normalizeError(Object error) {
