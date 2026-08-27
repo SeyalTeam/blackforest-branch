@@ -858,8 +858,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
               SizedBox(height: 6),
               Text(
-                'Send a message to reach management directly.
-Messages will appear in real time.',
+                'Send a message to reach management directly.\nMessages will appear in real time.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
               ),
