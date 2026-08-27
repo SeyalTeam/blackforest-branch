@@ -2,784 +2,72 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:branch/api_config.dart';
-import 'package:branch/common_scaffold.dart';
-import 'package:branch/home.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const Duration _chatPollInterval = Duration(seconds: 20);
+import 'api_server_prefs.dart';
+import 'common_scaffold.dart';
+
+const Duration _chatPollInterval = Duration(seconds: 15);
 const Color _whatsAppGreen = Color(0xFF25D366);
 const Color _whatsAppDarkGreen = Color(0xFF075E54);
-const Color _whatsAppHeaderShadow = Color(0x14000000);
 const Color _whatsAppOutgoingBubble = Color(0xFFD9FDD3);
 const Color _whatsAppWallpaperBase = Color(0xFFEDE3D1);
 const Color _whatsAppWallpaperIcon = Color(0xFFB6A88F);
 
-class ChatContact {
-  final String id;
-  final String name;
-  final String role;
-  final String? email;
-  final String? photoUrl;
-  final bool isAdmin;
-  final String? staffUserId;
-
-  const ChatContact({
-    required this.id,
-    required this.name,
-    required this.role,
-    this.email,
-    this.photoUrl,
-    this.isAdmin = false,
-    this.staffUserId,
-  });
-
-  static const admin = ChatContact(
-    id: 'admin',
-    name: 'Admin',
-    role: 'Management',
-    isAdmin: true,
-  );
-
-  String get initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return isAdmin ? 'AD' : 'EM';
-    if (parts.length == 1) {
-      return parts.first.characters.take(2).toString().toUpperCase();
-    }
-    return '${parts[0].characters.take(1)}${parts[1].characters.take(1)}'.toUpperCase();
-  }
-
-  Color get roleColor {
-    final r = role.toLowerCase();
-    if (r.contains('admin')) return const Color(0xFF7A1530);
-    if (r.contains('chef')) return const Color(0xFFD97706);
-    if (r.contains('driver') || r.contains('delivery')) return const Color(0xFF2563EB);
-    if (r.contains('cashier')) return const Color(0xFF059669);
-    if (r.contains('manager')) return const Color(0xFF7C3AED);
-    if (r.contains('supervisor')) return const Color(0xFF0D9488);
-    if (r.contains('waiter')) return const Color(0xFFDB2777);
-    if (r.contains('store')) return const Color(0xFFEA580C);
-    if (r.contains('kitchen')) return const Color(0xFFC026D3);
-    return const Color(0xFF4B5563);
-  }
-}
-
-class _ConversationItem {
-  final ChatContact contact;
-  final _ChatMessage? lastMessage;
-  final int unreadCount;
-
-  const _ConversationItem({
-    required this.contact,
-    this.lastMessage,
-    this.unreadCount = 0,
-  });
-}
-
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
+
+  static final ValueNotifier<int> unreadChatNotifier = ValueNotifier<int>(0);
+
+  static void setUnreadChatCount(int count) {
+    unreadChatNotifier.value = count;
+    CommonScaffold.setUnreadChatCount(count);
+  }
+
+  static Future<int> checkUnreadChatCount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token')?.trim();
+      if (token == null || token.isEmpty) return 0;
+
+      final receiptsRes = await http.get(
+        _apiUri(
+          '/api/message-receipts',
+          queryParameters: {
+            'limit': '500',
+            'depth': '0',
+            'where[recipientAudience][equals]': 'staff',
+            'where[status][not_equals]': 'read',
+          },
+        ),
+        headers: _authHeaders(token),
+      );
+
+      if (receiptsRes.statusCode == 200) {
+        final data = _decodeResponse(receiptsRes);
+        final count =
+            data?['totalDocs'] as int? ?? (data?['docs'] as List?)?.length ?? 0;
+        setUnreadChatCount(count);
+        return count;
+      }
+    } catch (e) {
+      debugPrint('Error checking unread chat messages in branch: $e');
+    }
+    return 0;
+  }
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
-  List<ChatContact> _allContacts = const [];
-  List<_ChatMessage> _allMessages = const [];
-  List<_ConversationItem> _conversationItems = const [];
-  bool _isLoading = true;
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearchOpen = false;
-  Timer? _pollTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim().toLowerCase();
-      });
-    });
-    _loadInboxData();
-    _startPolling();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _pollTimer?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _loadInboxData(showLoader: false);
-    }
-  }
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_chatPollInterval, (_) {
-      _loadInboxData(showLoader: false);
-    });
-  }
-
-  Future<void> _loadInboxData({bool showLoader = true}) async {
-    if (showLoader && mounted) {
-      setState(() => _isLoading = true);
-    }
-
-    try {
-      final token = await _readToken();
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id')?.trim();
-
-      final responses = await Future.wait([
-        http.get(
-          _apiUri(
-            '/api/employees',
-            queryParameters: {'limit': '200', 'depth': '1', 'sort': 'name'},
-          ),
-          headers: _authHeaders(token),
-        ),
-        http.get(
-          _apiUri(
-            '/api/users',
-            queryParameters: {'limit': '200', 'depth': '1', 'sort': 'name'},
-          ),
-          headers: _authHeaders(token),
-        ),
-        http.get(
-          _apiUri(
-            '/api/messages',
-            queryParameters: {'limit': '500', 'depth': '0', 'sort': '-createdAt'},
-          ),
-          headers: _authHeaders(token),
-        ),
-        http.get(
-          _apiUri(
-            '/api/message-receipts',
-            queryParameters: {
-              'limit': '500',
-              'depth': '0',
-              'where[recipientAudience][equals]': 'staff',
-              'where[status][not_equals]': 'read',
-            },
-          ),
-          headers: _authHeaders(token),
-        ),
-        if (userId != null && userId.isNotEmpty)
-          http.get(
-            _apiUri(
-              '/api/message-threads',
-              queryParameters: {
-                'limit': '1',
-                'depth': '0',
-                'where[staffUser][equals]': userId,
-              },
-            ),
-            headers: _authHeaders(token),
-          ),
-      ]);
-
-      final employeesRes = responses[0];
-      final usersRes = responses[1];
-      final messagesRes = responses[2];
-      final receiptsRes = responses[3];
-
-      String? currentUserThreadId;
-      if (responses.length > 4 && responses[4].statusCode == 200) {
-        final threadData = _decodeResponse(responses[4]);
-        final threadDocs = (threadData?['docs'] as List?) ?? [];
-        if (threadDocs.isNotEmpty) {
-          currentUserThreadId = _relationshipId(threadDocs.first);
-        }
-      }
-
-      final Set<String> unreadMessageIds = {};
-      if (receiptsRes.statusCode == 200) {
-        final decodedReceipts = _decodeResponse(receiptsRes);
-        final docs = (decodedReceipts?['docs'] as List?) ?? [];
-        for (final doc in docs) {
-          if (doc is Map<String, dynamic>) {
-            final mId = _relationshipId(doc['message']);
-            if (mId != null && mId.isNotEmpty) {
-              unreadMessageIds.add(mId);
-            }
-          }
-        }
-      }
-
-      final Map<String, dynamic> staffUsersByEmployeeId = {};
-      final Map<String, dynamic> staffUsersById = {};
-
-      if (usersRes.statusCode == 200) {
-        final decoded = _decodeResponse(usersRes);
-        final docs = (decoded?['docs'] as List?) ?? [];
-        for (final doc in docs) {
-          if (doc is Map<String, dynamic>) {
-            final uid = (doc['id'] ?? doc['_id'])?.toString();
-            final empId = _relationshipId(doc['employee']);
-            if (uid != null) {
-              staffUsersById[uid] = doc;
-            }
-            if (empId != null) {
-              staffUsersByEmployeeId[empId] = doc;
-            }
-          }
-        }
-      }
-
-      final List<ChatContact> contacts = [];
-
-      if (employeesRes.statusCode == 200) {
-        final decoded = _decodeResponse(employeesRes);
-        final docs = (decoded?['docs'] as List?) ?? [];
-        for (final doc in docs) {
-          if (doc is Map<String, dynamic>) {
-            final id = (doc['id'] ?? doc['_id'])?.toString() ?? '';
-            final name = (doc['name'] ?? '').toString().trim();
-            final role = (doc['team'] ?? doc['role'] ?? 'Staff').toString().trim();
-            final email = (doc['email'] ?? '').toString().trim();
-
-            final matchingUser = staffUsersByEmployeeId[id];
-            final staffUid = matchingUser != null
-                ? (matchingUser['id'] ?? matchingUser['_id'])?.toString()
-                : null;
-
-            if (name.isNotEmpty) {
-              contacts.add(
-                ChatContact(
-                  id: id,
-                  name: name,
-                  role: role.isEmpty ? 'Staff' : role,
-                  email: email.isNotEmpty ? email : null,
-                  staffUserId: staffUid,
-                ),
-              );
-            }
-          }
-        }
-      }
-
-      if (contacts.isEmpty && staffUsersById.isNotEmpty) {
-        for (final entry in staffUsersById.entries) {
-          final doc = entry.value;
-          final name = (doc['name'] ?? doc['username'] ?? '').toString().trim();
-          final role = (doc['role'] ?? 'Staff').toString().trim();
-          if (name.isNotEmpty &&
-              role.toLowerCase() != 'admin' &&
-              role.toLowerCase() != 'superadmin') {
-            contacts.add(
-              ChatContact(
-                id: entry.key,
-                name: name,
-                role: role,
-                staffUserId: entry.key,
-              ),
-            );
-          }
-        }
-      }
-
-      contacts.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
-      List<_ChatMessage> messages = [];
-      if (messagesRes.statusCode == 200) {
-        final decoded = _decodeResponse(messagesRes);
-        final docs = (decoded?['docs'] as List?) ?? [];
-        messages = docs
-            .map(_ChatMessage.fromJson)
-            .whereType<_ChatMessage>()
-            .toList(growable: false);
-      }
-
-      // Group messages by contact and count unread
-      final Map<String, _ChatMessage> latestMessageByContact = {};
-      final Map<String, int> unreadCountByContact = {};
-
-      for (final msg in messages) {
-        final text = msg.text;
-        String? matchedContactId;
-        // Check if message is tagged with a recipient [@Name • Role]
-        if (text.startsWith('[@') && text.contains(']')) {
-          final endIdx = text.indexOf(']');
-          final tag = text.substring(2, endIdx).toLowerCase();
-          for (final c in contacts) {
-            if (tag.contains(c.name.toLowerCase()) ||
-                tag.contains(c.role.toLowerCase())) {
-              matchedContactId = c.id;
-              break;
-            }
-          }
-        } else {
-          // Untagged messages: only associate with Admin IF it belongs to currentUser's thread or sender is currentUser
-          if (currentUserThreadId != null && msg.threadId == currentUserThreadId) {
-            matchedContactId = 'admin';
-          } else if (msg.senderUserId != null && msg.senderUserId == userId) {
-            matchedContactId = 'admin';
-          }
-        }
-
-        if (matchedContactId != null) {
-          if (!latestMessageByContact.containsKey(matchedContactId)) {
-            latestMessageByContact[matchedContactId] = msg;
-          }
-          if (unreadMessageIds.contains(msg.id) &&
-              msg.senderUserId != userId &&
-              msg.senderRole != 'staff') {
-            unreadCountByContact[matchedContactId] =
-                (unreadCountByContact[matchedContactId] ?? 0) + 1;
-          }
-        }
-      }
-
-      int totalUnread = 0;
-      for (final count in unreadCountByContact.values) {
-        totalUnread += count;
-      }
-      CommonScaffold.setUnreadChatCount(totalUnread);
-
-      // Build conversations list
-      final List<_ConversationItem> conversations = [];
-
-      // Always include Admin
-      conversations.add(
-        _ConversationItem(
-          contact: ChatContact.admin,
-          lastMessage: latestMessageByContact['admin'],
-          unreadCount: unreadCountByContact['admin'] ?? 0,
-        ),
-      );
-
-      // Add contacts that have message history
-      for (final c in contacts) {
-        if (latestMessageByContact.containsKey(c.id)) {
-          conversations.add(
-            _ConversationItem(
-              contact: c,
-              lastMessage: latestMessageByContact[c.id],
-              unreadCount: unreadCountByContact[c.id] ?? 0,
-            ),
-          );
-        }
-      }
-
-      // Sort conversations: latest message first!
-      conversations.sort((a, b) {
-        final aTime = a.lastMessage?.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bTime = b.lastMessage?.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bTime.compareTo(aTime);
-      });
-
-      if (mounted) {
-        setState(() {
-          _allContacts = contacts;
-          _allMessages = messages;
-          _conversationItems = conversations;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading chat inbox in branch: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  void _openChatWithContact(ChatContact contact) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _EmployeeChatScreen(
-          contact: contact,
-          allContacts: _allContacts,
-        ),
-      ),
-    ).then((_) {
-      _loadInboxData(showLoader: false);
-      CommonScaffold.checkUnreadChatCount();
-    });
-  }
-
-  void _openContactsModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _EmployeeContactsSheet(
-        contacts: _allContacts,
-        activeContact: ChatContact.admin,
-        onSelectContact: (contact) {
-          Navigator.of(ctx).pop();
-          _openChatWithContact(contact);
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredConversations = _conversationItems.where((item) {
-      if (_searchQuery.isEmpty) return true;
-      return item.contact.name.toLowerCase().contains(_searchQuery) ||
-          item.contact.role.toLowerCase().contains(_searchQuery) ||
-          (item.lastMessage?.text.toLowerCase().contains(_searchQuery) ?? false);
-    }).toList();
-
-    return CommonScaffold(
-      title: 'Chat',
-      pageType: PageType.chat,
-      showAppBar: false,
-      hideBottomNavigationBar: false,
-      body: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: FloatingActionButton(
-          onPressed: _openContactsModal,
-          backgroundColor: _whatsAppGreen,
-          child: const Icon(Icons.chat_bubble_rounded, color: Colors.white),
-        ),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 1,
-          shadowColor: _whatsAppHeaderShadow,
-          automaticallyImplyLeading: false,
-          title: _isSearchOpen
-              ? TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Search chats...',
-                    border: InputBorder.none,
-                    hintStyle: TextStyle(color: Colors.grey, fontSize: 16),
-                  ),
-                )
-              : const Text(
-                  'Chats',
-                  style: TextStyle(
-                    color: Color(0xFF111827),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-          actions: [
-            IconButton(
-              icon: Icon(
-                _isSearchOpen ? Icons.close : Icons.search,
-                color: const Color(0xFF374151),
-              ),
-              onPressed: () {
-                setState(() {
-                  _isSearchOpen = !_isSearchOpen;
-                  if (!_isSearchOpen) {
-                    _searchController.clear();
-                    _searchQuery = '';
-                  }
-                });
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Color(0xFF374151)),
-              onPressed: () => _loadInboxData(),
-            ),
-          ],
-        ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: _whatsAppGreen),
-              )
-            : RefreshIndicator(
-                color: _whatsAppGreen,
-                onRefresh: () => _loadInboxData(showLoader: false),
-                child: filteredConversations.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFF3F4F6),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  size: 48,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'No chats yet',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF1F2937),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Tap the chat button below to start messaging Admin or any team member.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        itemCount: filteredConversations.length,
-                        separatorBuilder: (context, index) => const Divider(
-                          indent: 76,
-                          height: 1,
-                          color: Color(0xFFF1F5F9),
-                        ),
-                        itemBuilder: (context, index) {
-                          final item = filteredConversations[index];
-                          final contact = item.contact;
-                          final lastMsg = item.lastMessage;
-
-                          String previewText = 'Tap to open chat';
-                          String timeText = '';
-                          bool isOutgoing = false;
-
-                          if (lastMsg != null) {
-                            isOutgoing = !lastMsg.isFromAdmin;
-                            String text = lastMsg.text;
-                            if (text.startsWith('[@') && text.contains(']\n')) {
-                              text = text.substring(text.indexOf(']\n') + 2);
-                            } else if (text.startsWith('[@') && text.contains(']: ')) {
-                              text = text.substring(text.indexOf(']: ') + 3);
-                            }
-                            previewText = text.trim();
-                            timeText = _formatInboxTime(lastMsg.createdAt);
-                          }
-
-                          return InkWell(
-                            onTap: () => _openChatWithContact(contact),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          contact.roleColor,
-                                          contact.roleColor.withValues(alpha: 0.8),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: contact.roleColor.withValues(alpha: 0.25),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: contact.isAdmin
-                                        ? const Icon(
-                                            Icons.admin_panel_settings_rounded,
-                                            color: Colors.white,
-                                            size: 26,
-                                          )
-                                        : Text(
-                                            contact.initials,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Flexible(
-                                              child: Row(
-                                                children: [
-                                                  Flexible(
-                                                    child: Text(
-                                                      contact.name,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: const TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.w700,
-                                                        color: Color(0xFF0F172A),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: contact.roleColor
-                                                          .withValues(alpha: 0.12),
-                                                      borderRadius:
-                                                          BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      contact.role.toUpperCase(),
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.w700,
-                                                        color: contact.roleColor,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (timeText.isNotEmpty)
-                                              Text(
-                                                timeText,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: item.unreadCount > 0
-                                                      ? _whatsAppGreen
-                                                      : Colors.grey.shade500,
-                                                  fontWeight: item.unreadCount > 0
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w500,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            if (lastMsg != null && isOutgoing) ...[
-                                              const Icon(
-                                                Icons.done_all_rounded,
-                                                size: 16,
-                                                color: Color(0xFF53BDEB),
-                                              ),
-                                              const SizedBox(width: 4),
-                                            ],
-                                            Expanded(
-                                              child: Text(
-                                                previewText,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: item.unreadCount > 0
-                                                      ? const Color(0xFF1E293B)
-                                                      : (lastMsg != null
-                                                          ? const Color(0xFF64748B)
-                                                          : Colors.grey.shade400),
-                                                  fontWeight: item.unreadCount > 0
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w400,
-                                                ),
-                                              ),
-                                            ),
-                                            if (item.unreadCount > 0) ...[
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                constraints: const BoxConstraints(
-                                                  minWidth: 20,
-                                                  minHeight: 20,
-                                                ),
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: _whatsAppGreen,
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: _whatsAppGreen.withValues(alpha: 0.3),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 1),
-                                                    ),
-                                                  ],
-                                                ),
-                                                alignment: Alignment.center,
-                                                child: Text(
-                                                  '${item.unreadCount}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-      ),
-    );
-  }
-}
-
-class _EmployeeChatScreen extends StatefulWidget {
-  final ChatContact contact;
-  final List<ChatContact> allContacts;
-
-  const _EmployeeChatScreen({
-    required this.contact,
-    this.allContacts = const [],
-  });
-
-  @override
-  State<_EmployeeChatScreen> createState() => _EmployeeChatScreenState();
-}
-
-class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
-    with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   _CurrentChatUser? _currentUser;
-  late ChatContact _activeContact;
   _MessageThreadSummary? _thread;
   List<_ChatMessage> _messages = const [];
   List<_ChatMessage> _optimisticMessages = const [];
@@ -797,8 +85,7 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
   @override
   void initState() {
     super.initState();
-    _activeContact = widget.contact;
-    CommonScaffold.setUnreadChatCount(0);
+    ChatPage.setUnreadChatCount(0);
     WidgetsBinding.instance.addObserver(this);
     _messageController.addListener(_handleDraftChanged);
     _startPolling();
@@ -828,24 +115,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       mounted && _appLifecycleState == AppLifecycleState.resumed;
 
   bool get _hasDraftText => _draftText.trim().isNotEmpty;
-
-  String get _chatTitle {
-    if (!_activeContact.isAdmin) {
-      return _activeContact.name;
-    }
-    return 'Admin';
-  }
-
-  String get _chatSubtitle {
-    if (!_activeContact.isAdmin) {
-      return _activeContact.role.toUpperCase();
-    }
-    return 'Management • Online';
-  }
-
-  String get _avatarLetters {
-    return _activeContact.initials;
-  }
 
   void _handleDraftChanged() {
     final nextDraft = _messageController.text;
@@ -918,11 +187,9 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     required String token,
     required String currentUserId,
   }) async {
-    // 1. Find thread for current user ONLY
     _MessageThreadSummary? thread = await _fetchThreadByStaffUser(token, currentUserId);
     if (thread != null) return thread;
 
-    // 2. Try creating thread for current user
     try {
       final createRes = await http.post(
         _apiUri('/api/message-threads'),
@@ -941,7 +208,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       debugPrint('Error creating message thread: $e');
     }
 
-    // 3. Fallback to refetching current user thread
     return await _fetchThreadByStaffUser(token, currentUserId);
   }
 
@@ -996,24 +262,16 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
         return;
       }
 
-      final queryParams = _activeContact.isAdmin
-          ? <String, String>{
-              'limit': '500',
-              'depth': '0',
-              'sort': 'seq',
-              'where[thread][equals]': thread.id,
-            }
-          : <String, String>{
-              'limit': '500',
-              'depth': '0',
-              'sort': '-createdAt',
-            };
-
       final responses = await Future.wait([
         http.get(
           _apiUri(
             '/api/messages',
-            queryParameters: queryParams,
+            queryParameters: {
+              'limit': '500',
+              'depth': '0',
+              'sort': 'seq',
+              'where[thread][equals]': thread.id,
+            },
           ),
           headers: _authHeaders(token),
         ),
@@ -1112,74 +370,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
           }
         });
       }
-    }
-  }
-
-  Future<_CurrentChatUser> _loadCurrentUser() async {
-    final token = await _readToken();
-    final response = await http.get(
-      _apiUri(
-        '/api/users/me',
-        queryParameters: {'depth': '5', 'showHiddenFields': 'true'},
-      ),
-      headers: _authHeaders(token),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        _responseMessage(response, 'Unable to load the current user.'),
-      );
-    }
-
-    final decoded = _decodeResponse(response);
-    final dynamic rawUser = decoded?['user'] ?? decoded;
-    if (rawUser is! Map<String, dynamic>) {
-      throw Exception('Unable to read the current user profile.');
-    }
-
-    final userId = _relationshipId(rawUser);
-    if (userId == null) {
-      throw Exception('Current user profile is missing an id.');
-    }
-
-    return _CurrentChatUser(
-      id: userId,
-      employeeId: _relationshipId(rawUser['employee']),
-      displayName:
-          _stringValue(rawUser['name']) ??
-          _stringValue(rawUser['username']) ??
-          _stringValue(rawUser['email']) ??
-          'Staff',
-    );
-  }
-
-  Future<_MessageThreadSummary?> _fetchThreadByStaffUser(
-    String token,
-    String currentUserId,
-  ) async {
-    try {
-      final response = await http.get(
-        _apiUri(
-          '/api/message-threads',
-          queryParameters: {
-            'limit': '1',
-            'depth': '0',
-            'where[staffUser][equals]': currentUserId,
-          },
-        ),
-        headers: _authHeaders(token),
-      );
-
-      if (response.statusCode != 200) {
-        return null;
-      }
-
-      final docs = (_decodeResponse(response)?['docs'] as List?) ?? const [];
-      if (docs.isEmpty) return null;
-
-      return _MessageThreadSummary.fromJson(docs.first);
-    } catch (_) {
-      return null;
     }
   }
 
@@ -1355,30 +545,7 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       if (seqCompare != 0) return seqCompare;
       return a.createdAt.compareTo(b.createdAt);
     });
-
-    if (_activeContact.isAdmin) {
-      // In Admin chat: Only show untagged messages (direct admin messages)
-      return allMessages.where((msg) {
-        return !msg.text.startsWith('[@');
-      }).toList();
-    }
-
-    final contactNameLower = _activeContact.name.toLowerCase();
-    final contactRoleLower = _activeContact.role.toLowerCase();
-    final currentNameLower = (_currentUser?.displayName ?? '').toLowerCase();
-
-    return allMessages.where((msg) {
-      final lower = msg.text.toLowerCase();
-      // Outgoing message to this contact: [@ContactName • ContactRole]
-      final isOutgoingToContact = lower.startsWith('[@') &&
-          (lower.contains(contactNameLower) || lower.contains(contactRoleLower));
-      // Incoming message from this contact:
-      final isIncomingFromContact =
-          (msg.senderUserId != null && msg.senderUserId == _activeContact.staffUserId) ||
-          (lower.startsWith('[@') && currentNameLower.isNotEmpty && lower.contains(currentNameLower));
-
-      return isOutgoingToContact || (isIncomingFromContact && lower.contains(contactNameLower));
-    }).toList();
+    return allMessages;
   }
 
   Future<void> _sendMessage() async {
@@ -1395,7 +562,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     final token = await _readToken();
     var thread = _thread;
 
-    // Automatically resolve or create thread for currentUser
     if (thread == null) {
       thread = await _fetchOrCreateThread(
         token: token,
@@ -1420,10 +586,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     }
 
     final threadId = thread.id;
-    final payloadText = _activeContact.isAdmin
-        ? text
-        : '[@${_activeContact.name} • ${_activeContact.role}]\n$text';
-
     final localSeq = _nextOptimisticSeq();
     final localId = 'local-${DateTime.now().microsecondsSinceEpoch}-$localSeq';
     final optimisticMessage = _ChatMessage(
@@ -1431,14 +593,14 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       threadId: threadId,
       senderUserId: currentUser.id,
       senderRole: 'staff',
-      text: payloadText,
+      text: text,
       seq: localSeq,
       createdAt: DateTime.now(),
     );
     final optimisticReceipt = _MessageReceiptSummary(
       id: localId,
       messageId: localId,
-      recipientAudience: _activeContact.isAdmin ? 'admins' : 'staff',
+      recipientAudience: 'admins',
       status: 'sent',
     );
     _addOptimisticMessage(
@@ -1447,11 +609,10 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     );
 
     try {
-
       final response = await http.post(
         _apiUri('/api/messages'),
         headers: _authHeaders(token, json: true),
-        body: jsonEncode({'thread': thread.id, 'text': payloadText}),
+        body: jsonEncode({'thread': thread.id, 'text': text}),
       );
 
       if (response.statusCode != 200 && response.statusCode != 201) {
@@ -1494,1203 +655,419 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     }
   }
 
-  Future<void> _handleBack() async {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  void _showPhaseOneMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
-  }
-
-  Future<void> _handleMenuAction(_ChatMenuAction action) async {
-    switch (action) {
-      case _ChatMenuAction.refresh:
-        await _refreshConversation(
-          showLoader: false,
-          forceScrollToBottom: true,
-          showRefreshIndicator: true,
-        );
-    }
-  }
-
-  void _openContactsModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _EmployeeContactsSheet(
-        contacts: widget.allContacts,
-        activeContact: _activeContact,
-        onSelectContact: (contact) {
-          Navigator.of(ctx).pop();
-          if (contact.id == _activeContact.id) return;
-          setState(() {
-            _activeContact = contact;
-            _messages = const [];
-            _optimisticMessages = const [];
-            _outgoingReceiptsByMessageId = const {};
-            _thread = null;
-          });
-          unawaited(_refreshConversation(showLoader: true, forceScrollToBottom: true));
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final thread = _thread;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          _WhatsAppChatAppBar(
-            title: _chatTitle,
-            subtitle: _chatSubtitle,
-            avatarLetters: _avatarLetters,
-            avatarColor: _activeContact.roleColor,
-            isRefreshing: _isRefreshing,
-            onBack: _handleBack,
-            onContactTap: _openContactsModal,
-            onCallTap: () => _showPhaseOneMessage(
-              'Voice calling is not part of chat phase 1.',
-            ),
-            onMenuSelected: _handleMenuAction,
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                const Positioned.fill(child: _WhatsAppWallpaper()),
-                Positioned.fill(
-                  child: Column(
-                    children: [
-                      Expanded(child: _buildConversationBody()),
-                      _Composer(
-                        controller: _messageController,
-                        isEnabled: thread == null || thread.status == 'open',
-                        hasText: _hasDraftText,
-                        onSend: () => unawaited(_sendMessage()),
-                        onCameraTap: () => _showPhaseOneMessage(
-                          'Camera sharing is not part of chat phase 1.',
-                        ),
-                        onMicTap: () => _showPhaseOneMessage(
-                          'Voice messages are not part of chat phase 1.',
-                        ),
-                        disabledMessage: (thread != null && thread.status != 'open')
-                            ? 'This chat is currently closed.'
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_loadError != null && _messages.isNotEmpty)
-                  Positioned(
-                    top: 12,
-                    left: 16,
-                    right: 16,
-                    child: _InfoBanner(message: _loadError!),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConversationBody() {
     final currentUser = _currentUser;
     final displayMessages = _displayMessages();
 
-    if (_isBootstrapping && displayMessages.isEmpty && _thread == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: _whatsAppGreen),
-      );
-    }
+    return Scaffold(
+      backgroundColor: _whatsAppWallpaperBase,
+      appBar: AppBar(
+        backgroundColor: _whatsAppDarkGreen,
+        foregroundColor: Colors.white,
+        elevation: 1,
+        titleSpacing: 0,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
+        title: Row(
+          children: [
+            const SizedBox(width: 8),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF128C7E),
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                'AD',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Admin',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Management • Online',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFD4EBE7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            tooltip: 'Refresh chat',
+            onPressed: () => _refreshConversation(showLoader: true, forceScrollToBottom: true),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: const _WhatsAppWallpaperPainter(),
+              ),
+            ),
+            Column(
+              children: [
+                if (_isRefreshing)
+                  const LinearProgressIndicator(
+                    minHeight: 2.5,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(_whatsAppGreen),
+                  ),
+                Expanded(
+                  child: _buildChatBody(currentUser, displayMessages),
+                ),
+                _buildInputBar(currentUser),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-    if (_loadError != null && displayMessages.isEmpty) {
-      return _CenteredStatus(
-        title: _loadError!,
-        subtitle: 'Pull down or use the menu to retry.',
-        actionLabel: 'Retry',
-        onAction: () => _bootstrapConversation(showLoader: false),
+  Widget _buildChatBody(
+    _CurrentChatUser? currentUser,
+    List<_ChatMessage> displayMessages,
+  ) {
+    if (_isBootstrapping && displayMessages.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: _whatsAppDarkGreen),
       );
     }
 
     if (currentUser != null && !currentUser.isEmployeeLinked) {
-      return const _CenteredStatus(
-        title: 'Chat is not available for this account.',
-        subtitle:
-            'Only logged-in employee-linked users can use the employee chat.',
-      );
-    }
-
-    if (_thread == null || displayMessages.isEmpty) {
-      return _CenteredStatus(
-        title: 'Start chatting with ${_activeContact.name}',
-        subtitle: _activeContact.isAdmin
-            ? 'Type a message below to reach out to the management and admin team.'
-            : 'Send a message below to start your conversation with ${_activeContact.name} (${_activeContact.role}).',
-        actionLabel: 'Say Hello 👋',
-        onAction: () async {
-          _messageController.text = 'Hi ${_activeContact.name} 👋';
-          _messageController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _messageController.text.length),
-          );
-        },
-      );
-    }
-
-    return RefreshIndicator(
-      color: _whatsAppGreen,
-      onRefresh: () => _refreshConversation(showLoader: false),
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(12, 14, 12, 18),
-        itemCount: displayMessages.length,
-        itemBuilder: (context, index) {
-          final message = displayMessages[index];
-          final previous = index > 0 ? displayMessages[index - 1] : null;
-          final showDateChip =
-              previous == null ||
-              !_isSameCalendarDay(previous.createdAt, message.createdAt);
-
-          return Column(
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (showDateChip) ...[
-                _DateChip(date: message.createdAt),
-                const SizedBox(height: 10),
-              ],
-              _MessageBubble(
-                message: message,
-                receipt: _outgoingReceiptsByMessageId[message.id],
+              const Icon(Icons.link_off_rounded, size: 52, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text(
+                'Employee Profile Not Linked',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              const Text(
+                'Your user account must be linked to an employee profile before chat can be used.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.black54),
+              ),
             ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _EmployeeContactsSheet extends StatefulWidget {
-  final List<ChatContact> contacts;
-  final ChatContact activeContact;
-  final ValueChanged<ChatContact> onSelectContact;
-
-  const _EmployeeContactsSheet({
-    required this.contacts,
-    required this.activeContact,
-    required this.onSelectContact,
-  });
-
-  @override
-  State<_EmployeeContactsSheet> createState() => _EmployeeContactsSheetState();
-}
-
-class _EmployeeContactsSheetState extends State<_EmployeeContactsSheet> {
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim().toLowerCase();
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredContacts = widget.contacts.where((c) {
-      if (_searchQuery.isEmpty) return true;
-      return c.name.toLowerCase().contains(_searchQuery) ||
-          c.role.toLowerCase().contains(_searchQuery);
-    }).toList();
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.78,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 44,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Select Contact',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF15171A),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${widget.contacts.length + 1} contacts available',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, color: Color(0xFF6B7280), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        hintText: 'Search by name or role...',
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF9CA3AF),
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  if (_searchQuery.isNotEmpty)
-                    GestureDetector(
-                      onTap: () => _searchController.clear(),
-                      child: const Icon(
-                        Icons.cancel,
-                        color: Color(0xFF9CA3AF),
-                        size: 18,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              children: [
-                if (_searchQuery.isEmpty ||
-                    'admin'.contains(_searchQuery) ||
-                    'management'.contains(_searchQuery))
-                  _buildContactTile(
-                    contact: ChatContact.admin,
-                    isSelected: widget.activeContact.isAdmin,
-                    isPinnedAdmin: true,
-                  ),
-                if (filteredContacts.isNotEmpty &&
-                    (_searchQuery.isEmpty ||
-                        'admin'.contains(_searchQuery) ||
-                        'management'.contains(_searchQuery)))
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-                    child: Text(
-                      'TEAM MEMBERS (${filteredContacts.length})',
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ),
-                ...filteredContacts.map(
-                  (c) => _buildContactTile(
-                    contact: c,
-                    isSelected: !widget.activeContact.isAdmin &&
-                        widget.activeContact.id == c.id,
-                  ),
-                ),
-                if (filteredContacts.isEmpty &&
-                    !('admin'.contains(_searchQuery) ||
-                        'management'.contains(_searchQuery)))
-                  Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        'No contacts matching "$_searchQuery"',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactTile({
-    required ChatContact contact,
-    required bool isSelected,
-    bool isPinnedAdmin = false,
-  }) {
-    return InkWell(
-      onTap: () => widget.onSelectContact(contact),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: isSelected ? const Color(0xFFE8F5E9) : Colors.transparent,
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    contact.roleColor,
-                    contact.roleColor.withValues(alpha: 0.8),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: contact.roleColor.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              alignment: Alignment.center,
-              child: isPinnedAdmin
-                  ? const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    )
-                  : Text(
-                      contact.initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          contact.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w600,
-                            color: const Color(0xFF1E293B),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: contact.roleColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: contact.roleColor.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Text(
-                          contact.role.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: contact.roleColor,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    isPinnedAdmin
-                        ? 'Official Support & Management Chat'
-                        : 'Team Member • ${contact.role}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              const Icon(
-                Icons.check_circle_rounded,
-                color: _whatsAppGreen,
-                size: 22,
-              )
-            else
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFFCBD5E1),
-                size: 22,
-              ),
-          ],
         ),
-      ),
-    );
-  }
-}
+      );
+    }
 
-enum _ChatMenuAction { refresh }
-
-class _WhatsAppChatAppBar extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final String avatarLetters;
-  final Color avatarColor;
-  final bool isRefreshing;
-  final Future<void> Function() onBack;
-  final VoidCallback onContactTap;
-  final VoidCallback onCallTap;
-  final Future<void> Function(_ChatMenuAction action) onMenuSelected;
-
-  const _WhatsAppChatAppBar({
-    required this.title,
-    this.subtitle,
-    required this.avatarLetters,
-    this.avatarColor = const Color(0xFF7A1530),
-    required this.isRefreshing,
-    required this.onBack,
-    required this.onContactTap,
-    required this.onCallTap,
-    required this.onMenuSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 2,
-      shadowColor: _whatsAppHeaderShadow,
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
+    if (_loadError != null && displayMessages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+              const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
               ),
-              Container(
-                width: 40,
-                height: 40,
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _whatsAppDarkGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Try Again'),
+                onPressed: () => _bootstrapConversation(showLoader: true),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (displayMessages.isEmpty) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded, size: 44, color: _whatsAppDarkGreen),
+              SizedBox(height: 10),
+              Text(
+                'Direct Admin Communication',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'Send a message to reach management directly.\nMessages will appear in real time.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      itemCount: displayMessages.length,
+      itemBuilder: (context, index) {
+        final message = displayMessages[index];
+        final isOutgoing = !message.isFromAdmin;
+        final receipt = isOutgoing ? _outgoingReceiptsByMessageId[message.id] : null;
+
+        final showDateChip = index == 0 ||
+            !_isSameCalendarDay(
+              displayMessages[index - 1].createdAt,
+              message.createdAt,
+            );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showDateChip) ...[
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    _formatDateChip(message.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF54656F),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            Align(
+              alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.78,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [avatarColor, avatarColor.withValues(alpha: 0.8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                  color: isOutgoing ? _whatsAppOutgoingBubble : Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(12),
+                    topRight: const Radius.circular(12),
+                    bottomLeft: isOutgoing ? const Radius.circular(12) : Radius.zero,
+                    bottomRight: isOutgoing ? Radius.zero : const Radius.circular(12),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: avatarColor.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withValues(alpha: 0.07),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
                     ),
                   ],
                 ),
-                alignment: Alignment.center,
-                child: Text(
-                  avatarLetters,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (!isOutgoing) ...[
+                      const Text(
+                        'Admin',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _whatsAppDarkGreen,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                    ],
+                    Text(
+                      message.text,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        color: Color(0xFF111B21),
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
+                        const Spacer(),
+                        Text(
+                          DateFormat('hh:mm a').format(message.createdAt.toLocal()),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF667781),
                           ),
                         ),
-                        if (isRefreshing) ...[
-                          const SizedBox(width: 8),
-                          const SizedBox(
-                            width: 13,
-                            height: 13,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _whatsAppGreen,
-                            ),
-                          ),
+                        if (isOutgoing) ...[
+                          const SizedBox(width: 4),
+                          _buildReceiptStatusIcon(receipt?.status),
                         ],
                       ],
                     ),
-                    if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF667781),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Contacts',
-                onPressed: onContactTap,
-                icon: const Icon(Icons.contacts_outlined, color: Colors.black87),
-              ),
-              IconButton(
-                tooltip: 'Call',
-                onPressed: onCallTap,
-                icon: const Icon(Icons.call_outlined, color: Colors.black87),
-              ),
-              PopupMenuButton<_ChatMenuAction>(
-                icon: const Icon(Icons.more_vert, color: Colors.black87),
-                onSelected: (action) => unawaited(onMenuSelected(action)),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _ChatMenuAction.refresh,
-                    child: Text('Refresh'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WhatsAppWallpaper extends StatelessWidget {
-  const _WhatsAppWallpaper();
-
-  static const List<IconData> _icons = <IconData>[
-    Icons.local_pizza_outlined,
-    Icons.cake_outlined,
-    Icons.local_cafe_outlined,
-    Icons.fastfood_outlined,
-    Icons.icecream_outlined,
-    Icons.restaurant_outlined,
-    Icons.bakery_dining_outlined,
-    Icons.emoji_food_beverage_outlined,
-    Icons.lunch_dining_outlined,
-    Icons.ramen_dining_outlined,
-    Icons.receipt_long_outlined,
-    Icons.shopping_bag_outlined,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: _whatsAppWallpaperBase,
-      child: IgnorePointer(
-        child: Opacity(
-          opacity: 0.18,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = math.max(4, (constraints.maxWidth / 68).ceil());
-              final rows = math.max(8, (constraints.maxHeight / 68).ceil() + 2);
-              final total = columns * rows;
-
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List<Widget>.generate(total, (index) {
-                  final icon = _icons[index % _icons.length];
-                  final angle = ((index % 7) - 3) * 0.18;
-                  final size = 20.0 + (index % 4) * 3.0;
-
-                  return SizedBox(
-                    width: 60,
-                    height: 56,
-                    child: Center(
-                      child: Transform.rotate(
-                        angle: angle,
-                        child: Icon(
-                          icon,
-                          size: size,
-                          color: _whatsAppWallpaperIcon.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CenteredStatus extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String? actionLabel;
-  final Future<void> Function()? onAction;
-
-  const _CenteredStatus({
-    required this.title,
-    required this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF15171A),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.45,
-                    color: Color(0xFF5F6368),
-                  ),
-                ),
-                if (actionLabel != null && onAction != null) ...[
-                  const SizedBox(height: 14),
-                  FilledButton(
-                    onPressed: onAction,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _whatsAppGreen,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(actionLabel!),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  final String message;
-
-  const _InfoBanner({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1).withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, size: 18, color: Color(0xFF8A6D00)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6E5A00)),
-              ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
-}
 
-class _Composer extends StatelessWidget {
-  final TextEditingController controller;
-  final bool isEnabled;
-  final bool hasText;
-  final VoidCallback onSend;
-  final VoidCallback onCameraTap;
-  final VoidCallback onMicTap;
-  final String? disabledMessage;
-
-  const _Composer({
-    required this.controller,
-    required this.isEnabled,
-    required this.hasText,
-    required this.onSend,
-    required this.onCameraTap,
-    required this.onMicTap,
-    this.disabledMessage,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool showSend = hasText;
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (disabledMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      disabledMessage!,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF5F6368),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controller,
-                            enabled: isEnabled,
-                            minLines: 1,
-                            maxLines: 5,
-                            textCapitalization: TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              hintText: 'Message',
-                              hintStyle: TextStyle(
-                                color: Color(0xFF7A7F85),
-                                fontSize: 16,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.fromLTRB(
-                                18,
-                                14,
-                                12,
-                                14,
-                              ),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Camera',
-                          onPressed: onCameraTap,
-                          icon: const Icon(
-                            Icons.camera_alt_outlined,
-                            color: Color(0xFF606468),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: _whatsAppGreen,
-                    shape: BoxShape.circle,
-                  ),
-                  child: SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: IconButton(
-                      onPressed: isEnabled
-                          ? (showSend ? onSend : onMicTap)
-                          : null,
-                      icon: Icon(
-                        showSend ? Icons.send_rounded : Icons.mic_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DateChip extends StatelessWidget {
-  final DateTime date;
-
-  const _DateChip({required this.date});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          _formatDateChip(date),
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF5F6368),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final _ChatMessage message;
-  final _MessageReceiptSummary? receipt;
-
-  const _MessageBubble({required this.message, required this.receipt});
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isOutgoing = !message.isFromAdmin;
-    final Color bubbleColor = isOutgoing
-        ? _whatsAppOutgoingBubble
-        : Colors.white;
-    const messageStyle = TextStyle(
-      fontSize: 16,
-      height: 1.32,
-      color: Colors.black87,
-    );
-    const timeStyle = TextStyle(fontSize: 12, color: Color(0xFF667781));
-    const double horizontalPadding = 12;
-    const double inlineGap = 10;
-    const double iconGap = 4;
-    const double statusIconWidth = 17;
-    final String timeText = DateFormat(
-      'HH:mm',
-    ).format(message.createdAt.toLocal());
-
-    String recipientTag = '';
-    String displayBody = message.text;
-    if (message.text.startsWith('[@') && message.text.contains(']\n')) {
-      final endIdx = message.text.indexOf(']\n');
-      recipientTag = message.text.substring(2, endIdx);
-      displayBody = message.text.substring(endIdx + 2);
-    } else if (message.text.startsWith('[@') && message.text.contains(']: ')) {
-      final endIdx = message.text.indexOf(']: ');
-      recipientTag = message.text.substring(2, endIdx);
-      displayBody = message.text.substring(endIdx + 3);
+  Widget _buildReceiptStatusIcon(String? status) {
+    if (status == 'read') {
+      return const Icon(Icons.done_all_rounded, size: 16, color: Color(0xFF53BDEB));
     }
+    if (status == 'delivered') {
+      return const Icon(Icons.done_all_rounded, size: 16, color: Color(0xFF8696A0));
+    }
+    return const Icon(Icons.done_rounded, size: 16, color: Color(0xFF8696A0));
+  }
 
-    return Align(
-      alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final double maxBubbleWidth = math.min(
-            MediaQuery.of(context).size.width * 0.80,
-            constraints.maxWidth,
-          );
-          final double contentMaxWidth = math.max(
-            0,
-            maxBubbleWidth - (horizontalPadding * 2),
-          );
-          final double metaWidth =
-              _measureTextWidth(
-                context: context,
-                text: timeText,
-                style: timeStyle,
-              ) +
-              (isOutgoing ? iconGap + statusIconWidth : 0);
+  Widget _buildInputBar(_CurrentChatUser? currentUser) {
+    final bool canSend = currentUser?.isEmployeeLinked == true;
 
-          final textPainter = TextPainter(
-            text: TextSpan(text: displayBody, style: messageStyle),
-            textDirection: Directionality.of(context),
-          )..layout(maxWidth: contentMaxWidth);
-
-          final bool isMultiLine = textPainter.computeLineMetrics().length > 1;
-          final bool showTimeInline =
-              recipientTag.isEmpty &&
-              !isMultiLine &&
-              (textPainter.width + inlineGap + metaWidth) <= contentMaxWidth;
-          final double resolvedBubbleWidth = showTimeInline
-              ? math.min(
-                  maxBubbleWidth,
-                  (textPainter.width + inlineGap + metaWidth) +
-                      (horizontalPadding * 2),
-                )
-              : maxBubbleWidth;
-
-          return SizedBox(
-            width: resolvedBubbleWidth,
-            child: DecoratedBox(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      color: Colors.transparent,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
               decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(12),
-                  topRight: const Radius.circular(12),
-                  bottomLeft: Radius.circular(isOutgoing ? 12 : 4),
-                  bottomRight: Radius.circular(isOutgoing ? 4 : 12),
-                ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.07),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: showTimeInline
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Text(displayBody, style: messageStyle),
-                          ),
-                          const SizedBox(width: inlineGap),
-                          _MessageMeta(
-                            timeText: timeText,
-                            isOutgoing: isOutgoing,
-                            status: receipt?.status,
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (recipientTag.isNotEmpty) ...[
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 5),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                'To: $recipientTag',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF334155),
-                                ),
-                              ),
-                            ),
-                          ],
-                          Text(displayBody, style: messageStyle),
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: _MessageMeta(
-                              timeText: timeText,
-                              isOutgoing: isOutgoing,
-                              status: receipt?.status,
-                            ),
-                          ),
-                        ],
+              child: Row(
+                children: [
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      enabled: canSend,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 4,
+                      minLines: 1,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: const InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(color: Color(0xFF8696A0), fontSize: 15),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
                       ),
+                      onSubmitted: (_) => _sendMessage(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _MessageMeta extends StatelessWidget {
-  final String timeText;
-  final bool isOutgoing;
-  final String? status;
-
-  const _MessageMeta({
-    required this.timeText,
-    required this.isOutgoing,
-    this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool showDelivered = status == 'delivered' || status == 'read';
-    final bool showRead = status == 'read';
-    final IconData tickIcon = showDelivered
-        ? Icons.done_all_rounded
-        : Icons.done_rounded;
-    final Color tickColor = showRead
-        ? const Color(0xFF53BDEB)
-        : const Color(0xFF8C979F);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          timeText,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF667781)),
-        ),
-        if (isOutgoing) ...[
-          const SizedBox(width: 4),
-          Icon(tickIcon, size: 17, color: tickColor),
+          ),
+          const SizedBox(width: 6),
+          Material(
+            color: _hasDraftText ? _whatsAppGreen : _whatsAppDarkGreen,
+            shape: const CircleBorder(),
+            elevation: 2,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: canSend && _hasDraftText ? _sendMessage : null,
+              child: Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.send_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -2699,11 +1076,13 @@ class _CurrentChatUser {
   final String id;
   final String? employeeId;
   final String displayName;
+  final String role;
 
   const _CurrentChatUser({
     required this.id,
     required this.employeeId,
     required this.displayName,
+    required this.role,
   });
 
   bool get isEmployeeLinked => employeeId != null && employeeId!.isNotEmpty;
@@ -2834,17 +1213,69 @@ class _MessageReceiptSummary {
 
     final id = _relationshipId(json);
     final messageId = _relationshipId(json['message']);
-    final recipientAudience = _stringValue(json['recipientAudience']);
-    final status = _stringValue(json['status']);
-    if (id == null || messageId == null || status == null) return null;
+    if (id == null || messageId == null) return null;
 
     return _MessageReceiptSummary(
       id: id,
       messageId: messageId,
-      recipientAudience: recipientAudience,
-      status: status,
+      recipientAudience: _stringValue(json['recipientAudience']),
+      status: _stringValue(json['status']) ?? 'sent',
     );
   }
+}
+
+class _WhatsAppWallpaperPainter extends CustomPainter {
+  const _WhatsAppWallpaperPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = _whatsAppWallpaperBase;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
+    final iconPaint = Paint()
+      ..color = _whatsAppWallpaperIcon.withValues(alpha: 0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    const double step = 64.0;
+    for (double y = 16; y < size.height; y += step) {
+      for (double x = 16; x < size.width; x += step) {
+        final double pattern = ((x / step).floor() + (y / step).floor()) % 4;
+        final center = Offset(x, y);
+
+        if (pattern == 0) {
+          canvas.drawCircle(center, 9, iconPaint);
+        } else if (pattern == 1) {
+          final rect = Rect.fromCenter(center: center, width: 14, height: 14);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+            iconPaint,
+          );
+        } else if (pattern == 2) {
+          final path = Path()
+            ..moveTo(center.dx - 8, center.dy + 7)
+            ..lineTo(center.dx, center.dy - 8)
+            ..lineTo(center.dx + 8, center.dy + 7)
+            ..close();
+          canvas.drawPath(path, iconPaint);
+        } else {
+          canvas.drawLine(
+            Offset(center.dx - 7, center.dy),
+            Offset(center.dx + 7, center.dy),
+            iconPaint,
+          );
+          canvas.drawLine(
+            Offset(center.dx, center.dy - 7),
+            Offset(center.dx, center.dy + 7),
+            iconPaint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 Future<String> _readToken() async {
@@ -2856,15 +1287,71 @@ Future<String> _readToken() async {
   return token;
 }
 
-Uri _apiUri(String path, {Map<String, String>? queryParameters}) {
-  final base = Uri.parse(ApiConfig.domain);
-  return Uri(
-    scheme: base.scheme.isNotEmpty ? base.scheme : 'https',
-    host: base.host,
-    port: base.hasPort ? base.port : null,
-    path: path,
-    queryParameters: queryParameters,
+Future<_CurrentChatUser> _loadCurrentUser() async {
+  final token = await _readToken();
+  final response = await http.get(
+    _apiUri('/api/users/me'),
+    headers: _authHeaders(token),
   );
+
+  if (response.statusCode != 200) {
+    throw Exception(_responseMessage(response, 'Unable to load user profile.'));
+  }
+
+  final decoded = _decodeResponse(response);
+  final userJson = decoded?['user'];
+  if (userJson is! Map<String, dynamic>) {
+    throw Exception('Malformed user profile response.');
+  }
+
+  final id = _relationshipId(userJson);
+  if (id == null) {
+    throw Exception('Missing user id in profile.');
+  }
+
+  final employeeId = _relationshipId(userJson['employee']);
+  final displayName = _stringValue(userJson['name']) ??
+      _stringValue(userJson['username']) ??
+      _stringValue(userJson['email']) ??
+      'Staff';
+  final role = _stringValue(userJson['role']) ?? 'staff';
+
+  return _CurrentChatUser(
+    id: id,
+    employeeId: employeeId,
+    displayName: displayName,
+    role: role,
+  );
+}
+
+Future<_MessageThreadSummary?> _fetchThreadByStaffUser(
+  String token,
+  String staffUserId,
+) async {
+  final response = await http.get(
+    _apiUri(
+      '/api/message-threads',
+      queryParameters: {
+        'limit': '1',
+        'depth': '0',
+        'where[staffUser][equals]': staffUserId,
+      },
+    ),
+    headers: _authHeaders(token),
+  );
+
+  if (response.statusCode != 200) {
+    return null;
+  }
+
+  final docs = (_decodeResponse(response)?['docs'] as List?) ?? const [];
+  if (docs.isEmpty) return null;
+  return _MessageThreadSummary.fromJson(docs.first);
+}
+
+Uri _apiUri(String path, {Map<String, String>? queryParameters}) {
+  final cleanPath = path.startsWith('/') ? path : '/$path';
+  return Uri.https(apiHostPrimary, cleanPath, queryParameters);
 }
 
 Map<String, String> _authHeaders(String token, {bool json = false}) {
@@ -2949,36 +1436,6 @@ DateTime? _parseDate(dynamic value) {
   final stringValue = _stringValue(value);
   if (stringValue == null) return null;
   return DateTime.tryParse(stringValue);
-}
-
-double _measureTextWidth({
-  required BuildContext context,
-  required String text,
-  required TextStyle style,
-}) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
-    textDirection: Directionality.of(context),
-    maxLines: 1,
-  )..layout();
-  return painter.width;
-}
-
-String _formatInboxTime(DateTime date) {
-  final local = date.toLocal();
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final msgDate = DateTime(local.year, local.month, local.day);
-  final diff = today.difference(msgDate).inDays;
-
-  if (diff == 0) {
-    return DateFormat('HH:mm').format(local);
-  } else if (diff == 1) {
-    return 'Yesterday';
-  } else if (diff < 7) {
-    return DateFormat('EEEE').format(local);
-  }
-  return DateFormat('dd/MM/yy').format(local);
 }
 
 String _formatDateChip(DateTime date) {
