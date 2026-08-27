@@ -138,6 +138,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
 
     try {
+      final token = await _readToken();
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('user_id')?.trim();
+
       final responses = await Future.wait([
         http.get(
           _apiUri(
@@ -172,12 +176,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           ),
           headers: _authHeaders(token),
         ),
+        if (userId != null && userId.isNotEmpty)
+          http.get(
+            _apiUri(
+              '/api/message-threads',
+              queryParameters: {
+                'limit': '1',
+                'depth': '0',
+                'where[staffUser][equals]': userId,
+              },
+            ),
+            headers: _authHeaders(token),
+          ),
       ]);
 
       final employeesRes = responses[0];
       final usersRes = responses[1];
       final messagesRes = responses[2];
       final receiptsRes = responses[3];
+
+      String? currentUserThreadId;
+      if (responses.length > 4 && responses[4].statusCode == 200) {
+        final threadData = _decodeResponse(responses[4]);
+        final threadDocs = (threadData?['docs'] as List?) ?? [];
+        if (threadDocs.isNotEmpty) {
+          currentUserThreadId = _relationshipId(threadDocs.first);
+        }
+      }
 
       final Set<String> unreadMessageIds = {};
       if (receiptsRes.statusCode == 200) {
@@ -296,14 +321,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             }
           }
         } else {
-          matchedContactId = 'admin';
+          // Untagged messages: only associate with Admin IF it belongs to currentUser's thread or sender is currentUser
+          if (currentUserThreadId != null && msg.threadId == currentUserThreadId) {
+            matchedContactId = 'admin';
+          } else if (msg.senderUserId != null && msg.senderUserId == userId) {
+            matchedContactId = 'admin';
+          }
         }
 
         if (matchedContactId != null) {
           if (!latestMessageByContact.containsKey(matchedContactId)) {
             latestMessageByContact[matchedContactId] = msg;
           }
-          if (unreadMessageIds.contains(msg.id) && msg.senderRole != 'staff') {
+          if (unreadMessageIds.contains(msg.id) &&
+              msg.senderUserId != userId &&
+              msg.senderRole != 'staff') {
             unreadCountByContact[matchedContactId] =
                 (unreadCountByContact[matchedContactId] ?? 0) + 1;
           }
@@ -801,13 +833,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     if (!_activeContact.isAdmin) {
       return _activeContact.name;
     }
-    final participantName = _thread?.participantName?.trim();
-    final currentName = _currentUser?.displayName.trim();
-    if (participantName != null &&
-        participantName.isNotEmpty &&
-        participantName != currentName) {
-      return participantName;
-    }
     return 'Admin';
   }
 
@@ -891,20 +916,13 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
 
   Future<_MessageThreadSummary?> _fetchOrCreateThread({
     required String token,
-    required String targetUserId,
     required String currentUserId,
   }) async {
-    // 1. Try finding thread for target user
-    _MessageThreadSummary? thread = await _fetchThreadByStaffUser(token, targetUserId);
+    // 1. Find thread for current user ONLY
+    _MessageThreadSummary? thread = await _fetchThreadByStaffUser(token, currentUserId);
     if (thread != null) return thread;
 
-    // 2. Try finding thread for current user
-    if (targetUserId != currentUserId) {
-      thread = await _fetchThreadByStaffUser(token, currentUserId);
-      if (thread != null) return thread;
-    }
-
-    // 3. Try creating thread for current user
+    // 2. Try creating thread for current user
     try {
       final createRes = await http.post(
         _apiUri('/api/message-threads'),
@@ -923,24 +941,8 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       debugPrint('Error creating message thread: $e');
     }
 
-    // 4. Fallback to any available thread
-    try {
-      final listRes = await http.get(
-        _apiUri('/api/message-threads', queryParameters: {'limit': '1', 'depth': '0'}),
-        headers: _authHeaders(token),
-      );
-      if (listRes.statusCode == 200) {
-        final docs = (_decodeResponse(listRes)?['docs'] as List?) ?? const [];
-        if (docs.isNotEmpty) {
-          thread = _MessageThreadSummary.fromJson(docs.first);
-          if (thread != null) return thread;
-        }
-      }
-    } catch (e) {
-      debugPrint('Error fetching fallback thread: $e');
-    }
-
-    return thread;
+    // 3. Fallback to refetching current user thread
+    return await _fetchThreadByStaffUser(token, currentUserId);
   }
 
   Future<void> _refreshConversation({
@@ -978,13 +980,8 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
 
     try {
       final token = await _readToken();
-      final targetUserId = _activeContact.isAdmin
-          ? currentUser.id
-          : (_activeContact.staffUserId ?? currentUser.id);
-
       final thread = await _fetchOrCreateThread(
         token: token,
-        targetUserId: targetUserId,
         currentUserId: currentUser.id,
       );
 
@@ -999,16 +996,24 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
         return;
       }
 
-      final responses = await Future.wait([
-        http.get(
-          _apiUri(
-            '/api/messages',
-            queryParameters: {
+      final queryParams = _activeContact.isAdmin
+          ? <String, String>{
               'limit': '500',
               'depth': '0',
               'sort': 'seq',
               'where[thread][equals]': thread.id,
-            },
+            }
+          : <String, String>{
+              'limit': '500',
+              'depth': '0',
+              'sort': '-createdAt',
+            };
+
+      final responses = await Future.wait([
+        http.get(
+          _apiUri(
+            '/api/messages',
+            queryParameters: queryParams,
           ),
           headers: _authHeaders(token),
         ),
@@ -1178,60 +1183,40 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     }
   }
 
-  Future<Map<String, _MessageReceiptSummary>> _applyIncomingReceiptUpdates({
+  Future<void> _applyIncomingReceiptUpdates({
     required String token,
     required List<_ChatMessage> messages,
     required Map<String, _MessageReceiptSummary> receiptsByMessageId,
   }) async {
-    if (messages.isEmpty || receiptsByMessageId.isEmpty) {
-      return receiptsByMessageId;
-    }
-
-    final updatedReceipts = Map<String, _MessageReceiptSummary>.from(
-      receiptsByMessageId,
-    );
-    final shouldMarkRead = _isChatVisible;
+    final currentUser = _currentUser;
+    if (currentUser == null) return;
 
     for (final message in messages) {
-      if (!message.isFromAdmin) continue;
+      if (message.isFromAdmin) {
+        final receipt = receiptsByMessageId[message.id];
+        if (receipt == null) continue;
 
-      var receipt = updatedReceipts[message.id];
-      if (receipt == null) continue;
-
-      if (receipt.rank < _MessageReceiptSummary.deliveredRank) {
-        final deliveredReceipt = await _patchReceiptStatus(
-          token: token,
-          receipt: receipt,
-          status: 'delivered',
-        );
-        if (deliveredReceipt != null) {
-          receipt = deliveredReceipt;
-          updatedReceipts[message.id] = deliveredReceipt;
-        }
-      }
-
-      if (!shouldMarkRead) {
-        continue;
-      }
-
-      if (receipt.rank < _MessageReceiptSummary.deliveredRank) {
-        continue;
-      }
-
-      if (receipt.rank < _MessageReceiptSummary.readRank) {
-        final readReceipt = await _patchReceiptStatus(
-          token: token,
-          receipt: receipt,
-          status: 'read',
-        );
-        if (readReceipt != null) {
-          updatedReceipts[message.id] = readReceipt;
-          CommonScaffold.setUnreadChatCount(0);
+        if (_isChatVisible) {
+          if (receipt.status != 'read') {
+            unawaited(
+              _patchReceiptStatus(
+                token: token,
+                receipt: receipt,
+                status: 'read',
+              ),
+            );
+          }
+        } else if (receipt.status == 'sent') {
+          unawaited(
+            _patchReceiptStatus(
+              token: token,
+              receipt: receipt,
+              status: 'delivered',
+            ),
+          );
         }
       }
     }
-
-    return updatedReceipts;
   }
 
   Future<_MessageReceiptSummary?> _patchReceiptStatus({
@@ -1312,11 +1297,10 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
   }
 
   void _removeOptimisticMessage(String localId) {
-    if (!mounted) return;
     setState(() {
       _optimisticMessages = _optimisticMessages
-          .where((message) => message.id != localId)
-          .toList(growable: false);
+          .where((m) => m.id != localId)
+          .toList();
       final updatedReceipts = Map<String, _MessageReceiptSummary>.from(
         _outgoingReceiptsByMessageId,
       );
@@ -1329,15 +1313,19 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     required String localId,
     required _ChatMessage serverMessage,
   }) {
-    if (!mounted) return;
     setState(() {
       _optimisticMessages = _optimisticMessages
-          .where((message) => message.id != localId)
-          .toList(growable: false);
-
-      final updatedMessages = List<_ChatMessage>.from(_messages)
-        ..removeWhere((message) => message.id == serverMessage.id)
-        ..add(serverMessage);
+          .where((m) => m.id != localId)
+          .toList();
+      final updatedMessages = List<_ChatMessage>.from(_messages);
+      final existingIndex = updatedMessages.indexWhere(
+        (m) => m.id == serverMessage.id,
+      );
+      if (existingIndex >= 0) {
+        updatedMessages[existingIndex] = serverMessage;
+      } else {
+        updatedMessages.add(serverMessage);
+      }
       updatedMessages.sort((a, b) {
         final seqCompare = a.seq.compareTo(b.seq);
         if (seqCompare != 0) return seqCompare;
@@ -1369,17 +1357,28 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     });
 
     if (_activeContact.isAdmin) {
-      return allMessages;
+      // In Admin chat: Only show untagged messages (direct admin messages)
+      return allMessages.where((msg) {
+        return !msg.text.startsWith('[@');
+      }).toList();
     }
 
     final contactNameLower = _activeContact.name.toLowerCase();
-    final filtered = allMessages.where((msg) {
-      final lower = msg.text.toLowerCase();
-      return lower.contains('[@$contactNameLower') ||
-          lower.contains('[@${_activeContact.role.toLowerCase()}');
-    }).toList();
+    final contactRoleLower = _activeContact.role.toLowerCase();
+    final currentNameLower = (_currentUser?.displayName ?? '').toLowerCase();
 
-    return filtered.isNotEmpty ? filtered : allMessages;
+    return allMessages.where((msg) {
+      final lower = msg.text.toLowerCase();
+      // Outgoing message to this contact: [@ContactName • ContactRole]
+      final isOutgoingToContact = lower.startsWith('[@') &&
+          (lower.contains(contactNameLower) || lower.contains(contactRoleLower));
+      // Incoming message from this contact:
+      final isIncomingFromContact =
+          (msg.senderUserId != null && msg.senderUserId == _activeContact.staffUserId) ||
+          (lower.startsWith('[@') && currentNameLower.isNotEmpty && lower.contains(currentNameLower));
+
+      return isOutgoingToContact || (isIncomingFromContact && lower.contains(contactNameLower));
+    }).toList();
   }
 
   Future<void> _sendMessage() async {
@@ -1396,15 +1395,10 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     final token = await _readToken();
     var thread = _thread;
 
-    // Automatically resolve or create thread if not yet created
+    // Automatically resolve or create thread for currentUser
     if (thread == null) {
-      final targetUserId = _activeContact.isAdmin
-          ? currentUser.id
-          : (_activeContact.staffUserId ?? currentUser.id);
-
       thread = await _fetchOrCreateThread(
         token: token,
-        targetUserId: targetUserId,
         currentUserId: currentUser.id,
       );
       if (thread != null && mounted) {
@@ -1414,7 +1408,18 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
       }
     }
 
-    final threadId = thread?.id ?? 'pending-thread-${currentUser.id}';
+    if (thread == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to initialize chat conversation. Please try again.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final threadId = thread.id;
     final payloadText = _activeContact.isAdmin
         ? text
         : '[@${_activeContact.name} • ${_activeContact.role}]\n$text';
@@ -1424,6 +1429,7 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     final optimisticMessage = _ChatMessage(
       id: localId,
       threadId: threadId,
+      senderUserId: currentUser.id,
       senderRole: 'staff',
       text: payloadText,
       seq: localSeq,
@@ -1432,7 +1438,7 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     final optimisticReceipt = _MessageReceiptSummary(
       id: localId,
       messageId: localId,
-      recipientAudience: 'admin',
+      recipientAudience: _activeContact.isAdmin ? 'admins' : 'staff',
       status: 'sent',
     );
     _addOptimisticMessage(
@@ -1441,9 +1447,6 @@ class _EmployeeChatScreenState extends State<_EmployeeChatScreen>
     );
 
     try {
-      if (thread == null) {
-        throw Exception('Unable to initialize chat conversation. Please try again.');
-      }
 
       final response = await http.post(
         _apiUri('/api/messages'),
@@ -2741,6 +2744,7 @@ class _MessageThreadSummary {
 class _ChatMessage {
   final String id;
   final String threadId;
+  final String? senderUserId;
   final String senderRole;
   final String text;
   final int seq;
@@ -2749,6 +2753,7 @@ class _ChatMessage {
   const _ChatMessage({
     required this.id,
     required this.threadId,
+    this.senderUserId,
     required this.senderRole,
     required this.text,
     required this.seq,
@@ -2762,6 +2767,7 @@ class _ChatMessage {
 
     final id = _relationshipId(json);
     final threadId = _relationshipId(json['thread']);
+    final senderUserId = _relationshipId(json['senderUser']);
     final createdAt = _parseDate(json['createdAt']);
     final text = _stringValue(json['text']);
     final seq = _intValue(json['seq']) ?? 0;
@@ -2773,6 +2779,7 @@ class _ChatMessage {
     return _ChatMessage(
       id: id,
       threadId: threadId,
+      senderUserId: senderUserId,
       senderRole: _stringValue(json['senderRole']) ?? '',
       text: text,
       seq: seq,
