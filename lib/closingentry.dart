@@ -117,6 +117,44 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       }
       return;
     }
+
+    // Check if manager enabled closing entry
+    try {
+      final branchUri = Uri.parse('${ApiConfig.baseUrl}/branches/$_branchId');
+      final branchRes = await http.get(branchUri, headers: ApiConfig.getHeaders(_token));
+      if (branchRes.statusCode == 200) {
+        final branchData = jsonDecode(branchRes.body);
+        if (branchData['isClosingEntryEnabled'] != true) {
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              _hasError = true;
+            });
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                title: const Text('Access Denied'),
+                content: const Text('Closing Entry form is locked. Please contact your manager to enable it.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context); // close dialog
+                      Navigator.pop(context); // close screen
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking branch status: $e');
+    }
+
     try {
       final lastClosing = await _fetchLastClosingToday();
 
