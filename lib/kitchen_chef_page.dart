@@ -170,7 +170,9 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
     if (_containsBranchReference(chef['kitchenBranches'], branchId)) {
       return true;
     }
-    if (_containsBranchReference(chef['kitchen'], branchId)) return true;
+    if (_containsBranchReference(chef['lastLoginBranch'], branchId)) {
+      return true;
+    }
 
     return false;
   }
@@ -267,7 +269,13 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
       final userData = jsonDecode(userRes.body);
       final userDoc = userData['user'] ?? userData;
 
-      final branchId = _extractId(userDoc['branch']);
+      String branchId = _extractId(userDoc['branch']);
+      if (branchId.isEmpty) {
+        branchId = _extractId(userDoc['lastLoginBranch']);
+      }
+      if (branchId.isEmpty) {
+        branchId = prefs.getString('branchId') ?? '';
+      }
       final branchNameFromUser = _extractName(userDoc['branch']);
 
       final normalizedBranchId = branchId.isNotEmpty ? branchId : null;
@@ -288,6 +296,11 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
       final fallbackBranchFilterChefIn =
           (normalizedBranchId != null && normalizedBranchId.isNotEmpty)
           ? '&where[kitchenBranches][in][0]=$normalizedBranchId'
+          : '';
+
+      final lastLoginBranchFilterChef =
+          (normalizedBranchId != null && normalizedBranchId.isNotEmpty)
+          ? '&where[lastLoginBranch][equals]=$normalizedBranchId'
           : '';
 
       final kitchenFilterChef =
@@ -318,11 +331,22 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
       }
 
       List<dynamic> chefs = [];
-      List<dynamic> firstSuccessfulDocs = [];
+      final Map<String, dynamic> chefsById = {};
+
+      void addFetchedDocs(List<dynamic> docs) {
+        for (final doc in docs) {
+          final id = _extractId(doc);
+          if (id.isNotEmpty && !chefsById.containsKey(id)) {
+            chefsById[id] = doc;
+          }
+        }
+      }
+
       final chefQueries = [
         '${ApiConfig.baseUrl}/users?where[role][equals]=chef$branchFilterChef$kitchenFilterChef&depth=1&limit=200',
-        '${ApiConfig.baseUrl}/users?where[role][equals]=chef$fallbackBranchFilterChefEquals$kitchenFilterChef&depth=1&limit=200',
         '${ApiConfig.baseUrl}/users?where[role][equals]=chef$fallbackBranchFilterChefIn$kitchenFilterChef&depth=1&limit=200',
+        '${ApiConfig.baseUrl}/users?where[role][equals]=chef$fallbackBranchFilterChefEquals$kitchenFilterChef&depth=1&limit=200',
+        '${ApiConfig.baseUrl}/users?where[role][equals]=chef$lastLoginBranchFilterChef$kitchenFilterChef&depth=1&limit=200',
         '${ApiConfig.baseUrl}/users?where[role][equals]=chef$kitchenFilterChef&depth=1&limit=200',
       ];
 
@@ -333,29 +357,25 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
         );
         if (chefsRes.statusCode == 200) {
           final docs = _decodeDocs(chefsRes.body);
-          if (firstSuccessfulDocs.isEmpty) {
-            firstSuccessfulDocs = docs;
-          }
-          if (docs.isNotEmpty) {
-            chefs = docs;
+          addFetchedDocs(docs);
+          if (chefsById.isNotEmpty && query != chefQueries.last) {
             break;
           }
         }
       }
 
-      if (chefs.isEmpty && firstSuccessfulDocs.isNotEmpty) {
-        chefs = firstSuccessfulDocs;
-      }
+      chefs = chefsById.values.toList();
 
-      if (normalizedBranchId != null &&
-          normalizedBranchId.isNotEmpty &&
-          chefs.isNotEmpty) {
-        final branchFilteredChefs = chefs
+      if (normalizedBranchId != null && normalizedBranchId.isNotEmpty) {
+        chefs = chefs
             .where((chef) => _chefBelongsToBranch(chef, normalizedBranchId))
             .toList();
-        if (branchFilteredChefs.isNotEmpty) {
-          chefs = branchFilteredChefs;
-        }
+      }
+
+      if (widget.kitchenId != null && widget.kitchenId!.isNotEmpty) {
+        chefs = chefs.where((chef) {
+          return _containsBranchReference(chef['kitchen'], widget.kitchenId!);
+        }).toList();
       }
 
       setState(() {
@@ -528,6 +548,8 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
         'password': password,
         'role': 'chef',
         'branch': _branchId,
+        'isKitchen': true,
+        'kitchenBranches': _branchId != null ? [_branchId] : [],
         'kitchen': kitchenIds,
         'categories': categoryIds,
         'employee': employeeId,
