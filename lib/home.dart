@@ -17,6 +17,7 @@ import 'favorite_rules_page.dart';
 import 'dealer_billing.dart';
 import 'cake_order_page.dart';
 import 'employee_photo_page.dart';
+import 'cashdrawer_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -108,6 +109,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _openClosing() {
     Navigator.push(context, _createRoute(const ClosingEntryPage()));
+  }
+
+  void _openCashDrawer() {
+    Navigator.push(context, _createRoute(const CashDrawerPage()));
   }
 
   void _openExpense() {
@@ -379,6 +384,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         label: 'Close Shift',
         accentColor: const Color(0xFFEF4444),
         onTap: _openClosing,
+      ),
+      _QuickAction(
+        index: 16,
+        icon: Icons.lock_open_rounded,
+        label: 'Cash Drawer',
+        accentColor: const Color(0xFFEF4444),
+        onTap: _openCashDrawer,
       ),
       _QuickAction(
         index: 3,
