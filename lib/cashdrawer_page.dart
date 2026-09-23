@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_service.dart';
+import 'api_config.dart';
 import 'printer/unified_printer.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 
@@ -36,7 +36,7 @@ class _CashDrawerPageState extends State<CashDrawerPage> {
         throw Exception("Not logged in properly.");
       }
 
-      final url = '${ApiService.baseUrl}/branches/$branchId';
+      final url = '${ApiConfig.baseUrl}/branches/$branchId';
       final response = await http.get(
         Uri.parse(url),
         headers: {
