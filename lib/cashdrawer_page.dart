@@ -29,7 +29,7 @@ class _CashDrawerPageState extends State<CashDrawerPage> {
     setState(() => _isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final branchId = prefs.getString('branch_id');
+      final branchId = prefs.getString('branchId');
       final token = prefs.getString('token');
       
       if (branchId == null || token == null) {
