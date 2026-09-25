@@ -7,9 +7,11 @@ import 'package:branch/stock_provider.dart';
 import 'package:branch/auth_service.dart';
 import 'package:branch/auth_session_manager.dart';
 import 'package:branch/login_page.dart';
+import 'package:branch/background_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeService();
   AuthSessionManager.instance.attachNavigatorKey(AuthService.navigatorKey);
   AuthSessionManager.instance.startHeartbeat();
 
