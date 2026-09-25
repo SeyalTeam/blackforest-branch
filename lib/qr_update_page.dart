@@ -33,7 +33,8 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
     try {
       final response = await http.get(
         Uri.parse(
-            "${ApiConfig.baseUrl}/categories?where[isBilling][equals]=true&limit=200&depth=1"),
+          "${ApiConfig.baseUrl}/categories?where[isBilling][equals]=true&limit=200&depth=1",
+        ),
         headers: ApiConfig.getHeaders(null),
       );
 
@@ -59,8 +60,7 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
 
   String _getCategoryImage(dynamic category) {
     try {
-      if (category["image"] != null &&
-          category["image"]["url"] != null) {
+      if (category["image"] != null && category["image"]["url"] != null) {
         String url = category["image"]["url"];
         if (url.startsWith("/")) {
           return "${ApiConfig.domain}$url";
@@ -80,105 +80,112 @@ class _QrUpdatePageState extends State<QrUpdatePage> {
         onRefresh: _fetchBillingCategories,
         child: _isLoading
             ? const Center(
-            child: CircularProgressIndicator(color: Colors.black))
+                child: CircularProgressIndicator(color: Colors.black),
+              )
             : _errorMessage.isNotEmpty
             ? Center(child: Text(_errorMessage))
             : _categories.isEmpty
             ? const Center(child: Text("No categories found"))
-            : LayoutBuilder(builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final crossCount = width > 600 ? 5 : 3;
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final crossCount = width > 600 ? 5 : 3;
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(10),
-            gridDelegate:
-            SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossCount,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.75, // EXACT same as original
-            ),
-            itemCount: _categories.length,
-            itemBuilder: (context, index) {
-              final category = _categories[index];
-              final imageUrl = _getCategoryImage(category);
-
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => QrProductsPage(
-                        categoryId: category["id"],
-                        categoryName: category["name"] ?? "",
-                      ),
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(10),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossCount,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.75, // EXACT same as original
                     ),
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      final category = _categories[index];
+                      final imageUrl = _getCategoryImage(category);
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QrProductsPage(
+                                categoryId: category["id"],
+                                categoryName: category["name"] ?? "",
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.1),
+                                spreadRadius: 2,
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                flex: 8,
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(8),
+                                  ),
+                                  child: CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+
+                                    placeholder: (context, url) => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                    errorWidget: (context, url, error) =>
+                                        const Center(
+                                          child: Text(
+                                            "No Image",
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  width: double.infinity,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black,
+                                    borderRadius: BorderRadius.vertical(
+                                      bottom: Radius.circular(8),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    category["name"] ?? "",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 2,
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        flex: 8,
-                        child: ClipRRect(
-                          borderRadius:
-                          const BorderRadius.vertical(
-                              top: Radius.circular(8)),
-                          child: CachedNetworkImage(
-                            imageUrl: imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-
-                            placeholder: (context, url) =>
-                            const Center(
-                                child:
-                                CircularProgressIndicator()),
-                            errorWidget: (context, url, error) =>
-                            const Center(
-                                child: Text("No Image",
-                                    style: TextStyle(
-                                        color: Colors.grey))),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          width: double.infinity,
-                          decoration: const BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.vertical(
-                                bottom: Radius.circular(8)),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            category["name"] ?? "",
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        }),
+              ),
       ),
     );
   }

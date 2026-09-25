@@ -48,10 +48,12 @@ class _CameraPageState extends State<CameraPage> {
 
   Future<void> _initCamera() async {
     if (widget.cameras.isEmpty) return;
-    
+
     // Default to front camera if face capture only on first load
     if (widget.isFaceCapture && !_initialCameraSet) {
-      final frontIdx = widget.cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+      final frontIdx = widget.cameras.indexWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+      );
       if (frontIdx != -1) _selectedCameraIndex = frontIdx;
       _initialCameraSet = true;
     }
@@ -78,10 +80,12 @@ class _CameraPageState extends State<CameraPage> {
       widget.cameras[_selectedCameraIndex],
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
     _controller = controller;
-    
+
     try {
       await controller.initialize();
       if (mounted) setState(() {});
@@ -106,11 +110,16 @@ class _CameraPageState extends State<CameraPage> {
       }
       final bytes = allBytes.done().buffer.asUint8List();
 
-      final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
+      final Size imageSize = Size(
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
       final InputImageRotation imageRotation =
-          InputImageRotationValue.fromRawValue(camera.sensorOrientation) ?? InputImageRotation.rotation0deg;
+          InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
+          InputImageRotation.rotation0deg;
       final InputImageFormat inputImageFormat =
-          InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
+          InputImageFormatValue.fromRawValue(image.format.raw) ??
+          InputImageFormat.nv21;
 
       final inputImage = InputImage.fromBytes(
         bytes: bytes,
@@ -123,7 +132,7 @@ class _CameraPageState extends State<CameraPage> {
       );
 
       final faces = await _faceDetector!.processImage(inputImage);
-      
+
       if (mounted) {
         if (faces.length == 1) {
           final face = faces.first;
@@ -172,16 +181,16 @@ class _CameraPageState extends State<CameraPage> {
 
   Future<void> _toggleCamera() async {
     if (widget.cameras.length < 2 || _isTogglingCamera) return;
-    
+
     _isTogglingCamera = true;
     final oldController = _controller;
-    
+
     setState(() {
       _controller = null; // triggers loading spinner
       _blinkState = 0;
       _isFaceDetected = false;
     });
-    
+
     try {
       if (oldController != null) {
         if (widget.isFaceCapture && oldController.value.isStreamingImages) {
@@ -189,37 +198,45 @@ class _CameraPageState extends State<CameraPage> {
         }
         await oldController.dispose();
       }
-      
+
       // small delay to let hardware release camera
       await Future.delayed(const Duration(milliseconds: 100));
-      
-      final currentDirection = widget.cameras[_selectedCameraIndex].lensDirection;
-      final newDirection = currentDirection == CameraLensDirection.front 
-          ? CameraLensDirection.back 
+
+      final currentDirection =
+          widget.cameras[_selectedCameraIndex].lensDirection;
+      final newDirection = currentDirection == CameraLensDirection.front
+          ? CameraLensDirection.back
           : CameraLensDirection.front;
-          
-      int nextIndex = widget.cameras.indexWhere((c) => c.lensDirection == newDirection);
+
+      int nextIndex = widget.cameras.indexWhere(
+        (c) => c.lensDirection == newDirection,
+      );
       if (nextIndex == -1) {
         // Fallback to simple cycle if opposite lens isn't found
         nextIndex = (_selectedCameraIndex + 1) % widget.cameras.length;
       }
-      
+
       _selectedCameraIndex = nextIndex;
       await _initCamera();
     } catch (e) {
       debugPrint('Error toggling camera: $e');
     }
-    
+
     _isTogglingCamera = false;
   }
 
   Future<void> _takePicture() async {
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized || _isTakingPicture) return;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _isTakingPicture)
+      return;
 
     if (widget.isFaceCapture && !_isFaceDetected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please align face until oval turns green')),
+        const SnackBar(
+          content: Text('Please align face until oval turns green'),
+        ),
       );
       return;
     }
@@ -251,9 +268,9 @@ class _CameraPageState extends State<CameraPage> {
         setState(() {
           _isTakingPicture = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to take picture')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to take picture')));
       }
     }
   }
@@ -262,9 +279,7 @@ class _CameraPageState extends State<CameraPage> {
   Widget build(BuildContext context) {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-      );
+      return const Scaffold(backgroundColor: Colors.black);
     }
 
     final size = MediaQuery.of(context).size;
@@ -278,16 +293,11 @@ class _CameraPageState extends State<CameraPage> {
           // 1. Full Screen Preview / Captured Photo
           Positioned.fill(
             child: _capturedFile != null
-                ? Image.file(
-                    File(_capturedFile!.path),
-                    fit: BoxFit.cover,
-                  )
+                ? Image.file(File(_capturedFile!.path), fit: BoxFit.cover)
                 : ClipRect(
                     child: Transform.scale(
                       scale: scale,
-                      child: Center(
-                        child: CameraPreview(controller),
-                      ),
+                      child: Center(child: CameraPreview(controller)),
                     ),
                   ),
           ),
@@ -297,12 +307,14 @@ class _CameraPageState extends State<CameraPage> {
             Positioned.fill(
               child: CustomPaint(
                 painter: _FaceOverlayPainter(
-                  borderColor: _isFaceDetected ? Colors.greenAccent : Colors.redAccent,
+                  borderColor: _isFaceDetected
+                      ? Colors.greenAccent
+                      : Colors.redAccent,
                   blinkState: _blinkState,
                 ),
               ),
             ),
-            
+
           // 2. Overlaid Controls
           Positioned.fill(
             child: SafeArea(
@@ -311,17 +323,28 @@ class _CameraPageState extends State<CameraPage> {
                 children: [
                   // Top controls row
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 8.0,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
+                            size: 28,
+                          ),
                           onPressed: () => Navigator.pop(context),
                         ),
                         if (_capturedFile == null && widget.cameras.length > 1)
                           IconButton(
-                            icon: const Icon(Icons.flip_camera_ios, color: Colors.white, size: 28),
+                            icon: const Icon(
+                              Icons.flip_camera_ios,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                             onPressed: _toggleCamera,
                           ),
                       ],
@@ -341,20 +364,36 @@ class _CameraPageState extends State<CameraPage> {
                                     _capturedFile = null;
                                   });
                                   if (widget.isFaceCapture) {
-                                     _initCamera(); // restart stream
+                                    _initCamera(); // restart stream
                                   }
                                 },
-                                icon: const Icon(Icons.refresh, color: Colors.white),
-                                label: const Text('Retake', style: TextStyle(color: Colors.white, fontSize: 18)),
+                                icon: const Icon(
+                                  Icons.refresh,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  'Retake',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                  ),
+                                ),
                               ),
                               ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(context, _capturedFile),
+                                onPressed: () =>
+                                    Navigator.pop(context, _capturedFile),
                                 icon: const Icon(Icons.check),
-                                label: const Text('Use Photo', style: TextStyle(fontSize: 18)),
+                                label: const Text(
+                                  'Use Photo',
+                                  style: TextStyle(fontSize: 18),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
                                 ),
                               ),
                             ],
@@ -370,7 +409,11 @@ class _CameraPageState extends State<CameraPage> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: (widget.isFaceCapture && !_isFaceDetected) ? Colors.red : Colors.white,
+                                      color:
+                                          (widget.isFaceCapture &&
+                                              !_isFaceDetected)
+                                          ? Colors.red
+                                          : Colors.white,
                                       width: 4,
                                     ),
                                   ),
@@ -380,7 +423,11 @@ class _CameraPageState extends State<CameraPage> {
                                       width: 65,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: (widget.isFaceCapture && !_isFaceDetected) ? Colors.red.withOpacity(0.5) : Colors.white,
+                                        color:
+                                            (widget.isFaceCapture &&
+                                                !_isFaceDetected)
+                                            ? Colors.red.withOpacity(0.5)
+                                            : Colors.white,
                                       ),
                                       child: _isTakingPicture
                                           ? const Center(
@@ -461,15 +508,13 @@ class _FaceOverlayPainter extends CustomPainter {
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset(
-        (size.width - textPainter.width) / 2,
-        rect.top - 50,
-      ),
+      Offset((size.width - textPainter.width) / 2, rect.top - 50),
     );
   }
 
   @override
   bool shouldRepaint(covariant _FaceOverlayPainter oldDelegate) {
-    return oldDelegate.borderColor != borderColor || oldDelegate.blinkState != blinkState;
+    return oldDelegate.borderColor != borderColor ||
+        oldDelegate.blinkState != blinkState;
   }
 }

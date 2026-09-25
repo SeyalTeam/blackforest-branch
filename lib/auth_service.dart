@@ -10,13 +10,14 @@ import 'package:branch/session_prefs.dart';
 
 class AuthService {
   // Global navigator key to allow navigation without context
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   // Centralized logout function
   static Future<void> logout() async {
     AuthSessionManager.instance.stopHeartbeat();
     final context = navigatorKey.currentContext;
-    
+
     // Clear Providers if context is available
     if (context != null) {
       try {
@@ -34,7 +35,9 @@ class AuthService {
     await clearSessionPreservingFavorites(prefs);
 
     // Navigate to Login Page
-    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
+    navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      '/login',
+      (route) => false,
+    );
   }
 }
-

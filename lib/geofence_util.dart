@@ -66,7 +66,9 @@ class GeofenceUtil {
           ),
         ).timeout(const Duration(seconds: 6));
       } catch (e) {
-        debugPrint('GeofenceUtil getCurrentPosition error: $e. Trying last known...');
+        debugPrint(
+          'GeofenceUtil getCurrentPosition error: $e. Trying last known...',
+        );
         try {
           position = await Geolocator.getLastKnownPosition();
         } catch (_) {}
@@ -82,7 +84,7 @@ class GeofenceUtil {
     }
 
     try {
-      final data = await ApiService.instance.fetchBranchGeoSettings();
+      final data = await ApiConfig.fetchBranchGeoSettings(prefs.getString('token') ?? '');
       final locations = data['locations'] as List?;
       if (locations != null && locations.isNotEmpty) {
         double nearestDistance = double.infinity;
@@ -99,10 +101,12 @@ class GeofenceUtil {
           final effectiveRadius = radius + 30.0;
 
           if (lat != null && lng != null) {
-            final double latD =
-                (lat is num) ? lat.toDouble() : double.parse(lat.toString());
-            final double lngD =
-                (lng is num) ? lng.toDouble() : double.parse(lng.toString());
+            final double latD = (lat is num)
+                ? lat.toDouble()
+                : double.parse(lat.toString());
+            final double lngD = (lng is num)
+                ? lng.toDouble()
+                : double.parse(lng.toString());
 
             final distance = Geolocator.distanceBetween(
               position.latitude,
@@ -112,8 +116,11 @@ class GeofenceUtil {
             );
 
             final branchName = loc['name'] ?? loc['branchName'] ?? '';
-            final branchId = (loc['branch'] is Map ? loc['branch']['id'] : loc['branch'])?.toString() ??
-                loc['branchId']?.toString() ?? '';
+            final branchId =
+                (loc['branch'] is Map ? loc['branch']['id'] : loc['branch'])
+                    ?.toString() ??
+                loc['branchId']?.toString() ??
+                '';
 
             if (distance < nearestDistance) {
               nearestDistance = distance;
@@ -124,7 +131,8 @@ class GeofenceUtil {
 
             if (distance <= effectiveRadius) {
               debugPrint(
-                  'GeofenceUtil: INSIDE branch "$branchName"! distance: ${distance.toStringAsFixed(1)}m <= effective: ${effectiveRadius}m');
+                'GeofenceUtil: INSIDE branch "$branchName"! distance: ${distance.toStringAsFixed(1)}m <= effective: ${effectiveRadius}m',
+              );
               return GeofenceResult(
                 isInside: true,
                 position: position,
@@ -138,7 +146,8 @@ class GeofenceUtil {
         }
 
         debugPrint(
-            'GeofenceUtil: OUTSIDE all branches. Nearest: ${nearestDistance.toStringAsFixed(1)}m (allowed: ${nearestRadius}m)');
+          'GeofenceUtil: OUTSIDE all branches. Nearest: ${nearestDistance.toStringAsFixed(1)}m (allowed: ${nearestRadius}m)',
+        );
         return GeofenceResult(
           isInside: false,
           position: position,

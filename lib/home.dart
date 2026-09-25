@@ -61,7 +61,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Future<void> _loadSessionPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('user_name') ??
+    final name =
+        prefs.getString('user_name') ??
         prefs.getString('employee_name') ??
         prefs.getString('username') ??
         prefs.getString('email')?.split('@').first ??
@@ -90,9 +91,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _openInstock() {
     Navigator.push(
       context,
-      _createRoute(
-        const CategoriesPage(isInstockEntry: true),
-      ),
+      _createRoute(const CategoriesPage(isInstockEntry: true)),
     );
   }
 
@@ -331,11 +330,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     color: action.accentColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    action.icon,
-                    color: action.accentColor,
-                    size: 26,
-                  ),
+                  child: Icon(action.icon, color: action.accentColor, size: 26),
                 ),
                 const SizedBox(height: 8),
                 Padding(

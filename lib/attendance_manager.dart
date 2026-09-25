@@ -13,11 +13,10 @@ class AttendanceManager {
   static final AttendanceManager instance = AttendanceManager._internal();
   AttendanceManager._internal();
 
-  
-
   final StreamController<Map<String, dynamic>> _updateController =
       StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get onAttendanceUpdate => _updateController.stream;
+  Stream<Map<String, dynamic>> get onAttendanceUpdate =>
+      _updateController.stream;
 
   Timer? _foregroundTimer;
   static bool _isExecuting = false;
@@ -54,10 +53,14 @@ class AttendanceManager {
   }
 
   /// Core logic executed by both the foreground manager and the background service.
-  static Future<void> checkAndProcessAttendance({bool isBackground = false}) async {
+  static Future<void> checkAndProcessAttendance({
+    bool isBackground = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     if (_isExecuting) {
-      debugPrint('AttendanceManager: Check already in progress, skipping tick.');
+      debugPrint(
+        'AttendanceManager: Check already in progress, skipping tick.',
+      );
       return;
     }
 
@@ -76,7 +79,9 @@ class AttendanceManager {
       final position = geo.position;
 
       if (position == null) {
-        debugPrint('AttendanceManager: Could not get GPS fix. Skipping attendance check.');
+        debugPrint(
+          'AttendanceManager: Could not get GPS fix. Skipping attendance check.',
+        );
         return;
       }
 
@@ -94,18 +99,26 @@ class AttendanceManager {
       final url =
           '${ApiConfig.baseUrl}/attendance?where[user][equals]=$userId&where[date][greater_than_equal]=$queryDate&sort=-date&limit=5';
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        debugPrint('AttendanceManager: Failed to fetch attendance (${response.statusCode})');
+        debugPrint(
+          'AttendanceManager: Failed to fetch attendance (${response.statusCode})',
+        );
         return;
       }
 
       final data = jsonDecode(response.body);
-      final docs = (data is Map<String, dynamic> ? data['docs'] : null) as List?;
+      final docs =
+          (data is Map<String, dynamic> ? data['docs'] : null) as List?;
       if (docs == null) return;
 
       // 3. Stale session auto-close (past days active sessions)
@@ -118,7 +131,9 @@ class AttendanceManager {
           if (a is Map<String, dynamic> &&
               a['type'] == 'session' &&
               a['status'] == 'active') {
-            final punchIn = DateTime.tryParse(a['punchIn']?.toString() ?? '')?.toLocal();
+            final punchIn = DateTime.tryParse(
+              a['punchIn']?.toString() ?? '',
+            )?.toLocal();
             if (punchIn != null && punchIn.isBefore(localMidnight)) {
               final endOfDay = DateTime(
                 punchIn.year,
@@ -165,7 +180,9 @@ class AttendanceManager {
             (firstDoc['date']?.toString().startsWith(queryDateStr) == true)) {
           todayDoc = firstDoc;
           docId = firstDoc['id']?.toString();
-          rawActivities = List<dynamic>.from((firstDoc['activities'] as List?) ?? []);
+          rawActivities = List<dynamic>.from(
+            (firstDoc['activities'] as List?) ?? [],
+          );
         }
       }
 
@@ -222,7 +239,9 @@ class AttendanceManager {
 
             activeSession['punchOut'] = now.toUtc().toIso8601String();
             activeSession['status'] = 'closed';
-            activeSession['durationSeconds'] = durationSecs > 0 ? durationSecs : 0;
+            activeSession['durationSeconds'] = durationSecs > 0
+                ? durationSecs
+                : 0;
             activeSession['punchOutType'] = 'auto';
 
             final patchUrl = '${ApiConfig.baseUrl}/attendance/$docId';
@@ -243,7 +262,8 @@ class AttendanceManager {
               await _showLocalNotification(
                 id: 991,
                 title: '🏢 Auto Punched Out',
-                body: 'You left the branch area. Your work session has been automatically punched out.',
+                body:
+                    'You left the branch area. Your work session has been automatically punched out.',
                 payload: 'profile',
               );
 
@@ -255,7 +275,9 @@ class AttendanceManager {
                 });
               }
             } else {
-              debugPrint('AttendanceManager: Auto punch-out failed on server (${patchRes.statusCode}): ${patchRes.body}');
+              debugPrint(
+                'AttendanceManager: Auto punch-out failed on server (${patchRes.statusCode}): ${patchRes.body}',
+              );
             }
           }
         } else {
@@ -263,7 +285,6 @@ class AttendanceManager {
           _consecutiveOutsideTicks = 0;
         }
       }
-
       // ── 6. AUTO PUNCH IN EVALUATION ───────────────────────────────────────
       else {
         _consecutiveOutsideTicks = 0;
@@ -274,7 +295,9 @@ class AttendanceManager {
           // Debounce to prevent rapid re-triggering
           if (_lastActionTime != null &&
               now.difference(_lastActionTime!).inSeconds < 25) {
-            debugPrint('AttendanceManager: Auto punch-in debounced (recently executed).');
+            debugPrint(
+              'AttendanceManager: Auto punch-in debounced (recently executed).',
+            );
             return;
           }
           _lastActionTime = now;
@@ -290,7 +313,8 @@ class AttendanceManager {
           };
 
           if (docId != null) {
-            final updatedActivities = List<dynamic>.from(rawActivities)..add(newActivity);
+            final updatedActivities = List<dynamic>.from(rawActivities)
+              ..add(newActivity);
             final patchUrl = '${ApiConfig.baseUrl}/attendance/$docId';
             final patchRes = await http.patch(
               Uri.parse(patchUrl),
@@ -308,7 +332,8 @@ class AttendanceManager {
               await _showLocalNotification(
                 id: 992,
                 title: '⚡ Auto Punched In',
-                body: 'You arrived at the branch! Session started. Tap here to add your selfie.',
+                body:
+                    'You arrived at the branch! Session started. Tap here to add your selfie.',
                 payload: 'auto_punch_in',
               );
 
@@ -320,7 +345,9 @@ class AttendanceManager {
                 });
               }
             } else {
-              debugPrint('AttendanceManager: Auto punch-in PATCH failed (${patchRes.statusCode}): ${patchRes.body}');
+              debugPrint(
+                'AttendanceManager: Auto punch-in PATCH failed (${patchRes.statusCode}): ${patchRes.body}',
+              );
             }
           } else {
             // Create new today document
@@ -340,13 +367,16 @@ class AttendanceManager {
             );
 
             if (postRes.statusCode == 200 || postRes.statusCode == 201) {
-              debugPrint('AttendanceManager: Auto punch-in SUCCESS (posted new doc)!');
+              debugPrint(
+                'AttendanceManager: Auto punch-in SUCCESS (posted new doc)!',
+              );
               await prefs.remove('lastPunchOutType');
 
               await _showLocalNotification(
                 id: 992,
                 title: '⚡ Auto Punched In',
-                body: 'You arrived at the branch! Session started. Tap here to add your selfie.',
+                body:
+                    'You arrived at the branch! Session started. Tap here to add your selfie.',
                 payload: 'auto_punch_in',
               );
 
@@ -357,7 +387,9 @@ class AttendanceManager {
                 });
               }
             } else {
-              debugPrint('AttendanceManager: Auto punch-in POST failed (${postRes.statusCode}): ${postRes.body}');
+              debugPrint(
+                'AttendanceManager: Auto punch-in POST failed (${postRes.statusCode}): ${postRes.body}',
+              );
             }
           }
         }
@@ -381,19 +413,23 @@ class AttendanceManager {
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
         'auto_attendance_channel',
         'Auto Attendance Alerts',
-        description: 'Notifications for automatic punch-in and punch-out based on geofence',
+        description:
+            'Notifications for automatic punch-in and punch-out based on geofence',
         importance: Importance.max,
       );
 
       await notificationsPlugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(channel);
 
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      const AndroidNotificationDetails
+      androidDetails = AndroidNotificationDetails(
         'auto_attendance_channel',
         'Auto Attendance Alerts',
-        channelDescription: 'Notifications for automatic punch-in and punch-out based on geofence',
+        channelDescription:
+            'Notifications for automatic punch-in and punch-out based on geofence',
         importance: Importance.max,
         priority: Priority.high,
         ticker: 'Attendance Alert',

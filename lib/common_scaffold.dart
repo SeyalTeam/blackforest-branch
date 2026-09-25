@@ -113,7 +113,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
   Future<void> _loadUsername() async {
     final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('user_name') ??
+    final name =
+        prefs.getString('user_name') ??
         prefs.getString('employee_name') ??
         prefs.getString('username') ??
         prefs.getString('email')?.split('@').first ??
@@ -131,7 +132,6 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         _photoUrl = photoUrl;
       });
     }
-
   }
 
   Future<void> _initStockAlerts() async {
@@ -198,8 +198,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           final data = jsonDecode(threadRes.body);
           final docs = data['docs'] as List?;
           if (docs != null && docs.isNotEmpty) {
-            _cachedChatThreadId =
-                (docs.first['id'] ?? docs.first['_id'])?.toString().trim();
+            _cachedChatThreadId = (docs.first['id'] ?? docs.first['_id'])
+                ?.toString()
+                .trim();
           }
         }
       }
@@ -214,9 +215,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         queryParams['where[thread][equals]'] = _cachedChatThreadId!;
       }
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}/message-receipts').replace(
-        queryParameters: queryParams,
-      );
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/message-receipts',
+      ).replace(queryParameters: queryParams);
 
       final receiptsRes = await http.get(
         uri,
@@ -523,9 +524,8 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         barrierDismissible: true,
         pageBuilder: (_, __, ___) => const ScannerDialog(),
         barrierLabel: "Dismiss",
-        transitionBuilder:
-            (context, anim, __, child) =>
-                FadeTransition(opacity: anim, child: child),
+        transitionBuilder: (context, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
       );
 
       if (result != null) {
@@ -571,216 +571,226 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                 bottom: widget.bottom, // NEW
                 actions: [
                   ...?widget.actions,
-            if (widget.pageType == PageType.instock)
-              Consumer<InstockProvider>(
-                // NEW CONSUMER for Instock
-                builder: (_, sp, __) {
-                  final int count = sp.inStockQuery.length;
-                  return Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined),
-                        onPressed: () {
-                          _resetTimer();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CartPage(isInstock: true),
-                            ),
-                          );
-                        },
-                      ),
-                      if (count > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF11998e),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              )
-            else if (widget.pageType == PageType.stock)
-              Consumer<StockProvider>(
-                builder: (_, sp, __) {
-                  final int count =
-                      sp.selected.values.where((v) => v == true).length;
-                  return Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined),
-                        onPressed: () {
-                          _resetTimer();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => ChangeNotifierProvider.value(
-                                    value: sp,
-                                    child: const CartPage(isStockOrder: true),
+                  if (widget.pageType == PageType.instock)
+                    Consumer<InstockProvider>(
+                      // NEW CONSUMER for Instock
+                      builder: (_, sp, __) {
+                        final int count = sp.inStockQuery.length;
+                        return Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.shopping_cart_outlined),
+                              onPressed: () {
+                                _resetTimer();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CartPage(isInstock: true),
                                   ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
-                      if (count > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              borderRadius: BorderRadius.circular(10),
-                            ), // Blue badge for stock? Or Keep Red. Let's keep Red but maybe distinct.
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
+                            if (count > 0)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF11998e),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               ),
-                              textAlign: TextAlign.center,
+                          ],
+                        );
+                      },
+                    )
+                  else if (widget.pageType == PageType.stock)
+                    Consumer<StockProvider>(
+                      builder: (_, sp, __) {
+                        final int count = sp.selected.values
+                            .where((v) => v == true)
+                            .length;
+                        return Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.shopping_cart_outlined),
+                              onPressed: () {
+                                _resetTimer();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        ChangeNotifierProvider.value(
+                                          value: sp,
+                                          child: const CartPage(
+                                            isStockOrder: true,
+                                          ),
+                                        ),
+                                  ),
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              )
-            else if (widget.pageType == PageType.returnorder)
-              Consumer<ReturnProvider>(
-                builder: (_, rp, __) {
-                  final int count = rp.returnItems.length;
-                  return Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined),
-                        onPressed: () {
-                          _resetTimer();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => const CartPage(isReturnOrder: true),
-                            ),
-                          );
-                        },
-                      ),
-                      if (count > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                            if (count > 0)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ), // Blue badge for stock? Or Keep Red. Let's keep Red but maybe distinct.
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               ),
-                              textAlign: TextAlign.center,
+                          ],
+                        );
+                      },
+                    )
+                  else if (widget.pageType == PageType.returnorder)
+                    Consumer<ReturnProvider>(
+                      builder: (_, rp, __) {
+                        final int count = rp.returnItems.length;
+                        return Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.shopping_cart_outlined),
+                              onPressed: () {
+                                _resetTimer();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CartPage(isReturnOrder: true),
+                                  ),
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              )
-            else if (widget.pageType == PageType.home)
-              IconButton(
-                icon: _photoUrl != null && _photoUrl!.isNotEmpty
-                    ? CircleAvatar(
-                        radius: 14,
-                        backgroundImage: NetworkImage(_photoUrl!),
-                      )
-                    : const Icon(Icons.person_outline),
-                onPressed: () {
-
-                  _resetTimer();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfilePage()),
-                  );
-                },
-              )
-            else if (widget.pageType != PageType.stockstatus && widget.pageType != PageType.employee && widget.pageType != PageType.profile && widget.pageType != PageType.chat)
-              Consumer<CartProvider>(
-                builder: (_, cartProvider, __) {
-                  final int count = cartProvider.cartItems.length;
-                  return Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined),
-                        onPressed: () {
-                          _resetTimer();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const CartPage()),
-                          );
-                        },
-                      ),
-                      if (count > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
+                            if (count > 0)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                            ),
+                          ],
+                        );
+                      },
+                    )
+                  else if (widget.pageType == PageType.home)
+                    IconButton(
+                      icon: _photoUrl != null && _photoUrl!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 14,
+                              backgroundImage: NetworkImage(_photoUrl!),
+                            )
+                          : const Icon(Icons.person_outline),
+                      onPressed: () {
+                        _resetTimer();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ProfilePage(),
                           ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-          ],
-        )
-      : null,
+                        );
+                      },
+                    )
+                  else if (widget.pageType != PageType.stockstatus &&
+                      widget.pageType != PageType.employee &&
+                      widget.pageType != PageType.profile &&
+                      widget.pageType != PageType.chat)
+                    Consumer<CartProvider>(
+                      builder: (_, cartProvider, __) {
+                        final int count = cartProvider.cartItems.length;
+                        return Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.shopping_cart_outlined),
+                              onPressed: () {
+                                _resetTimer();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const CartPage(),
+                                  ),
+                                );
+                              },
+                            ),
+                            if (count > 0)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                ],
+              )
+            : null,
 
         drawer: Drawer(
           child: ListView(
@@ -880,7 +890,10 @@ class _CommonScaffoldState extends State<CommonScaffold> {
                 },
               ),
               SwitchListTile(
-                secondary: const Icon(Icons.account_balance_wallet_outlined, color: Colors.black),
+                secondary: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Colors.black,
+                ),
                 title: const Text('Cash Drawer'),
                 subtitle: const Text('Open automatically on print'),
                 value: _cashDrawerEnabled,
@@ -908,76 +921,76 @@ class _CommonScaffoldState extends State<CommonScaffold> {
 
         bottomNavigationBar:
             (widget.hideBottomNavigationBar ||
-                    widget.pageType == PageType.stock ||
-                    widget.pageType == PageType.chat)
-                ? null
-                : Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
-                    ),
-                  ),
-                  child: BottomAppBar(
-                    color: Colors.white,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        /// HOME
-                        _buildNavItem(
-                          icon: Icons.home_rounded,
-                          label: "Home",
-                          page: const HomePage(),
-                          type: PageType.home,
-                        ),
-
-                        /// BILLING
-                        _buildNavItem(
-                          icon: Icons.receipt_long_rounded,
-                          label: "Billing",
-                          page: const CategoriesPage(),
-                          type: PageType.billing,
-                        ),
-
-                        /// SCAN
-                        GestureDetector(
-                          onTap: _scanBarcode,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(
-                                Icons.qr_code_scanner_rounded,
-                                color: Color(0xFF64748B),
-                                size: 32,
-                              ),
-                              Text(
-                                "Scan",
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF64748B),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        /// CHAT
-                        ValueListenableBuilder<int>(
-                          valueListenable: CommonScaffold.unreadChatNotifier,
-                          builder: (context, unreadCount, _) {
-                            return _buildNavItem(
-                              icon: Icons.forum_rounded,
-                              label: "Chat",
-                              page: const ChatPage(),
-                              type: PageType.chat,
-                              badgeCount: unreadCount,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                widget.pageType == PageType.stock ||
+                widget.pageType == PageType.chat)
+            ? null
+            : Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
                   ),
                 ),
+                child: BottomAppBar(
+                  color: Colors.white,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      /// HOME
+                      _buildNavItem(
+                        icon: Icons.home_rounded,
+                        label: "Home",
+                        page: const HomePage(),
+                        type: PageType.home,
+                      ),
+
+                      /// BILLING
+                      _buildNavItem(
+                        icon: Icons.receipt_long_rounded,
+                        label: "Billing",
+                        page: const CategoriesPage(),
+                        type: PageType.billing,
+                      ),
+
+                      /// SCAN
+                      GestureDetector(
+                        onTap: _scanBarcode,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.qr_code_scanner_rounded,
+                              color: Color(0xFF64748B),
+                              size: 32,
+                            ),
+                            Text(
+                              "Scan",
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      /// CHAT
+                      ValueListenableBuilder<int>(
+                        valueListenable: CommonScaffold.unreadChatNotifier,
+                        builder: (context, unreadCount, _) {
+                          return _buildNavItem(
+                            icon: Icons.forum_rounded,
+                            label: "Chat",
+                            page: const ChatPage(),
+                            type: PageType.chat,
+                            badgeCount: unreadCount,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -990,8 +1003,9 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     int badgeCount = 0,
   }) {
     final bool isSelected = widget.pageType == type;
-    final Color itemColor =
-        isSelected ? const Color(0xFF4A1A12) : const Color(0xFF64748B);
+    final Color itemColor = isSelected
+        ? const Color(0xFF4A1A12)
+        : const Color(0xFF64748B);
     return GestureDetector(
       onTap: () {
         _resetTimer();
@@ -1007,11 +1021,7 @@ class _CommonScaffoldState extends State<CommonScaffold> {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(
-                icon,
-                size: 32,
-                color: itemColor,
-              ),
+              Icon(icon, size: 32, color: itemColor),
               if (badgeCount > 0)
                 Positioned(
                   right: -6,

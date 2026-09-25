@@ -111,7 +111,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
             if ((_companyId == null || _companyId!.isEmpty) &&
                 _branchId != null &&
                 _branchId!.isNotEmpty) {
-              final resolved = await _fetchCompanyIdFromBranch(token, _branchId!);
+              final resolved = await _fetchCompanyIdFromBranch(
+                token,
+                _branchId!,
+              );
               if (resolved != null && resolved.isNotEmpty) {
                 _companyId = resolved;
                 final prefs = await SharedPreferences.getInstance();
@@ -283,7 +286,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
         if (_companyId != null && _companyId!.isNotEmpty) {
           extra = "&where[company][contains]=$_companyId";
-        } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
+        } else if (_userRole == "waiter" ||
+            _userRole == "kitchen" ||
+            _userRole == "chef" ||
+            _userRole == "manager" ||
+            _userRole == "cashier") {
           final ip = await _deviceIp();
           final matches = await _matchingCompanies(token, ip);
           if (matches.isNotEmpty) {
@@ -341,7 +348,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       messenger.showSnackBar(const SnackBar(content: Text('No camera found')));
       return null;
     }
-    
+
     final XFile? photo = await Navigator.push<XFile>(
       context,
       MaterialPageRoute(
@@ -366,7 +373,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       '${tempDir.path}/category_${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
     await file.writeAsBytes(compressed);
-    
+
     return file;
   }
 
@@ -512,15 +519,18 @@ class _CategoriesPageState extends State<CategoriesPage> {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'category';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            if (redirResponse.statusCode == 200 || redirResponse.statusCode == 201) {
+            if (redirResponse.statusCode == 200 ||
+                redirResponse.statusCode == 201) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
@@ -691,130 +701,135 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                      TextFormField(
-                        controller: nameCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: "Category Name",
-                          border: OutlineInputBorder(),
+                        TextFormField(
+                          controller: nameCtrl,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: "Category Name",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return "Category name is required";
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return "Category name is required";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCompanyId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: "Company",
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCompanyId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: "Company",
+                            border: OutlineInputBorder(),
+                          ),
+                          items: companyOptions.map((company) {
+                            final id = company['id'] ?? '';
+                            final label = company['name'] ?? 'Unknown Company';
+                            return DropdownMenuItem<String>(
+                              value: id,
+                              child: Text(
+                                label,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (isSubmitting || !canChangeCompany)
+                              ? null
+                              : (value) {
+                                  setDialogState(() {
+                                    selectedCompanyId = value;
+                                  });
+                                },
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return "Company is required";
+                            }
+                            return null;
+                          },
                         ),
-                        items: companyOptions.map((company) {
-                          final id = company['id'] ?? '';
-                          final label = company['name'] ?? 'Unknown Company';
-                          return DropdownMenuItem<String>(
-                            value: id,
-                            child: Text(
-                              label,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (isSubmitting || !canChangeCompany)
-                            ? null
-                            : (value) {
-                                setDialogState(() {
-                                  selectedCompanyId = value;
-                                });
-                              },
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return "Company is required";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.camera_alt_outlined, size: 18),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    "Category Image (optional)",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 18,
                                   ),
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _captureAndConfirmCategoryPhoto();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: Text(
-                                        capturedImage == null
-                                            ? "Capture"
-                                            : "Retake",
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      "Category Image (optional)",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _pickAndConfirmCategoryPhotoFromGallery();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: const Text("Select from Gallery"),
-                                    ),
-                                  ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _captureAndConfirmCategoryPhoto();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: Text(
+                                          capturedImage == null
+                                              ? "Capture"
+                                              : "Retake",
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _pickAndConfirmCategoryPhotoFromGallery();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: const Text(
+                                          "Select from Gallery",
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              if (capturedImage != null) ...[
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.file(
+                                    capturedImage!,
+                                    height: 140,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ],
-                            ),
-                            if (capturedImage != null) ...[
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.file(
-                                  capturedImage!,
-                                  height: 140,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
                       ],
                     ),
                   ),

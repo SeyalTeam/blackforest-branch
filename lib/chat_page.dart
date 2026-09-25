@@ -54,7 +54,9 @@ class ChatPage extends StatefulWidget {
         return count;
       }
     } catch (e) {
-      debugPrint('Error checking unread chat messages in branch: ' + e.toString());
+      debugPrint(
+        'Error checking unread chat messages in branch: ' + e.toString(),
+      );
     }
     return 0;
   }
@@ -187,17 +189,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     required String token,
     required String currentUserId,
   }) async {
-    _MessageThreadSummary? thread = await _fetchThreadByStaffUser(token, currentUserId);
+    _MessageThreadSummary? thread = await _fetchThreadByStaffUser(
+      token,
+      currentUserId,
+    );
     if (thread != null) return thread;
 
     try {
       final createRes = await http.post(
         _apiUri('/api/message-threads'),
         headers: _authHeaders(token, json: true),
-        body: jsonEncode({
-          'staffUser': currentUserId,
-          'status': 'open',
-        }),
+        body: jsonEncode({'staffUser': currentUserId, 'status': 'open'}),
       );
       if (createRes.statusCode == 200 || createRes.statusCode == 201) {
         final data = _decodeResponse(createRes);
@@ -311,11 +313,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final receiptDocs =
           (_decodeResponse(receiptResponse)?['docs'] as List?) ?? const [];
 
-      final messages =
-          messageDocs
-              .map(_ChatMessage.fromJson)
-              .whereType<_ChatMessage>()
-              .toList(growable: false);
+      final messages = messageDocs
+          .map(_ChatMessage.fromJson)
+          .whereType<_ChatMessage>()
+          .toList(growable: false);
 
       final outgoingReceiptsByMessageId = <String, _MessageReceiptSummary>{};
       final staffReceiptsByMessageId = <String, _MessageReceiptSummary>{};
@@ -427,7 +428,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         debugPrint(
-          'Chat receipt update failed for ' + receipt.id + ': ' + response.statusCode.toString(),
+          'Chat receipt update failed for ' +
+              receipt.id +
+              ': ' +
+              response.statusCode.toString(),
         );
         return null;
       }
@@ -435,7 +439,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return _MessageReceiptSummary.fromJson(_decodeResponse(response)) ??
           receipt.copyWith(status: status);
     } catch (error) {
-      debugPrint('Chat receipt update error for ' + receipt.id + ': ' + error.toString());
+      debugPrint(
+        'Chat receipt update error for ' + receipt.id + ': ' + error.toString(),
+      );
       return null;
     }
   }
@@ -578,7 +584,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unable to initialize chat conversation. Please try again.'),
+          content: Text(
+            'Unable to initialize chat conversation. Please try again.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -587,7 +595,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     final threadId = thread.id;
     final localSeq = _nextOptimisticSeq();
-    final localId = 'local-' + DateTime.now().microsecondsSinceEpoch.toString() + '-' + localSeq.toString();
+    final localId =
+        'local-' +
+        DateTime.now().microsecondsSinceEpoch.toString() +
+        '-' +
+        localSeq.toString();
     final optimisticMessage = _ChatMessage(
       id: localId,
       threadId: threadId,
@@ -712,10 +724,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   SizedBox(height: 2),
                   Text(
                     'Management • Online',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFD4EBE7),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFFD4EBE7)),
                   ),
                 ],
               ),
@@ -726,7 +735,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
             tooltip: 'Refresh chat',
-            onPressed: () => _refreshConversation(showLoader: true, forceScrollToBottom: true),
+            onPressed: () => _refreshConversation(
+              showLoader: true,
+              forceScrollToBottom: true,
+            ),
           ),
           const SizedBox(width: 4),
         ],
@@ -735,9 +747,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: Stack(
           children: [
             Positioned.fill(
-              child: CustomPaint(
-                painter: const _WhatsAppWallpaperPainter(),
-              ),
+              child: CustomPaint(painter: const _WhatsAppWallpaperPainter()),
             ),
             Column(
               children: [
@@ -747,9 +757,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     backgroundColor: Colors.transparent,
                     valueColor: AlwaysStoppedAnimation<Color>(_whatsAppGreen),
                   ),
-                Expanded(
-                  child: _buildChatBody(currentUser, displayMessages),
-                ),
+                Expanded(child: _buildChatBody(currentUser, displayMessages)),
                 _buildInputBar(currentUser),
               ],
             ),
@@ -801,7 +809,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: Colors.redAccent,
+              ),
               const SizedBox(height: 12),
               Text(
                 _loadError!,
@@ -846,7 +858,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.chat_bubble_outline_rounded, size: 44, color: _whatsAppDarkGreen),
+              Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 44,
+                color: _whatsAppDarkGreen,
+              ),
               SizedBox(height: 10),
               Text(
                 'Direct Admin Communication',
@@ -860,7 +876,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               Text(
                 'Send a message to reach management directly.\nMessages will appear in real time.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
               ),
             ],
           ),
@@ -875,9 +895,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       itemBuilder: (context, index) {
         final message = displayMessages[index];
         final isOutgoing = !message.isFromAdmin;
-        final receipt = isOutgoing ? _outgoingReceiptsByMessageId[message.id] : null;
+        final receipt = isOutgoing
+            ? _outgoingReceiptsByMessageId[message.id]
+            : null;
 
-        final showDateChip = index == 0 ||
+        final showDateChip =
+            index == 0 ||
             !_isSameCalendarDay(
               displayMessages[index - 1].createdAt,
               message.createdAt,
@@ -890,7 +913,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               Center(
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.88),
                     borderRadius: BorderRadius.circular(8),
@@ -914,20 +940,29 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
             ],
             Align(
-              alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: isOutgoing
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
               child: Container(
                 margin: const EdgeInsets.only(bottom: 6),
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.78,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isOutgoing ? _whatsAppOutgoingBubble : Colors.white,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(12),
                     topRight: const Radius.circular(12),
-                    bottomLeft: isOutgoing ? const Radius.circular(12) : Radius.zero,
-                    bottomRight: isOutgoing ? Radius.zero : const Radius.circular(12),
+                    bottomLeft: isOutgoing
+                        ? const Radius.circular(12)
+                        : Radius.zero,
+                    bottomRight: isOutgoing
+                        ? Radius.zero
+                        : const Radius.circular(12),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -967,7 +1002,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       children: [
                         const Spacer(),
                         Text(
-                          DateFormat('hh:mm a').format(message.createdAt.toLocal()),
+                          DateFormat(
+                            'hh:mm a',
+                          ).format(message.createdAt.toLocal()),
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF667781),
@@ -991,10 +1028,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Widget _buildReceiptStatusIcon(String? status) {
     if (status == 'read') {
-      return const Icon(Icons.done_all_rounded, size: 16, color: Color(0xFF53BDEB));
+      return const Icon(
+        Icons.done_all_rounded,
+        size: 16,
+        color: Color(0xFF53BDEB),
+      );
     }
     if (status == 'delivered') {
-      return const Icon(Icons.done_all_rounded, size: 16, color: Color(0xFF8696A0));
+      return const Icon(
+        Icons.done_all_rounded,
+        size: 16,
+        color: Color(0xFF8696A0),
+      );
     }
     return const Icon(Icons.done_rounded, size: 16, color: Color(0xFF8696A0));
   }
@@ -1033,7 +1078,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       style: const TextStyle(fontSize: 15),
                       decoration: const InputDecoration(
                         hintText: 'Type a message...',
-                        hintStyle: TextStyle(color: Color(0xFF8696A0), fontSize: 15),
+                        hintStyle: TextStyle(
+                          color: Color(0xFF8696A0),
+                          fontSize: 15,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(vertical: 10),
@@ -1310,7 +1358,8 @@ Future<_CurrentChatUser> _loadCurrentUser() async {
   }
 
   final employeeId = _relationshipId(userJson['employee']);
-  final displayName = _stringValue(userJson['name']) ??
+  final displayName =
+      _stringValue(userJson['name']) ??
       _stringValue(userJson['username']) ??
       _stringValue(userJson['email']) ??
       'Staff';
@@ -1375,7 +1424,8 @@ Map<String, dynamic>? _decodeResponse(http.Response response) {
 
 String _responseMessage(http.Response response, String fallback) {
   final decoded = _decodeResponse(response);
-  if (decoded == null) return fallback + ' (' + response.statusCode.toString() + ')';
+  if (decoded == null)
+    return fallback + ' (' + response.statusCode.toString() + ')';
 
   final directMessage = _stringValue(decoded['message']);
   if (directMessage != null && directMessage.isNotEmpty) {

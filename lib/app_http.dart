@@ -62,10 +62,7 @@ Future<Map<String, String>> _prepareHeaders(
   return map;
 }
 
-Future<raw_http.Response> get(
-  Uri url, {
-  Map<String, String>? headers,
-}) async {
+Future<raw_http.Response> get(Uri url, {Map<String, String>? headers}) async {
   final resolvedHeaders = await _prepareHeaders(url, headers);
   return _interceptResponse(
     raw_http.get(url, headers: resolvedHeaders),
@@ -126,10 +123,7 @@ Future<raw_http.Response> delete(
   );
 }
 
-Future<raw_http.Response> head(
-  Uri url, {
-  Map<String, String>? headers,
-}) async {
+Future<raw_http.Response> head(Uri url, {Map<String, String>? headers}) async {
   final resolvedHeaders = await _prepareHeaders(url, headers);
   return _interceptResponse(
     raw_http.head(url, headers: resolvedHeaders),

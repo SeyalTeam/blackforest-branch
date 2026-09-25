@@ -17,7 +17,6 @@ import 'package:branch/cart_provider.dart';
 import 'package:branch/api_config.dart';
 import 'package:branch/camera_page.dart';
 
-
 class ProductsPage extends StatefulWidget {
   final String categoryId;
   final String categoryName;
@@ -33,7 +32,6 @@ class ProductsPage extends StatefulWidget {
 }
 
 // _ProductCameraDialog class removed in favor of shared CameraPage in camera_page.dart
-
 
 class _ProductsPageState extends State<ProductsPage> {
   List<dynamic> _products = [];
@@ -70,9 +68,15 @@ class _ProductsPageState extends State<ProductsPage> {
         });
         if (user['branch'] != null) {
           setState(() {
-            _branchId = (user['branch'] is Map) ? user['branch']['id'] : user['branch'];
+            _branchId = (user['branch'] is Map)
+                ? user['branch']['id']
+                : user['branch'];
           });
-        } else if (user['role'] == 'waiter' || user['role'] == 'kitchen' || user['role'] == 'chef' || user['role'] == 'manager' || user['role'] == 'cashier') {
+        } else if (user['role'] == 'waiter' ||
+            user['role'] == 'kitchen' ||
+            user['role'] == 'chef' ||
+            user['role'] == 'manager' ||
+            user['role'] == 'cashier') {
           await _fetchWaiterBranch(token);
         }
       }
@@ -156,7 +160,8 @@ class _ProductsPageState extends State<ProductsPage> {
         await _fetchUserData(token);
       }
       // Updated: Fetch all products in the category without restricting to branch overrides
-      String url = '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
+      String url =
+          '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
       final response = await http.get(
         Uri.parse(url),
         headers: ApiConfig.getHeaders(token),
@@ -168,7 +173,9 @@ class _ProductsPageState extends State<ProductsPage> {
         });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch products: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to fetch products: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
@@ -191,7 +198,9 @@ class _ProductsPageState extends State<ProductsPage> {
     if (_branchId != null && product['branchOverrides'] != null) {
       for (var override in product['branchOverrides']) {
         var branch = override['branch'];
-        String branchOid = branch is Map ? (branch[r'$oid'] ?? branch['id'] ?? '') : (branch ?? '');
+        String branchOid = branch is Map
+            ? (branch[r'$oid'] ?? branch['id'] ?? '')
+            : (branch ?? '');
         if (branchOid == _branchId) {
           price = override['price']?.toDouble() ?? price;
           break;
@@ -202,13 +211,20 @@ class _ProductsPageState extends State<ProductsPage> {
     // Step 2: Detect if the product is weight-based
     bool isWeightBased = false;
     try {
-      final unit = product['defaultPriceDetails']?['unit']?.toString().toLowerCase();
-      final isKgFlag = product['isKg'] == true || product['sellByWeight'] == true || product['weightBased'] == true;
+      final unit = product['defaultPriceDetails']?['unit']
+          ?.toString()
+          .toLowerCase();
+      final isKgFlag =
+          product['isKg'] == true ||
+          product['sellByWeight'] == true ||
+          product['weightBased'] == true;
       final pricingType = product['pricingType']?.toString().toLowerCase();
 
-      if (unit != null && (unit.contains('kg') || unit.contains('gram'))) isWeightBased = true;
+      if (unit != null && (unit.contains('kg') || unit.contains('gram')))
+        isWeightBased = true;
       if (isKgFlag) isWeightBased = true;
-      if (pricingType != null && pricingType.contains('kg')) isWeightBased = true;
+      if (pricingType != null && pricingType.contains('kg'))
+        isWeightBased = true;
       // Removed name check to avoid false positives
     } catch (e) {
       isWeightBased = false;
@@ -217,7 +233,7 @@ class _ProductsPageState extends State<ProductsPage> {
     // Step 3: Get current quantity if exists
     double existingQty = 0.0;
     final existingItem = cartProvider.cartItems.firstWhere(
-          (i) => i.id == product['id'],
+      (i) => i.id == product['id'],
       orElse: () => CartItem(id: '', name: '', price: 0, quantity: 0),
     );
     if (existingItem.id.isNotEmpty) {
@@ -239,7 +255,9 @@ class _ProductsPageState extends State<ProductsPage> {
             title: Text('Enter Weight ($unit)'),
             content: TextField(
               controller: weightController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 hintText: 'e.g. 0.5',
                 labelText: 'Weight in $unit',
@@ -253,7 +271,8 @@ class _ProductsPageState extends State<ProductsPage> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  final value = double.tryParse(weightController.text.trim()) ?? 0.0;
+                  final value =
+                      double.tryParse(weightController.text.trim()) ?? 0.0;
                   Navigator.pop(context, value);
                 },
                 child: const Text('OK'),
@@ -299,9 +318,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
     final XFile? photo = await Navigator.push<XFile>(
       context,
-      MaterialPageRoute(
-        builder: (context) => CameraPage(cameras: cameras),
-      ),
+      MaterialPageRoute(builder: (context) => CameraPage(cameras: cameras)),
     );
     if (photo == null) return null;
 
@@ -463,15 +480,18 @@ class _ProductsPageState extends State<ProductsPage> {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'product';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            if (redirResponse.statusCode == 200 || redirResponse.statusCode == 201) {
+            if (redirResponse.statusCode == 200 ||
+                redirResponse.statusCode == 201) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
@@ -637,191 +657,200 @@ class _ProductsPageState extends State<ProductsPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                      TextFormField(
-                        controller: nameCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Product Name',
-                          border: OutlineInputBorder(),
+                        TextFormField(
+                          controller: nameCtrl,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Product Name',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Product name is required';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Product name is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: priceCtrl,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: priceCtrl,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Price',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(
+                              (value ?? '').trim(),
+                            );
+                            if (parsed == null || parsed <= 0) {
+                              return 'Enter a valid price';
+                            }
+                            return null;
+                          },
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Price',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: rateCtrl,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Rate',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(
+                              (value ?? '').trim(),
+                            );
+                            if (parsed == null || parsed < 0) {
+                              return 'Enter a valid rate';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          final parsed = double.tryParse((value ?? '').trim());
-                          if (parsed == null || parsed <= 0) {
-                            return 'Enter a valid price';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: rateCtrl,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedUnit,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Unit',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'pcs', child: Text('pcs')),
+                            DropdownMenuItem(value: 'kg', child: Text('kg')),
+                            DropdownMenuItem(value: 'g', child: Text('g')),
+                          ],
+                          onChanged: isSubmitting
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setDialogState(() {
+                                    selectedUnit = value;
+                                  });
+                                },
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Rate',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedGst,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'GST',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: '0', child: Text('0%')),
+                            DropdownMenuItem(value: '5', child: Text('5%')),
+                            DropdownMenuItem(value: '12', child: Text('12%')),
+                            DropdownMenuItem(value: '18', child: Text('18%')),
+                            DropdownMenuItem(value: '22', child: Text('22%')),
+                          ],
+                          onChanged: isSubmitting
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setDialogState(() {
+                                    selectedGst = value;
+                                  });
+                                },
                         ),
-                        validator: (value) {
-                          final parsed = double.tryParse((value ?? '').trim());
-                          if (parsed == null || parsed < 0) {
-                            return 'Enter a valid rate';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedUnit,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'pcs', child: Text('pcs')),
-                          DropdownMenuItem(value: 'kg', child: Text('kg')),
-                          DropdownMenuItem(value: 'g', child: Text('g')),
-                        ],
-                        onChanged: isSubmitting
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setDialogState(() {
-                                  selectedUnit = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedGst,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'GST',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: '0', child: Text('0%')),
-                          DropdownMenuItem(value: '5', child: Text('5%')),
-                          DropdownMenuItem(value: '12', child: Text('12%')),
-                          DropdownMenuItem(value: '18', child: Text('18%')),
-                          DropdownMenuItem(value: '22', child: Text('22%')),
-                        ],
-                        onChanged: isSubmitting
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setDialogState(() {
-                                  selectedGst = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.camera_alt_outlined, size: 18),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    'Product Image',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 18,
                                   ),
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _captureAndConfirmPhoto();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: Text(
-                                        capturedImage == null
-                                            ? 'Capture'
-                                            : 'Retake',
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Product Image',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _pickAndConfirmPhotoFromGallery();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: const Text('Select from Gallery'),
-                                    ),
-                                  ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _captureAndConfirmPhoto();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: Text(
+                                          capturedImage == null
+                                              ? 'Capture'
+                                              : 'Retake',
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _pickAndConfirmPhotoFromGallery();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: const Text(
+                                          'Select from Gallery',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              if (capturedImage != null) ...[
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.file(
+                                    capturedImage!,
+                                    height: 140,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ],
-                            ),
-                            if (capturedImage != null) ...[
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.file(
-                                  capturedImage!,
-                                  height: 140,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Is Veg'),
-                        value: isVeg,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            isVeg = value;
-                          });
-                        },
-                      ),
+                        const SizedBox(height: 10),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Is Veg'),
+                          value: isVeg,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isVeg = value;
+                            });
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -941,226 +970,264 @@ class _ProductsPageState extends State<ProductsPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.black))
           : LayoutBuilder(
-        builder: (context, constraints) {
-          if (_products.isEmpty && !_canCreateProduct) {
-            return const Center(
-              child: Text(
-                'No products found',
-                style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18),
-              ),
-            );
-          }
+              builder: (context, constraints) {
+                if (_products.isEmpty && !_canCreateProduct) {
+                  return const Center(
+                    child: Text(
+                      'No products found',
+                      style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18),
+                    ),
+                  );
+                }
 
-          final width = constraints.maxWidth;
-          final crossAxisCount = (width > 600) ? 5 : 3;
-          final extraTile = _canCreateProduct ? 1 : 0;
-          return GridView.builder(
-            padding: const EdgeInsets.all(10),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.75,
-            ),
-            itemCount: _products.length + extraTile,
-            itemBuilder: (context, index) {
-              if (_canCreateProduct && index == 0) {
-                return GestureDetector(
-                  onTap: _showCreateProductDialog,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: const Color(0xFFEFFAF1),
-                      border: Border.all(
-                        color: const Color(0xFF2E7D32),
-                        width: 2,
-                      ),
-                    ),
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_circle,
-                          size: 48,
-                          color: Color(0xFF2E7D32),
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          'New Product',
-                          style: TextStyle(
-                            color: Color(0xFF1B5E20),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Add to this category',
-                          style: TextStyle(
-                            color: Color(0xFF2E7D32),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
+                final width = constraints.maxWidth;
+                final crossAxisCount = (width > 600) ? 5 : 3;
+                final extraTile = _canCreateProduct ? 1 : 0;
+                return GridView.builder(
+                  padding: const EdgeInsets.all(10),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 0.75,
                   ),
-                );
-              }
-
-              final dataIndex = index - extraTile;
-              final product = _products[dataIndex];
-              String? imageUrl;
-              if (product['images'] != null &&
-                  product['images'].isNotEmpty &&
-                  product['images'][0]['image'] != null &&
-                  product['images'][0]['image']['url'] != null) {
-                imageUrl = product['images'][0]['image']['url'];
-                if (imageUrl != null && imageUrl.startsWith('/')) {
-                  imageUrl = '${ApiConfig.domain}$imageUrl';
-                }
-              }
-              imageUrl ??= 'https://via.placeholder.com/150?text=No+Image';
-
-              dynamic priceDetails = product['defaultPriceDetails'];
-              if (_branchId != null && product['branchOverrides'] != null) {
-                for (var override in product['branchOverrides']) {
-                  var branch = override['branch'];
-                  String branchOid = branch is Map ? branch[r'$oid'] ?? branch['id'] ?? '' : branch ?? '';
-                  if (branchOid == _branchId) {
-                    priceDetails = override;
-                    break;
-                  }
-                }
-              }
-              final price = priceDetails != null ? '₹${priceDetails['price'] ?? 0}' : '₹0';
-
-              return GestureDetector(
-                onTap: () => _toggleProductSelection(dataIndex),
-                child: Consumer<CartProvider>(
-                  builder: (context, cartProvider, child) {
-                    final isSelected = cartProvider.cartItems.any((i) => i.id == product['id']);
-                    final qty = cartProvider.cartItems
-                        .firstWhere(
-                          (i) => i.id == product['id'],
-                      orElse: () => CartItem(
-                        id: '',
-                        name: '',
-                        price: 0,
-                        quantity: 0,
-                      ),
-                    )
-                        .quantity;
-                    String qtyText;
-                    if (qty == qty.floorToDouble()) {
-                      qtyText = qty.toInt().toString();
-                    } else {
-                      qtyText = qty.toStringAsFixed(2);
-                    }
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: isSelected ? Border.all(color: Colors.green, width: 4) : null,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
-                            spreadRadius: 2,
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
+                  itemCount: _products.length + extraTile,
+                  itemBuilder: (context, index) {
+                    if (_canCreateProduct && index == 0) {
+                      return GestureDetector(
+                        onTap: _showCreateProductDialog,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: const Color(0xFFEFFAF1),
+                            border: Border.all(
+                              color: const Color(0xFF2E7D32),
+                              width: 2,
+                            ),
                           ),
-                        ],
-                      ),
-                      child: Stack(
-                        children: [
-                          Column(
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Expanded(
-                                flex: 8,
-                                child: ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                  child: CachedNetworkImage(
-                                    imageUrl: imageUrl!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-
-                                    placeholder: (context, url) =>
-                                    const Center(child: CircularProgressIndicator()),
-                                    errorWidget: (context, url, error) => const Center(
-                                      child: Text('No Image', style: TextStyle(color: Colors.grey)),
-                                    ),
-                                  ),
+                              Icon(
+                                Icons.add_circle,
+                                size: 48,
+                                color: Color(0xFF2E7D32),
+                              ),
+                              SizedBox(height: 10),
+                              Text(
+                                'New Product',
+                                style: TextStyle(
+                                  color: Color(0xFF1B5E20),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
                               ),
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(8)),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    product['name'] ?? 'Unknown',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                    textAlign: TextAlign.center,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Add to this category',
+                                style: TextStyle(
+                                  color: Color(0xFF2E7D32),
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
                           ),
-                          Positioned(
-                            top: 2,
-                            left: 2,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                price,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
+                        ),
+                      );
+                    }
+
+                    final dataIndex = index - extraTile;
+                    final product = _products[dataIndex];
+                    String? imageUrl;
+                    if (product['images'] != null &&
+                        product['images'].isNotEmpty &&
+                        product['images'][0]['image'] != null &&
+                        product['images'][0]['image']['url'] != null) {
+                      imageUrl = product['images'][0]['image']['url'];
+                      if (imageUrl != null && imageUrl.startsWith('/')) {
+                        imageUrl = '${ApiConfig.domain}$imageUrl';
+                      }
+                    }
+                    imageUrl ??=
+                        'https://via.placeholder.com/150?text=No+Image';
+
+                    dynamic priceDetails = product['defaultPriceDetails'];
+                    if (_branchId != null &&
+                        product['branchOverrides'] != null) {
+                      for (var override in product['branchOverrides']) {
+                        var branch = override['branch'];
+                        String branchOid = branch is Map
+                            ? branch[r'$oid'] ?? branch['id'] ?? ''
+                            : branch ?? '';
+                        if (branchOid == _branchId) {
+                          priceDetails = override;
+                          break;
+                        }
+                      }
+                    }
+                    final price = priceDetails != null
+                        ? '₹${priceDetails['price'] ?? 0}'
+                        : '₹0';
+
+                    return GestureDetector(
+                      onTap: () => _toggleProductSelection(dataIndex),
+                      child: Consumer<CartProvider>(
+                        builder: (context, cartProvider, child) {
+                          final isSelected = cartProvider.cartItems.any(
+                            (i) => i.id == product['id'],
+                          );
+                          final qty = cartProvider.cartItems
+                              .firstWhere(
+                                (i) => i.id == product['id'],
+                                orElse: () => CartItem(
+                                  id: '',
+                                  name: '',
+                                  price: 0,
+                                  quantity: 0,
                                 ),
-                              ),
+                              )
+                              .quantity;
+                          String qtyText;
+                          if (qty == qty.floorToDouble()) {
+                            qtyText = qty.toInt().toString();
+                          } else {
+                            qtyText = qty.toStringAsFixed(2);
+                          }
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: isSelected
+                                  ? Border.all(color: Colors.green, width: 4)
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  spreadRadius: 2,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                          ),
-                          if (isSelected)
-                            Positioned.fill(
-                              child: Align(
-                                alignment: Alignment.center,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
-                                    border: Border.all(color: Colors.grey, width: 1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: Text(
-                                    qtyText,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                            child: Stack(
+                              children: [
+                                Column(
+                                  children: [
+                                    Expanded(
+                                      flex: 8,
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(8),
+                                            ),
+                                        child: CachedNetworkImage(
+                                          imageUrl: imageUrl!,
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+
+                                          placeholder: (context, url) =>
+                                              const Center(
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              ),
+                                          errorWidget: (context, url, error) =>
+                                              const Center(
+                                                child: Text(
+                                                  'No Image',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Container(
+                                        width: double.infinity,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius: BorderRadius.vertical(
+                                            bottom: Radius.circular(8),
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          product['name'] ?? 'Unknown',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Positioned(
+                                  top: 2,
+                                  left: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      price,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                                if (isSelected)
+                                  Positioned.fill(
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.7),
+                                          border: Border.all(
+                                            color: Colors.grey,
+                                            width: 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        child: Text(
+                                          qtyText,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                        ],
+                          );
+                        },
                       ),
                     );
                   },
-                ),
-              );
-            },
-          );
-        },
-      ),
+                );
+              },
+            ),
     );
   }
 }

@@ -22,10 +22,11 @@ class CakeOrderPage extends StatefulWidget {
   State<CakeOrderPage> createState() => _CakeOrderPageState();
 }
 
-class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProviderStateMixin {
+class _CakeOrderPageState extends State<CakeOrderPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
-  
+
   final _kotController = TextEditingController();
   final _priceController = TextEditingController();
   final _paymentController = TextEditingController();
@@ -93,8 +94,12 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final url = '${ApiConfig.baseUrl}/cakes?where[branch][equals]=$_branchId&limit=100&sort=deliveryDate&depth=2';
-      final response = await http.get(Uri.parse(url), headers: ApiConfig.getHeaders(token));
+      final url =
+          '${ApiConfig.baseUrl}/cakes?where[branch][equals]=$_branchId&limit=100&sort=deliveryDate&depth=2';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: ApiConfig.getHeaders(token),
+      );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final docs = data['docs'] as List<dynamic>? ?? [];
@@ -139,15 +144,14 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
   Future<void> _selectDeliveryDateTime(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: _deliveryDateTime ?? DateTime.now().add(const Duration(days: 1)),
+      initialDate:
+          _deliveryDateTime ?? DateTime.now().add(const Duration(days: 1)),
       firstDate: DateTime.now(),
       lastDate: DateTime(2101),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Colors.blueAccent,
-            ),
+            colorScheme: const ColorScheme.dark(primary: Colors.blueAccent),
           ),
           child: child!,
         );
@@ -159,13 +163,13 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
 
     final TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_deliveryDateTime ?? DateTime.now().add(const Duration(days: 1))),
+      initialTime: TimeOfDay.fromDateTime(
+        _deliveryDateTime ?? DateTime.now().add(const Duration(days: 1)),
+      ),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Colors.blueAccent,
-            ),
+            colorScheme: const ColorScheme.dark(primary: Colors.blueAccent),
           ),
           child: child!,
         );
@@ -219,9 +223,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No camera found')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('No camera found')));
         }
         return;
       }
@@ -265,7 +269,8 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
       final tempFile = File('${tempDir.path}/cake_${typeLabel}_$timestamp.jpg');
       await tempFile.writeAsBytes(compressed);
 
-      final altText = 'Cake Order ${isKotPhoto ? "KOT" : "Design"} Photo - KOT ${_kotController.text}';
+      final altText =
+          'Cake Order ${isKotPhoto ? "KOT" : "Design"} Photo - KOT ${_kotController.text}';
       final mediaId = await _uploadPhoto(tempFile, altText);
 
       if (mediaId != null) {
@@ -386,15 +391,18 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'cake';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+            if (redirResponse.statusCode == 201 ||
+                redirResponse.statusCode == 200) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
@@ -443,9 +451,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
     }
 
     if (_kotPhotoId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload KOT photo.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please upload KOT photo.')));
       return;
     }
 
@@ -472,8 +480,12 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final cakeData = {
         'kotNumber': _kotController.text.trim(),
@@ -485,7 +497,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
         'deliveryDate': _deliveryDateTime!.toUtc().toIso8601String(),
         'kotPhoto': _kotPhotoId,
         'cakePhoto': _cakePhotoId,
-        'status': (pendingAmount <= 0.0 || _paymentType == 'full') ? 'paid' : 'pending',
+        'status': (pendingAmount <= 0.0 || _paymentType == 'full')
+            ? 'paid'
+            : 'pending',
         'branch': _branchId,
         'cashierId': cashierId,
         'cashierName': cashierName,
@@ -494,8 +508,8 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             'amount': paymentAmount,
             'method': _paymentMethod,
             'date': DateTime.now().toUtc().toIso8601String(),
-          }
-        ]
+          },
+        ],
       };
 
       final response = await http.post(
@@ -520,7 +534,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to submit: ${response.statusCode} - ${response.body}'),
+              content: Text(
+                'Failed to submit: ${response.statusCode} - ${response.body}',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -584,11 +600,18 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                         children: [
                           const Text(
                             'Pending to Pay:',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.redAccent,
+                            ),
                           ),
                           Text(
                             '₹${pending.toStringAsFixed(2)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.redAccent,
+                            ),
                           ),
                         ],
                       ),
@@ -597,14 +620,22 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                     if (rawHistory.isNotEmpty) ...[
                       const Text(
                         'Payment Logs:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       ...rawHistory.map((p) {
                         final amt = (p['amount'] as num?)?.toDouble() ?? 0.0;
-                        final mthd = (p['method'] ?? 'cash').toString().toUpperCase();
+                        final mthd = (p['method'] ?? 'cash')
+                            .toString()
+                            .toUpperCase();
                         final dtStr = p['date'] != null
-                            ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(p['date']).toLocal())
+                            ? DateFormat(
+                                'dd MMM, hh:mm a',
+                              ).format(DateTime.parse(p['date']).toLocal())
                             : 'N/A';
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -622,10 +653,14 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                         DropdownMenuItem(value: 'cash', child: Text('Cash')),
                         DropdownMenuItem(value: 'card', child: Text('Card')),
                         DropdownMenuItem(value: 'upi', child: Text('UPI')),
-                        DropdownMenuItem(value: 'cashfree', child: Text('Cashfree')),
+                        DropdownMenuItem(
+                          value: 'cashfree',
+                          child: Text('Cashfree'),
+                        ),
                         DropdownMenuItem(value: 'other', child: Text('Other')),
                       ],
-                      onChanged: (val) => setDialogState(() => selectMethod = val),
+                      onChanged: (val) =>
+                          setDialogState(() => selectMethod = val),
                       decoration: const InputDecoration(
                         labelText: 'Payment Method',
                         border: OutlineInputBorder(),
@@ -636,7 +671,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
               ),
               actions: [
                 TextButton(
-                  onPressed: dialogSubmitting ? null : () => Navigator.pop(context),
+                  onPressed: dialogSubmitting
+                      ? null
+                      : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
@@ -652,31 +689,38 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                           };
 
                           final updatedHistory = [
-                            ...rawHistory.map((h) => {
-                                  'amount': h['amount'],
-                                  'method': h['method'],
-                                  'date': h['date'],
-                                }),
-                            newHistoryEntry
+                            ...rawHistory.map(
+                              (h) => {
+                                'amount': h['amount'],
+                                'method': h['method'],
+                                'date': h['date'],
+                              },
+                            ),
+                            newHistoryEntry,
                           ];
 
                           try {
                             final prefs = await SharedPreferences.getInstance();
                             final token = prefs.getString('token');
-                            
+
                             final response = await http.patch(
-                              Uri.parse('${ApiConfig.baseUrl}/cakes/${cake['id']}'),
+                              Uri.parse(
+                                '${ApiConfig.baseUrl}/cakes/${cake['id']}',
+                              ),
                               headers: ApiConfig.getHeaders(token),
                               body: jsonEncode({
                                 'paymentHistory': updatedHistory,
                               }),
                             );
 
-                            if (response.statusCode == 200 || response.statusCode == 201) {
+                            if (response.statusCode == 200 ||
+                                response.statusCode == 201) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Payment updated successfully! Bill Closed.'),
+                                    content: Text(
+                                      'Payment updated successfully! Bill Closed.',
+                                    ),
                                     backgroundColor: Colors.green,
                                   ),
                                 );
@@ -686,7 +730,11 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                             } else {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed to update: ${response.statusCode}')),
+                                  SnackBar(
+                                    content: Text(
+                                      'Failed to update: ${response.statusCode}',
+                                    ),
+                                  ),
                                 );
                               }
                             }
@@ -701,7 +749,14 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                           }
                         },
                   child: dialogSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Text('Confirm & Close Bill'),
                 ),
               ],
@@ -712,7 +767,11 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
     );
   }
 
-  void _showImagePreviewDialog(BuildContext context, String title, String imageUrl) {
+  void _showImagePreviewDialog(
+    BuildContext context,
+    String title,
+    String imageUrl,
+  ) {
     showDialog(
       context: context,
       builder: (context) {
@@ -723,7 +782,10 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             mainAxisSize: MainAxisSize.min,
             children: [
               AppBar(
-                title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                title: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 leading: IconButton(
@@ -738,8 +800,14 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                   child: CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.contain,
-                    placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.white, size: 60),
+                    placeholder: (context, url) => const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                    errorWidget: (context, url, error) => const Icon(
+                      Icons.broken_image,
+                      color: Colors.white,
+                      size: 60,
+                    ),
                   ),
                 ),
               ),
@@ -777,37 +845,41 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             child: uploading
                 ? const Center(child: CircularProgressIndicator())
                 : photoFile != null
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.file(photoFile, fit: BoxFit.cover),
-                          Positioned(
-                            right: 8,
-                            top: 8,
-                            child: CircleAvatar(
-                              backgroundColor: Colors.black54,
-                              child: IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.white),
-                                onPressed: onTap,
-                              ),
-                            ),
-                          )
-                        ],
-                      )
-                    : InkWell(
-                        onTap: onTap,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt, size: 40, color: Colors.grey.shade400),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap to upload',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          ],
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(photoFile, fit: BoxFit.cover),
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.white),
+                            onPressed: onTap,
+                          ),
                         ),
                       ),
+                    ],
+                  )
+                : InkWell(
+                    onTap: onTap,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.camera_alt,
+                          size: 40,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap to upload',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
         ),
       ],
@@ -829,7 +901,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             // Header Card
             Card(
               elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -839,14 +913,19 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                       children: [
                         const Text(
                           'Pending Amount',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           '₹${_pendingAmount.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: _pendingAmount > 0 ? Colors.redAccent : Colors.green,
+                            color: _pendingAmount > 0
+                                ? Colors.redAccent
+                                : Colors.green,
                           ),
                         ),
                       ],
@@ -860,14 +939,20 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          (_pendingAmount <= 0.0 || _paymentType == 'full') ? 'PAID' : 'PENDING',
+                          (_pendingAmount <= 0.0 || _paymentType == 'full')
+                              ? 'PAID'
+                              : 'PENDING',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: (_pendingAmount <= 0.0 || _paymentType == 'full') ? Colors.green : Colors.orange,
+                            color:
+                                (_pendingAmount <= 0.0 ||
+                                    _paymentType == 'full')
+                                ? Colors.green
+                                : Colors.orange,
                           ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -880,21 +965,28 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
               decoration: InputDecoration(
                 labelText: 'KOT Number',
                 prefixIcon: const Icon(Icons.receipt),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+              validator: (val) =>
+                  (val == null || val.trim().isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 16),
 
             // Cake Price
             TextFormField(
               controller: _priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 labelText: 'Cake Price',
                 prefixText: '₹ ',
                 prefixIcon: const Icon(Icons.cake),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               validator: (val) {
                 if (val == null || val.isEmpty) return 'Required';
@@ -920,7 +1012,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
               decoration: InputDecoration(
                 labelText: 'Payment Method',
                 prefixIcon: const Icon(Icons.payment),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -929,13 +1023,17 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             DropdownButtonFormField<String>(
               initialValue: _paymentType,
               items: const [
-                DropdownMenuItem(value: 'advance', child: Text('Advance Payment')),
+                DropdownMenuItem(
+                  value: 'advance',
+                  child: Text('Advance Payment'),
+                ),
                 DropdownMenuItem(value: 'full', child: Text('Full Payment')),
               ],
               onChanged: (val) {
                 setState(() {
                   _paymentType = val;
-                  if (_paymentType == 'full' && _priceController.text.isNotEmpty) {
+                  if (_paymentType == 'full' &&
+                      _priceController.text.isNotEmpty) {
                     _paymentController.text = _priceController.text;
                   }
                 });
@@ -943,7 +1041,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
               decoration: InputDecoration(
                 labelText: 'Payment Type',
                 prefixIcon: const Icon(Icons.assignment),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -951,12 +1051,16 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
             // Payment Input Box
             TextFormField(
               controller: _paymentController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 labelText: 'Payment Amount',
                 prefixText: '₹ ',
                 prefixIcon: const Icon(Icons.attach_money),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               validator: (val) {
                 if (val == null || val.isEmpty) return 'Required';
@@ -983,13 +1087,20 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
               ),
               child: ListTile(
                 onTap: () => _selectDeliveryDateTime(context),
-                leading: const Icon(Icons.calendar_today, color: Colors.blueAccent),
+                leading: const Icon(
+                  Icons.calendar_today,
+                  color: Colors.blueAccent,
+                ),
                 title: const Text('Delivery Date & Time'),
                 subtitle: Text(
                   formattedDelivery,
                   style: TextStyle(
-                    fontWeight: _deliveryDateTime != null ? FontWeight.bold : FontWeight.normal,
-                    color: _deliveryDateTime != null ? Colors.black : Colors.grey.shade600,
+                    fontWeight: _deliveryDateTime != null
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: _deliveryDateTime != null
+                        ? Colors.black
+                        : Colors.grey.shade600,
                   ),
                 ),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -1030,7 +1141,10 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.check),
               label: Text(_isSubmitting ? 'Submitting...' : 'Submit Order'),
@@ -1038,7 +1152,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                 backgroundColor: Colors.purple,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -1061,9 +1177,12 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
       if (delivery == null) return false;
 
       // Show if delivery is today or in the future
-      final isTodayOrFuture = delivery.isAfter(startOfToday) || 
-                              (delivery.year == now.year && delivery.month == now.month && delivery.day == now.day);
-      
+      final isTodayOrFuture =
+          delivery.isAfter(startOfToday) ||
+          (delivery.year == now.year &&
+              delivery.month == now.month &&
+              delivery.day == now.day);
+
       // OR show if it is still pending payment (status is not paid / is pending)
       final status = (cake['status'] ?? 'pending').toString().toLowerCase();
       final isPending = status == 'pending';
@@ -1099,12 +1218,17 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
           final kotNumber = cake['kotNumber'] ?? 'N/A';
           final price = (cake['cakePrice'] as num?)?.toDouble() ?? 0.0;
           final paid = (cake['paymentAmount'] as num?)?.toDouble() ?? 0.0;
-          final pending = (cake['pendingAmount'] as num?)?.toDouble() ?? (price - paid);
+          final pending =
+              (cake['pendingAmount'] as num?)?.toDouble() ?? (price - paid);
           final status = (cake['status'] ?? 'pending').toString().toUpperCase();
-          final method = (cake['paymentMethod'] ?? 'cash').toString().toUpperCase();
-          
+          final method = (cake['paymentMethod'] ?? 'cash')
+              .toString()
+              .toUpperCase();
+
           final deliveryStr = cake['deliveryDate'] != null
-              ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(cake['deliveryDate']).toLocal())
+              ? DateFormat(
+                  'dd MMM yyyy, hh:mm a',
+                ).format(DateTime.parse(cake['deliveryDate']).toLocal())
               : 'N/A';
 
           String? getPhotoUrl(dynamic photoObj) {
@@ -1120,7 +1244,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
           return Card(
             elevation: 3,
             margin: const EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () => _showUpdatePaymentDialog(cake),
@@ -1134,12 +1260,20 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                       children: [
                         Text(
                           'KOT: $kotNumber',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: status == 'PAID' ? Colors.green.shade100 : Colors.orange.shade100,
+                            color: status == 'PAID'
+                                ? Colors.green.shade100
+                                : Colors.orange.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -1147,7 +1281,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
-                              color: status == 'PAID' ? Colors.green.shade800 : Colors.orange.shade800,
+                              color: status == 'PAID'
+                                  ? Colors.green.shade800
+                                  : Colors.orange.shade800,
                             ),
                           ),
                         ),
@@ -1168,7 +1304,9 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                               'Pending: ₹${pending.toStringAsFixed(2)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: pending > 0 ? Colors.redAccent : Colors.green,
+                                color: pending > 0
+                                    ? Colors.redAccent
+                                    : Colors.green,
                               ),
                             ),
                           ],
@@ -1178,40 +1316,63 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                           children: [
                             const Text(
                               'Delivery:',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               deliveryStr,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
                       ],
                     ),
                     const Divider(height: 20),
-                    if (cake['paymentHistory'] is List && (cake['paymentHistory'] as List).isNotEmpty) ...[
+                    if (cake['paymentHistory'] is List &&
+                        (cake['paymentHistory'] as List).isNotEmpty) ...[
                       const Text(
                         'Payment History Log:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       ...(cake['paymentHistory'] as List).map((p) {
                         if (p is! Map) return const SizedBox.shrink();
                         final amt = (p['amount'] as num?)?.toDouble() ?? 0.0;
-                        final mthd = (p['method'] ?? 'cash').toString().toUpperCase();
+                        final mthd = (p['method'] ?? 'cash')
+                            .toString()
+                            .toUpperCase();
                         final dtStr = p['date'] != null
-                            ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(p['date']).toLocal())
+                            ? DateFormat(
+                                'dd MMM, hh:mm a',
+                              ).format(DateTime.parse(p['date']).toLocal())
                             : 'N/A';
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 4, left: 8),
                           child: Row(
                             children: [
-                              const Icon(Icons.check_circle, size: 12, color: Colors.green),
+                              const Icon(
+                                Icons.check_circle,
+                                size: 12,
+                                color: Colors.green,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 '₹${amt.toStringAsFixed(2)} via $mthd ($dtStr)',
-                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ],
                           ),
@@ -1226,10 +1387,20 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('KOT Photo', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                const Text(
+                                  'KOT Photo',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 GestureDetector(
-                                  onTap: () => _showImagePreviewDialog(context, 'KOT Photo (KOT: $kotNumber)', kotPhotoUrl),
+                                  onTap: () => _showImagePreviewDialog(
+                                    context,
+                                    'KOT Photo (KOT: $kotNumber)',
+                                    kotPhotoUrl,
+                                  ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: CachedNetworkImage(
@@ -1237,24 +1408,45 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                                       height: 80,
                                       width: double.infinity,
                                       fit: BoxFit.cover,
-                                      placeholder: (context, url) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                                      errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+                                      placeholder: (context, url) =>
+                                          const Center(
+                                            child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          ),
+                                      errorWidget: (context, url, error) =>
+                                          const Icon(Icons.broken_image),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        if (kotPhotoUrl != null && cakePhotoUrl != null) const SizedBox(width: 16),
+                        if (kotPhotoUrl != null && cakePhotoUrl != null)
+                          const SizedBox(width: 16),
                         if (cakePhotoUrl != null)
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Cake Photo', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                const Text(
+                                  'Cake Photo',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 GestureDetector(
-                                  onTap: () => _showImagePreviewDialog(context, 'Cake Photo (KOT: $kotNumber)', cakePhotoUrl),
+                                  onTap: () => _showImagePreviewDialog(
+                                    context,
+                                    'Cake Photo (KOT: $kotNumber)',
+                                    cakePhotoUrl,
+                                  ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: CachedNetworkImage(
@@ -1262,8 +1454,18 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                                       height: 80,
                                       width: double.infinity,
                                       fit: BoxFit.cover,
-                                      placeholder: (context, url) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                                      errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+                                      placeholder: (context, url) =>
+                                          const Center(
+                                            child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          ),
+                                      errorWidget: (context, url, error) =>
+                                          const Icon(Icons.broken_image),
                                     ),
                                   ),
                                 ),
@@ -1277,7 +1479,11 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.payment, size: 14, color: Colors.blue.shade700),
+                          Icon(
+                            Icons.payment,
+                            size: 14,
+                            color: Colors.blue.shade700,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Tap to record payment',
@@ -1288,8 +1494,8 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
                             ),
                           ),
                         ],
-                      )
-                    ]
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1329,10 +1535,7 @@ class _CakeOrderPageState extends State<CakeOrderPage> with SingleTickerProvider
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildOrderFormView(),
-          _buildSubmittedCakesList(),
-        ],
+        children: [_buildOrderFormView(), _buildSubmittedCakesList()],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:branch/common_scaffold.dart';
 import 'package:branch/stock_provider.dart';
 import 'package:branch/api_config.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
 class StockOrderPage extends StatelessWidget {
   const StockOrderPage({super.key});
 
@@ -22,11 +23,12 @@ class StockOrderPage extends StatelessWidget {
             title: sp.step == "categories"
                 ? "Stock Categories"
                 : "Products in ${sp.selectedCategoryName}",
-            pageType: PageType.stock, // Changed from PageType.billsheet to PageType.stock for better semantic accuracy (assuming PageType.stock is added to the enum if not present)
+            pageType: PageType
+                .stock, // Changed from PageType.billsheet to PageType.stock for better semantic accuracy (assuming PageType.stock is added to the enum if not present)
             body: sp.isLoading
                 ? const Center(
-              child: CircularProgressIndicator(color: Colors.black),
-            )
+                    child: CircularProgressIndicator(color: Colors.black),
+                  )
                 : sp.step == "categories"
                 ? _buildCategories(context, sp)
                 : _buildProducts(context, sp),
@@ -73,23 +75,24 @@ class StockOrderPage extends StatelessWidget {
                       BoxShadow(
                         color: Colors.grey.withValues(alpha: 0.15),
                         blurRadius: 4,
-                      )
+                      ),
                     ],
                   ),
                   child: Column(
                     children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(10)),
-                            child: Image.network(
-                              img,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              headers: ApiConfig.getHeaders(null),
-                            ),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(10),
+                          ),
+                          child: Image.network(
+                            img,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            headers: ApiConfig.getHeaders(null),
                           ),
                         ),
+                      ),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(8),
@@ -97,7 +100,8 @@ class StockOrderPage extends StatelessWidget {
                         decoration: const BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.vertical(
-                              bottom: Radius.circular(10)),
+                            bottom: Radius.circular(10),
+                          ),
                         ),
                         child: Text(
                           c["name"] ?? "",
@@ -108,7 +112,7 @@ class StockOrderPage extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -129,31 +133,33 @@ class StockOrderPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Container(
-               padding: const EdgeInsets.symmetric(horizontal: 12),
-               decoration: BoxDecoration(
-                 color: const Color(0xFFFFF0F0),
-                 borderRadius: BorderRadius.circular(10),
-                 border: Border.all(color: Colors.pink.shade300),
-               ),
-               child: DropdownButtonHideUnderline(
-                 child: DropdownButton<String>(
-                   isExpanded: true,
-                   hint: const Text("Select Branch"),
-                   value: sp.overrideBranchId,
-                   items: sp.availableBranches.map<DropdownMenuItem<String>>((b) {
-                     return DropdownMenuItem<String>(
-                       value: b['id'] ?? b['_id'],
-                       child: Text(
-                         b['name'] ?? 'Unknown Branch',
-                         style: const TextStyle(fontWeight: FontWeight.bold),
-                       ),
-                     );
-                   }).toList(),
-                   onChanged: (val) {
-                     sp.setOverrideBranch(val);
-                   },
-                 ),
-               ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF0F0),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.pink.shade300),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  hint: const Text("Select Branch"),
+                  value: sp.overrideBranchId,
+                  items: sp.availableBranches.map<DropdownMenuItem<String>>((
+                    b,
+                  ) {
+                    return DropdownMenuItem<String>(
+                      value: b['id'] ?? b['_id'],
+                      child: Text(
+                        b['name'] ?? 'Unknown Branch',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    sp.setOverrideBranch(val);
+                  },
+                ),
+              ),
             ),
           ),
 
@@ -220,13 +226,25 @@ class StockOrderPage extends StatelessWidget {
                           onTap: () async {
                             bool isWeightBased = false;
                             try {
-                              final unit = p['defaultPriceDetails']?['unit']?.toString().toLowerCase();
-                              final isKgFlag = p['isKg'] == true || p['sellByWeight'] == true || p['weightBased'] == true;
-                              final pricingType = p['pricingType']?.toString().toLowerCase();
+                              final unit = p['defaultPriceDetails']?['unit']
+                                  ?.toString()
+                                  .toLowerCase();
+                              final isKgFlag =
+                                  p['isKg'] == true ||
+                                  p['sellByWeight'] == true ||
+                                  p['weightBased'] == true;
+                              final pricingType = p['pricingType']
+                                  ?.toString()
+                                  .toLowerCase();
 
-                              if (unit != null && (unit.contains('kg') || unit.contains('gram'))) isWeightBased = true;
+                              if (unit != null &&
+                                  (unit.contains('kg') ||
+                                      unit.contains('gram')))
+                                isWeightBased = true;
                               if (isKgFlag) isWeightBased = true;
-                              if (pricingType != null && pricingType.contains('kg')) isWeightBased = true;
+                              if (pricingType != null &&
+                                  pricingType.contains('kg'))
+                                isWeightBased = true;
                             } catch (e) {
                               isWeightBased = false;
                             }
@@ -234,10 +252,14 @@ class StockOrderPage extends StatelessWidget {
                             final currentQty = sp.quantities[id] ?? 0.0;
 
                             if (isWeightBased) {
-                              final unit = p['defaultPriceDetails']?['unit'] ?? 'kg';
-                              final TextEditingController weightController = TextEditingController(
-                                text: currentQty > 0 ? currentQty.toStringAsFixed(2) : '',
-                              );
+                              final unit =
+                                  p['defaultPriceDetails']?['unit'] ?? 'kg';
+                              final TextEditingController weightController =
+                                  TextEditingController(
+                                    text: currentQty > 0
+                                        ? currentQty.toStringAsFixed(2)
+                                        : '',
+                                  );
                               final enteredWeight = await showDialog<double>(
                                 context: context,
                                 barrierDismissible: true,
@@ -246,7 +268,10 @@ class StockOrderPage extends StatelessWidget {
                                     title: Text('Enter Weight ($unit)'),
                                     content: TextField(
                                       controller: weightController,
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
                                       decoration: InputDecoration(
                                         hintText: 'e.g. 0.5',
                                         labelText: 'Weight in $unit',
@@ -260,7 +285,11 @@ class StockOrderPage extends StatelessWidget {
                                       ),
                                       ElevatedButton(
                                         onPressed: () {
-                                          final value = double.tryParse(weightController.text.trim()) ?? 0.0;
+                                          final value =
+                                              double.tryParse(
+                                                weightController.text.trim(),
+                                              ) ??
+                                              0.0;
                                           Navigator.pop(context, value);
                                         },
                                         child: const Text('OK'),
@@ -269,7 +298,8 @@ class StockOrderPage extends StatelessWidget {
                                   );
                                 },
                               );
-                              if (enteredWeight == null || enteredWeight <= 0) return;
+                              if (enteredWeight == null || enteredWeight <= 0)
+                                return;
                               sp.updateQuantity(id, enteredWeight);
                             } else {
                               sp.updateQuantity(id, currentQty + 1);
@@ -297,24 +327,28 @@ class StockOrderPage extends StatelessWidget {
                                     Expanded(
                                       flex: 8,
                                       child: ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(8)),
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(8),
+                                            ),
                                         child: CachedNetworkImage(
                                           imageUrl: imageUrl!,
                                           fit: BoxFit.cover,
                                           width: double.infinity,
                                           placeholder: (context, url) =>
                                               const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              ),
                                           errorWidget: (context, url, error) =>
                                               const Center(
-                                            child: Text(
-                                              'No Image',
-                                              style: TextStyle(
-                                                  color: Colors.grey),
-                                            ),
-                                          ),
+                                                child: Text(
+                                                  'No Image',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
                                         ),
                                       ),
                                     ),
@@ -324,9 +358,9 @@ class StockOrderPage extends StatelessWidget {
                                         width: double.infinity,
                                         decoration: const BoxDecoration(
                                           color: Colors.black,
-                                          borderRadius:
-                                              BorderRadius.vertical(
-                                                  bottom: Radius.circular(8)),
+                                          borderRadius: BorderRadius.vertical(
+                                            bottom: Radius.circular(8),
+                                          ),
                                         ),
                                         alignment: Alignment.center,
                                         child: Text(
@@ -347,7 +381,9 @@ class StockOrderPage extends StatelessWidget {
                                   left: 2,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 2),
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.black,
                                       borderRadius: BorderRadius.circular(4),
@@ -370,12 +406,17 @@ class StockOrderPage extends StatelessWidget {
                                         decoration: BoxDecoration(
                                           color: Colors.black.withOpacity(0.7),
                                           border: Border.all(
-                                              color: Colors.grey, width: 1),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
+                                            color: Colors.grey,
+                                            width: 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
                                         child: Text(
                                           qtyText,
                                           style: const TextStyle(

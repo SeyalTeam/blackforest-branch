@@ -30,7 +30,8 @@ class _BluetoothPrinterSettingsPageState
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
     setState(() {
-      if (key == 'bluetooth_printing_enabled') _isBluetoothPrintingEnabled = value;
+      if (key == 'bluetooth_printing_enabled')
+        _isBluetoothPrintingEnabled = value;
     });
   }
 
@@ -105,7 +106,8 @@ class _BluetoothPrinterSettingsPageState
     if (mounted) {
       setState(() {
         _savedMacAddress = prefs.getString('bt_printer_mac');
-        _isBluetoothPrintingEnabled = prefs.getBool('bluetooth_printing_enabled') ?? true;
+        _isBluetoothPrintingEnabled =
+            prefs.getBool('bluetooth_printing_enabled') ?? true;
       });
     }
 
@@ -314,17 +316,20 @@ class _BluetoothPrinterSettingsPageState
               ],
             ),
             child: SwitchListTile(
-              title: const Text('Bluetooth Printing',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle:
-                  const Text('Enable or disable Bluetooth printer module'),
+              title: const Text(
+                'Bluetooth Printing',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Enable or disable Bluetooth printer module',
+              ),
               value: _isBluetoothPrintingEnabled,
               onChanged: (val) =>
                   _updateSetting('bluetooth_printing_enabled', val),
               activeColor: const Color(0xFF16A34A),
             ),
           ),
-          
+
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(24),
@@ -454,7 +459,10 @@ class _BluetoothPrinterSettingsPageState
                       ),
                       child: const Text(
                         'Open Bluetooth',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
@@ -475,7 +483,11 @@ class _BluetoothPrinterSettingsPageState
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.print, size: 60, color: Colors.black87),
+                      child: const Icon(
+                        Icons.print,
+                        size: 60,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -520,7 +532,10 @@ class _BluetoothPrinterSettingsPageState
                       ),
                       child: const Text(
                         'Disconnect',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
@@ -581,62 +596,64 @@ class _BluetoothPrinterSettingsPageState
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
-                  ..._devices.map((device) => Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey[200]!),
+                  ..._devices.map(
+                    (device) => Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                        leading: const Icon(
+                          Icons.print,
+                          size: 32,
+                          color: Colors.black87,
+                        ),
+                        title: Text(
+                          device.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
-                          leading: const Icon(
-                            Icons.print,
-                            size: 32,
-                            color: Colors.black87,
-                          ),
-                          title: Text(
-                            device.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                        ),
+                        subtitle: Row(
+                          children: [
+                            Icon(
+                              Icons.bluetooth,
+                              size: 14,
+                              color: Colors.grey[500],
                             ),
-                          ),
-                          subtitle: Row(
-                            children: [
-                              Icon(
-                                Icons.bluetooth,
-                                size: 14,
+                            const SizedBox(width: 4),
+                            Text(
+                              'Disconnected',
+                              style: TextStyle(
+                                fontSize: 12,
                                 color: Colors.grey[500],
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Disconnected',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: () => _connect(device),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEAF7F1),
-                              foregroundColor: const Color(0xFF16A34A),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 20),
                             ),
-                            child: const Text('Connect'),
-                          ),
+                          ],
                         ),
-                      )),
+                        trailing: ElevatedButton(
+                          onPressed: () => _connect(device),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEAF7F1),
+                            foregroundColor: const Color(0xFF16A34A),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                          ),
+                          child: const Text('Connect'),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
@@ -653,7 +670,10 @@ class _BluetoothPrinterSettingsPageState
                       ),
                       child: const Text(
                         'Refresh Devices',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),

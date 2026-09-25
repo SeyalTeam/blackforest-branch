@@ -6,7 +6,8 @@ class WifiPrinterSettingsPage extends StatefulWidget {
   const WifiPrinterSettingsPage({super.key});
 
   @override
-  State<WifiPrinterSettingsPage> createState() => _WifiPrinterSettingsPageState();
+  State<WifiPrinterSettingsPage> createState() =>
+      _WifiPrinterSettingsPageState();
 }
 
 class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
@@ -29,10 +30,13 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final info = NetworkInfo();
-    
+
     String? deviceIp;
     try {
-      deviceIp = await info.getWifiIP().timeout(const Duration(seconds: 2), onTimeout: () => null);
+      deviceIp = await info.getWifiIP().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
     } catch (_) {}
 
     final printerIp = prefs.getString('printerIp');
@@ -40,9 +44,13 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
 
     bool isConnected = false;
     if (deviceIp != null && deviceIp.isNotEmpty) {
-      if (printerIp != null && printerIp.isNotEmpty && _isSameSubnet(deviceIp, printerIp)) {
+      if (printerIp != null &&
+          printerIp.isNotEmpty &&
+          _isSameSubnet(deviceIp, printerIp)) {
         isConnected = true;
-      } else if (branchIpRange != null && branchIpRange.isNotEmpty && _isIpInRange(deviceIp, branchIpRange)) {
+      } else if (branchIpRange != null &&
+          branchIpRange.isNotEmpty &&
+          _isIpInRange(deviceIp, branchIpRange)) {
         isConnected = true;
       }
     }
@@ -71,7 +79,9 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
     final parts = range.split('/').first.trim().split('.');
     final ipParts = ip.split('.');
     if (parts.length != 4 || ipParts.length != 4) return false;
-    return parts[0] == ipParts[0] && parts[1] == ipParts[1] && parts[2] == ipParts[2];
+    return parts[0] == ipParts[0] &&
+        parts[1] == ipParts[1] &&
+        parts[2] == ipParts[2];
   }
 
   Future<void> _updateSetting(String key, bool value) async {
@@ -122,7 +132,9 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: _isConnected ? primaryColor.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                              color: _isConnected
+                                  ? primaryColor.withOpacity(0.1)
+                                  : Colors.red.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -145,8 +157,13 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                                   ),
                                 ),
                                 Text(
-                                  _isConnected ? 'Printer is reachable' : 'Printer not found in network',
-                                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                                  _isConnected
+                                      ? 'Printer is reachable'
+                                      : 'Printer not found in network',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
                               ],
                             ),
@@ -170,12 +187,19 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                                   color: Colors.black87,
                                 ),
                               ),
-                              Text('Master control for all Wi-Fi printers', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(
+                                'Master control for all Wi-Fi printers',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
                             ],
                           ),
                           Switch(
                             value: _isWifiPrintingEnabled,
-                            onChanged: (val) => _updateSetting('wifi_printing_enabled', val),
+                            onChanged: (val) =>
+                                _updateSetting('wifi_printing_enabled', val),
                             activeColor: primaryColor,
                           ),
                         ],
@@ -184,7 +208,7 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // IP Configuration Details
                 const Text(
                   'NETWORK CONFIGURATION',
@@ -211,12 +235,24 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                   ),
                   child: Column(
                     children: [
-                      _buildInfoRow(Icons.phone_android, 'Device IP', _deviceIp ?? 'Disconnected'),
+                      _buildInfoRow(
+                        Icons.phone_android,
+                        'Device IP',
+                        _deviceIp ?? 'Disconnected',
+                      ),
                       const Divider(height: 32),
-                      _buildInfoRow(Icons.print, 'Printer IP', _printerIp ?? 'Not Configured'),
+                      _buildInfoRow(
+                        Icons.print,
+                        'Printer IP',
+                        _printerIp ?? 'Not Configured',
+                      ),
                       if (_branchIpRange != null) ...[
                         const Divider(height: 32),
-                        _buildInfoRow(Icons.lan, 'Branch Range', _branchIpRange!),
+                        _buildInfoRow(
+                          Icons.lan,
+                          'Branch Range',
+                          _branchIpRange!,
+                        ),
                       ],
                     ],
                   ),
@@ -250,21 +286,39 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
                     child: Column(
                       children: [
                         SwitchListTile(
-                          title: const Text('Billing Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: const Text('Automatic printing for completed bills'),
+                          title: const Text(
+                            'Billing Receipt',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: const Text(
+                            'Automatic printing for completed bills',
+                          ),
                           value: _isBillingEnabled,
-                          onChanged: (val) => _updateSetting('wifi_billing_enabled', val),
+                          onChanged: (val) =>
+                              _updateSetting('wifi_billing_enabled', val),
                           activeColor: primaryColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
-                          title: const Text('KOT Printing', style: TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: const Text('Send orders to kitchen printer'),
+                          title: const Text(
+                            'KOT Printing',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: const Text(
+                            'Send orders to kitchen printer',
+                          ),
                           value: _isKotEnabled,
-                          onChanged: (val) => _updateSetting('wifi_kot_enabled', val),
+                          onChanged: (val) =>
+                              _updateSetting('wifi_kot_enabled', val),
                           activeColor: primaryColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
                         ),
                       ],
                     ),
@@ -289,9 +343,21 @@ class _WifiPrinterSettingsPageState extends State<WifiPrinterSettingsPage> {
       children: [
         Icon(icon, size: 20, color: Colors.grey[400]),
         const SizedBox(width: 12),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+          ),
+        ),
         const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
       ],
     );
   }

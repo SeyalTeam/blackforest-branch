@@ -29,7 +29,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  
   bool _profileLoading = true;
   String? _employeeName;
   String? _employeeRole;
@@ -94,8 +93,8 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadEmployeeData() async {
     final prefs = await SharedPreferences.getInstance();
     try {
-      final cachedName = prefs.getString( 'userName');
-      final cachedRole = prefs.getString( 'userRole');
+      final cachedName = prefs.getString('userName');
+      final cachedRole = prefs.getString('userRole');
 
       if (mounted) {
         setState(() {
@@ -142,7 +141,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _fetchEmployeeProfile() async {
     final prefs = await SharedPreferences.getInstance();
     try {
-      final profile = await ApiConfig.fetchUserProfile(prefs.getString('token') ?? '');
+      final profile = await ApiConfig.fetchUserProfile(
+        prefs.getString('token') ?? '',
+      );
       if (profile.isNotEmpty) {
         final user = profile['user'] ?? profile;
         final employee = user['employee'] ?? {};
@@ -201,8 +202,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _fetchAttendance() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString( 'token');
-    final userId = prefs.getString( 'userId');
+    final token = prefs.getString('token');
+    final userId = prefs.getString('userId');
 
     if (token == null || userId == null) return;
 
@@ -557,7 +558,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final uploadFile = await _prepareImageForUpload(file);
     if (!await uploadFile.exists()) return null;
 
-    final token = prefs.getString( 'token');
+    final token = prefs.getString('token');
     if (token == null) return null;
 
     final filename = 'selfie_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -675,8 +676,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _punchIn(String mediaId, {bool isAuto = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString( 'token');
-    final userId = prefs.getString( 'userId');
+    final token = prefs.getString('token');
+    final userId = prefs.getString('userId');
     if (token == null || userId == null) return;
 
     Position? position;
@@ -722,7 +723,7 @@ class _ProfilePageState extends State<ProfilePage> {
           await _fetchEmployeeProfile();
           await _fetchAttendance();
           _lastPunchOutType = null;
-          await prefs.remove( 'lastPunchOutType');
+          await prefs.remove('lastPunchOutType');
         }
       } else {
         final localMidnight = DateTime(now.year, now.month, now.day);
@@ -751,7 +752,7 @@ class _ProfilePageState extends State<ProfilePage> {
           await _fetchEmployeeProfile();
           await _fetchAttendance();
           _lastPunchOutType = null;
-          await prefs.remove( 'lastPunchOutType');
+          await prefs.remove('lastPunchOutType');
         }
       }
     } catch (e) {
@@ -795,8 +796,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _isProcessingPunch = true;
     });
 
-    final token = prefs.getString( 'token');
-    final userId = prefs.getString( 'userId');
+    final token = prefs.getString('token');
+    final userId = prefs.getString('userId');
     if (token == null || userId == null) {
       setState(() => _isProcessingPunch = false);
       return;
@@ -991,7 +992,7 @@ class _ProfilePageState extends State<ProfilePage> {
         return;
       }
 
-      final token = prefs.getString( 'token');
+      final token = prefs.getString('token');
       if (token == null || _attendanceDocId == null) return;
 
       final updatedActivities = List.from(_rawActivities);
@@ -1114,7 +1115,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     setState(() => _isProcessingPunch = true);
 
-    final token = prefs.getString( 'token');
+    final token = prefs.getString('token');
     if (token == null) {
       setState(() => _isProcessingPunch = false);
       return;
@@ -1239,7 +1240,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _isProcessingPunch = true;
     });
 
-    final token = prefs.getString( 'token');
+    final token = prefs.getString('token');
     if (token == null) return;
 
     try {
@@ -1280,7 +1281,7 @@ class _ProfilePageState extends State<ProfilePage> {
         await _fetchAttendance();
         _autoPunchInFired = false;
         _lastPunchOutType = 'manual';
-        await prefs.setString( 'lastPunchOutType',  'manual');
+        await prefs.setString('lastPunchOutType', 'manual');
       }
     } catch (e) {
       debugPrint('Punch Out Error: $e');

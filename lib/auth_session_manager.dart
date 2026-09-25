@@ -82,12 +82,17 @@ class AuthSessionManager {
     required String token,
     required Duration timeout,
   }) async {
-    final baseUri = Uri.parse("${ApiConfig.baseUrl}/users/me?depth=5&showHiddenFields=true");
+    final baseUri = Uri.parse(
+      "${ApiConfig.baseUrl}/users/me?depth=5&showHiddenFields=true",
+    );
     return raw_http
-        .get(baseUri, headers: {
-          'Authorization': 'Bearer $token',
-          'x-app-version': AppVersion.current,
-        })
+        .get(
+          baseUri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'x-app-version': AppVersion.current,
+          },
+        )
         .timeout(timeout);
   }
 
@@ -160,7 +165,8 @@ class AuthSessionManager {
       await clearSessionPreservingFavorites(prefs);
       await prefs.setString(pendingLogoutMessageKey, resolvedMessage);
 
-      final nav = _navigatorKey?.currentState ?? AuthService.navigatorKey.currentState;
+      final nav =
+          _navigatorKey?.currentState ?? AuthService.navigatorKey.currentState;
       if (nav != null) {
         nav.pushNamedAndRemoveUntil('/login', (route) => false);
       }

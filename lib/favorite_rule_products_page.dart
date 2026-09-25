@@ -21,7 +21,8 @@ class FavoriteRuleProductsPage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _FavoriteRuleProductsPageState createState() => _FavoriteRuleProductsPageState();
+  _FavoriteRuleProductsPageState createState() =>
+      _FavoriteRuleProductsPageState();
 }
 
 class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
@@ -58,13 +59,13 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final docs = data['docs'] as List<dynamic>? ?? [];
-        
+
         final List<Map<String, dynamic>> productsList = [];
         for (var doc in docs) {
           if (doc is Map) {
             bool belongsToCompany = false;
             final category = doc['category'];
-            
+
             if (category is Map) {
               // 1. Check category.company directly
               final catCompanies = category['company'];
@@ -77,7 +78,7 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
                   }
                 }
               }
-              
+
               // 2. Check category.department.company
               if (!belongsToCompany) {
                 final department = category['department'];
@@ -85,7 +86,9 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
                   final depCompanies = department['company'];
                   if (depCompanies is List) {
                     for (var c in depCompanies) {
-                      final cId = c is Map ? (c['id'] ?? c['_id']) : c.toString();
+                      final cId = c is Map
+                          ? (c['id'] ?? c['_id'])
+                          : c.toString();
                       if (cId == widget.companyId) {
                         belongsToCompany = true;
                         break;
@@ -100,14 +103,14 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
               productsList.add({
                 'id': doc['id'] ?? doc['_id'],
                 'name': doc['name'] ?? 'Unknown Product',
-                'categoryName': (doc['category'] is Map) 
-                    ? (doc['category']['name'] ?? '') 
+                'categoryName': (doc['category'] is Map)
+                    ? (doc['category']['name'] ?? '')
                     : '',
               });
             }
           }
         }
-        
+
         setState(() {
           _allProducts = productsList;
           _updateDisplayedProducts();
@@ -133,7 +136,7 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
 
   void _updateDisplayedProducts() {
     final query = _searchController.text.trim().toLowerCase();
-    
+
     // Filter by search query and category
     List<Map<String, dynamic>> filtered = _allProducts.where((p) {
       final category = p['categoryName'].toString();
@@ -149,10 +152,10 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
     filtered.sort((a, b) {
       final aSelected = _selectedProductIds.contains(a['id']);
       final bSelected = _selectedProductIds.contains(b['id']);
-      
+
       if (aSelected && !bSelected) return -1;
       if (!aSelected && bSelected) return 1;
-      
+
       if (query.isNotEmpty) {
         final aName = a['name'].toString().toLowerCase();
         final bName = b['name'].toString().toLowerCase();
@@ -164,8 +167,12 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
         if (!aStartsWith && bStartsWith) return 1;
 
         // Word startsWith priority
-        final aWordStartsWith = aName.split(' ').any((w) => w.startsWith(query));
-        final bWordStartsWith = bName.split(' ').any((w) => w.startsWith(query));
+        final aWordStartsWith = aName
+            .split(' ')
+            .any((w) => w.startsWith(query));
+        final bWordStartsWith = bName
+            .split(' ')
+            .any((w) => w.startsWith(query));
         if (aWordStartsWith && !bWordStartsWith) return -1;
         if (!aWordStartsWith && bWordStartsWith) return 1;
       }
@@ -193,7 +200,9 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
       if (response.statusCode == 200) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Favorite products updated successfully')),
+          const SnackBar(
+            content: Text('Favorite products updated successfully'),
+          ),
         );
         Navigator.of(context).pop(true); // Return true to indicate success
       } else {
@@ -217,10 +226,10 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
     if (query.isEmpty) {
       return Text(text, style: const TextStyle(fontSize: 16));
     }
-    
+
     final lowerText = text.toLowerCase();
     final lowerQuery = query.toLowerCase();
-    
+
     if (!lowerText.contains(lowerQuery)) {
       return Text(text, style: const TextStyle(fontSize: 16));
     }
@@ -228,22 +237,27 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
     final spans = <TextSpan>[];
     int start = 0;
     int indexOfMatch;
-    
+
     while ((indexOfMatch = lowerText.indexOf(lowerQuery, start)) != -1) {
       if (indexOfMatch > start) {
         spans.add(TextSpan(text: text.substring(start, indexOfMatch)));
       }
-      spans.add(TextSpan(
-        text: text.substring(indexOfMatch, indexOfMatch + query.length),
-        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-      ));
+      spans.add(
+        TextSpan(
+          text: text.substring(indexOfMatch, indexOfMatch + query.length),
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
       start = indexOfMatch + query.length;
     }
-    
+
     if (start < text.length) {
       spans.add(TextSpan(text: text.substring(start)));
     }
-    
+
     return RichText(
       text: TextSpan(
         style: const TextStyle(color: Colors.black, fontSize: 16),
@@ -316,12 +330,19 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
                     itemCount: _displayedProducts.length,
                     itemBuilder: (context, index) {
                       final product = _displayedProducts[index];
-                      final isSelected = _selectedProductIds.contains(product['id']);
+                      final isSelected = _selectedProductIds.contains(
+                        product['id'],
+                      );
                       final categoryName = product['categoryName'];
 
                       return CheckboxListTile(
-                        title: _buildHighlightedText(product['name'], _searchController.text.trim()),
-                        subtitle: categoryName.isNotEmpty ? Text(categoryName) : null,
+                        title: _buildHighlightedText(
+                          product['name'],
+                          _searchController.text.trim(),
+                        ),
+                        subtitle: categoryName.isNotEmpty
+                            ? Text(categoryName)
+                            : null,
                         value: isSelected,
                         activeColor: Colors.green,
                         onChanged: (bool? checked) {
@@ -348,7 +369,7 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
                   color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
-                )
+                ),
               ],
             ),
             child: ElevatedButton(
@@ -364,11 +385,18 @@ class _FavoriteRuleProductsPageState extends State<FavoriteRuleProductsPage> {
                   ? const SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Text(
                       'Save Changes',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
             ),
           ),

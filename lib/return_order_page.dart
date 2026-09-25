@@ -16,7 +16,6 @@ import 'package:http_parser/http_parser.dart';
 import 'package:branch/api_config.dart';
 import 'package:branch/camera_page.dart';
 
-
 class ReturnOrderPage extends StatefulWidget {
   final String categoryId;
   final String categoryName;
@@ -85,10 +84,19 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         });
         if (user['branch'] != null) {
           setState(() {
-            _branchId = (user['branch'] is Map) ? user['branch']['id'] : user['branch'];
+            _branchId = (user['branch'] is Map)
+                ? user['branch']['id']
+                : user['branch'];
           });
-          Provider.of<ReturnProvider>(context, listen: false).setBranchId(_branchId);
-        } else if (user['role'] == 'waiter' || user['role'] == 'kitchen' || user['role'] == 'chef' || user['role'] == 'manager' || user['role'] == 'cashier') {
+          Provider.of<ReturnProvider>(
+            context,
+            listen: false,
+          ).setBranchId(_branchId);
+        } else if (user['role'] == 'waiter' ||
+            user['role'] == 'kitchen' ||
+            user['role'] == 'chef' ||
+            user['role'] == 'manager' ||
+            user['role'] == 'cashier') {
           await _fetchWaiterBranch(token);
         }
       }
@@ -113,7 +121,10 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
             setState(() {
               _branchId = branch['id'];
             });
-            Provider.of<ReturnProvider>(context, listen: false).setBranchId(_branchId);
+            Provider.of<ReturnProvider>(
+              context,
+              listen: false,
+            ).setBranchId(_branchId);
             break;
           }
         }
@@ -135,8 +146,12 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (_branchId == null && _userRole == null) {
         await _fetchUserData(token);
       }
-      final url = '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
-      final response = await http.get(Uri.parse(url), headers: ApiConfig.getHeaders(token));
+      final url =
+          '${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=100&depth=1';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: ApiConfig.getHeaders(token),
+      );
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         setState(() {
@@ -145,13 +160,15 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch products: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to fetch products: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Network error, try again')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Network error, try again')));
     }
     setState(() => _isLoading = false);
   }
@@ -165,7 +182,9 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     if (_branchId != null && product['branchOverrides'] != null) {
       for (var override in product['branchOverrides']) {
         var branch = override['branch'];
-        String branchOid = branch is Map ? (branch[r'$oid'] ?? branch['id'] ?? '') : (branch ?? '');
+        String branchOid = branch is Map
+            ? (branch[r'$oid'] ?? branch['id'] ?? '')
+            : (branch ?? '');
         if (branchOid == _branchId) {
           price = override['price']?.toDouble() ?? price;
           break;
@@ -176,13 +195,20 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     // Step 2: Detect if the product is weight-based
     bool isWeightBased = false;
     try {
-      final unit = product['defaultPriceDetails']?['unit']?.toString().toLowerCase();
-      final isKgFlag = product['isKg'] == true || product['sellByWeight'] == true || product['weightBased'] == true;
+      final unit = product['defaultPriceDetails']?['unit']
+          ?.toString()
+          .toLowerCase();
+      final isKgFlag =
+          product['isKg'] == true ||
+          product['sellByWeight'] == true ||
+          product['weightBased'] == true;
       final pricingType = product['pricingType']?.toString().toLowerCase();
 
-      if (unit != null && (unit.contains('kg') || unit.contains('gram'))) isWeightBased = true;
+      if (unit != null && (unit.contains('kg') || unit.contains('gram')))
+        isWeightBased = true;
       if (isKgFlag) isWeightBased = true;
-      if (pricingType != null && pricingType.contains('kg')) isWeightBased = true;
+      if (pricingType != null && pricingType.contains('kg'))
+        isWeightBased = true;
       // Removed name check to avoid false positives
     } catch (e) {
       isWeightBased = false;
@@ -191,7 +217,7 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     // Step 3: Get current quantity if exists
     double existingQty = 0.0;
     final existingItem = provider.returnItems.firstWhere(
-          (i) => i.id == product['id'],
+      (i) => i.id == product['id'],
       orElse: () => ReturnItem(id: '', name: '', price: 0, quantity: 0),
     );
     if (existingItem.id.isNotEmpty) {
@@ -213,7 +239,9 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
             title: Text('Enter Weight ($unit)'),
             content: TextField(
               controller: weightController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 hintText: 'e.g. 0.5',
                 labelText: 'Weight in $unit',
@@ -227,7 +255,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  final value = double.tryParse(weightController.text.trim()) ?? 0.0;
+                  final value =
+                      double.tryParse(weightController.text.trim()) ?? 0.0;
                   Navigator.pop(context, value);
                 },
                 child: const Text('OK'),
@@ -245,10 +274,20 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (existingItem.id.isNotEmpty) {
         provider.updateQuantity(product['id'], quantity);
       } else {
-        provider.addOrUpdateItem(product['id'], product['name'], quantity, price);
+        provider.addOrUpdateItem(
+          product['id'],
+          product['name'],
+          quantity,
+          price,
+        );
       }
     } else {
-      provider.addOrUpdateItem(product['id'], product['name'], existingQty.toInt() + 1, price);
+      provider.addOrUpdateItem(
+        product['id'],
+        product['name'],
+        existingQty.toInt() + 1,
+        price,
+      );
     }
   }
 
@@ -261,9 +300,9 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         return;
       }
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Product not found')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Product not found')));
   }
 
   Future<void> _submitReturnOrders() async {
@@ -281,16 +320,14 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     }
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No camera found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No camera found')));
       return;
     }
     final XFile? photo = await Navigator.push<XFile>(
       context,
-      MaterialPageRoute(
-        builder: (context) => CameraPage(cameras: cameras),
-      ),
+      MaterialPageRoute(builder: (context) => CameraPage(cameras: cameras)),
     );
     if (photo == null) return;
     final bytes = await photo.readAsBytes();
@@ -306,7 +343,10 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final tempFile = File('${tempDir.path}/return_${productId}_$timestamp.jpg');
     await tempFile.writeAsBytes(compressed);
-    final product = _products.firstWhere((p) => p['id'] == productId, orElse: () => {'name': 'Unknown'});
+    final product = _products.firstWhere(
+      (p) => p['id'] == productId,
+      orElse: () => {'name': 'Unknown'},
+    );
     final altText = product['name'] ?? 'Return proof';
     final mediaId = await _uploadPhoto(tempFile, altText);
     final provider = Provider.of<ReturnProvider>(context, listen: false);
@@ -315,7 +355,9 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       provider.setPhoto(productId, mediaId, tempFile, url);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_lastUploadError ?? 'Upload failed, saved locally')),
+        SnackBar(
+          content: Text(_lastUploadError ?? 'Upload failed, saved locally'),
+        ),
       );
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_photo_$productId', tempFile.path);
@@ -393,7 +435,8 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         return null;
       }
 
-      final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final filename =
+          'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
         '${ApiConfig.baseUrl}/media?prefix=returnorder',
         '${ApiConfig.baseUrl}/media/?prefix=returnorder',
@@ -421,7 +464,9 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
         final response = await request.send();
         final body = await response.stream.bytesToString();
 
-        debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+        debugPrint(
+          'Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body',
+        );
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           final data = jsonDecode(body);
@@ -441,21 +486,27 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'returnorder';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            debugPrint('Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
-            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+            debugPrint(
+              'Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody',
+            );
+            if (redirResponse.statusCode == 201 ||
+                redirResponse.statusCode == 200) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
             }
-            _lastUploadError = 'Upload failed (${redirResponse.statusCode}): $redirBody';
+            _lastUploadError =
+                'Upload failed (${redirResponse.statusCode}): $redirBody';
           }
         } else {
           _lastUploadError = 'Upload failed (${response.statusCode}): $body';
@@ -480,7 +531,10 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
       if (file != null && await file.exists()) {
         previewWidget = Image.file(file);
       } else if (previewUrl != null) {
-        previewWidget = CachedNetworkImage(imageUrl: previewUrl, fit: BoxFit.contain);
+        previewWidget = CachedNetworkImage(
+          imageUrl: previewUrl,
+          fit: BoxFit.contain,
+        );
       } else {
         previewWidget = const Text('No preview available');
       }
@@ -490,8 +544,14 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
           title: const Text('Current Photo'),
           content: previewWidget,
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Retake')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Retake'),
+            ),
           ],
         ),
       );
@@ -520,215 +580,309 @@ class _ReturnOrderPageState extends State<ReturnOrderPage> {
           // Button removed as per request to use Cart Icon in header
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Colors.black))
+                ? const Center(
+                    child: CircularProgressIndicator(color: Colors.black),
+                  )
                 : _products.isEmpty
                 ? const Center(
-              child: Text(
-                'No products found',
-                style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18),
-              ),
-            )
+                    child: Text(
+                      'No products found',
+                      style: TextStyle(color: Color(0xFF4A4A4A), fontSize: 18),
+                    ),
+                  )
                 : LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final crossAxisCount = (width > 600) ? 5 : 3;
-                return GridView.builder(
-                  padding: const EdgeInsets.all(10),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 0.75,
-                  ),
-                  itemCount: _products.length,
-                  itemBuilder: (context, index) {
-                    final product = _products[index];
-                    final id = product['id'];
-                    String? imageUrl;
-                    if (product['images'] != null &&
-                        product['images'].isNotEmpty &&
-                        product['images'][0]['image'] != null &&
-                        product['images'][0]['image']['url'] != null) {
-                      imageUrl = product['images'][0]['image']['url'];
-                      if (imageUrl != null && imageUrl.startsWith('/')) {
-                        imageUrl = '${ApiConfig.domain}$imageUrl';
-                      }
-                    }
-                    imageUrl ??= 'https://via.placeholder.com/150?text=No+Image';
-                    dynamic priceDetails = product['defaultPriceDetails'];
-                    if (_branchId != null && product['branchOverrides'] != null) {
-                      for (var override in product['branchOverrides']) {
-                        var branch = override['branch'];
-                        String branchOid = branch is Map ? branch[r'$oid'] ?? branch['id'] ?? '' : branch ?? '';
-                        if (branchOid == _branchId) {
-                          priceDetails = override;
-                          break;
-                        }
-                      }
-                    }
-                    final price = priceDetails != null ? '₹${priceDetails['price'] ?? 0}' : '₹0';
-                    return GestureDetector(
-                      onTap: () => _toggleReturnSelection(index),
-                      child: Consumer<ReturnProvider>(
-                        builder: (context, provider, child) {
-                          final matching = provider.returnItems.where((i) => i.id == id).toList();
-                          final isSelected = matching.isNotEmpty && matching.first.quantity > 0;
-                          final qty = isSelected ? matching.first.quantity : 0.0;
-                          String qtyText;
-                          if (qty == qty.floorToDouble()) {
-                            qtyText = qty.toInt().toString();
-                          } else {
-                            qtyText = qty.toStringAsFixed(2);
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final crossAxisCount = (width > 600) ? 5 : 3;
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(10),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.75,
+                        ),
+                        itemCount: _products.length,
+                        itemBuilder: (context, index) {
+                          final product = _products[index];
+                          final id = product['id'];
+                          String? imageUrl;
+                          if (product['images'] != null &&
+                              product['images'].isNotEmpty &&
+                              product['images'][0]['image'] != null &&
+                              product['images'][0]['image']['url'] != null) {
+                            imageUrl = product['images'][0]['image']['url'];
+                            if (imageUrl != null && imageUrl.startsWith('/')) {
+                              imageUrl = '${ApiConfig.domain}$imageUrl';
+                            }
                           }
-                          final hasPhoto = provider.hasPhoto(id);
-                          return Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: isSelected ? Border.all(color: Colors.green, width: 4) : null,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.1),
-                                  spreadRadius: 2,
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                Column(
-                                  children: [
-                                    Expanded(
-                                      flex: 8,
-                                      child: ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                        child: CachedNetworkImage(
-                                          imageUrl: imageUrl!,
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-
-
-                                          placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                          errorWidget: (context, url, error) => const Center(child: Text('No Image', style: TextStyle(color: Colors.grey))),
-                                        ),
+                          imageUrl ??=
+                              'https://via.placeholder.com/150?text=No+Image';
+                          dynamic priceDetails = product['defaultPriceDetails'];
+                          if (_branchId != null &&
+                              product['branchOverrides'] != null) {
+                            for (var override in product['branchOverrides']) {
+                              var branch = override['branch'];
+                              String branchOid = branch is Map
+                                  ? branch[r'$oid'] ?? branch['id'] ?? ''
+                                  : branch ?? '';
+                              if (branchOid == _branchId) {
+                                priceDetails = override;
+                                break;
+                              }
+                            }
+                          }
+                          final price = priceDetails != null
+                              ? '₹${priceDetails['price'] ?? 0}'
+                              : '₹0';
+                          return GestureDetector(
+                            onTap: () => _toggleReturnSelection(index),
+                            child: Consumer<ReturnProvider>(
+                              builder: (context, provider, child) {
+                                final matching = provider.returnItems
+                                    .where((i) => i.id == id)
+                                    .toList();
+                                final isSelected =
+                                    matching.isNotEmpty &&
+                                    matching.first.quantity > 0;
+                                final qty = isSelected
+                                    ? matching.first.quantity
+                                    : 0.0;
+                                String qtyText;
+                                if (qty == qty.floorToDouble()) {
+                                  qtyText = qty.toInt().toString();
+                                } else {
+                                  qtyText = qty.toStringAsFixed(2);
+                                }
+                                final hasPhoto = provider.hasPhoto(id);
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: Colors.green,
+                                            width: 4,
+                                          )
+                                        : null,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.1),
+                                        spreadRadius: 2,
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
                                       ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Container(
-                                        width: double.infinity,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.black,
-                                          borderRadius: BorderRadius.vertical(bottom: Radius.circular(8)),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          product['name'] ?? 'Unknown',
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                          textAlign: TextAlign.center,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Positioned(
-                                  top: 2,
-                                  left: 2,
-                                  child: GestureDetector(
-                                    onTap: () => _unselectProduct(id),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        price,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
+                                    ],
                                   ),
-                                ),
-                                Positioned(
-                                  top: 2,
-                                  right: 2,
-                                  child: GestureDetector(
-                                    onTap: () => _handleCameraTap(id),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: hasPhoto ? Border.all(color: Colors.green, width: 2) : null,
-                                      ),
-                                      child: provider.getTempPhoto(id) != null && provider.getTempPhoto(id)!.existsSync()
-                                          ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Image.file(
-                                          provider.getTempPhoto(id)!,
-                                          width: 24,
-                                          height: 24,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
-                                          : provider.getPhotoUrl(id) != null
-                                          ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: CachedNetworkImage(
-                                          imageUrl: provider.getPhotoUrl(id)!,
-                                          width: 24,
-                                          height: 24,
-                                          fit: BoxFit.cover,
+                                  child: Stack(
+                                    children: [
+                                      Column(
+                                        children: [
+                                          Expanded(
+                                            flex: 8,
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  const BorderRadius.vertical(
+                                                    top: Radius.circular(8),
+                                                  ),
+                                              child: CachedNetworkImage(
+                                                imageUrl: imageUrl!,
+                                                fit: BoxFit.cover,
+                                                width: double.infinity,
 
-                                          placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                                          errorWidget: (context, url, error) => Icon(
-                                            Icons.camera_alt,
-                                            color: hasPhoto ? Colors.green : Colors.white,
-                                            size: 20,
+                                                placeholder: (context, url) =>
+                                                    const Center(
+                                                      child:
+                                                          CircularProgressIndicator(),
+                                                    ),
+                                                errorWidget:
+                                                    (context, url, error) =>
+                                                        const Center(
+                                                          child: Text(
+                                                            'No Image',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.grey,
+                                                            ),
+                                                          ),
+                                                        ),
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Container(
+                                              width: double.infinity,
+                                              decoration: const BoxDecoration(
+                                                color: Colors.black,
+                                                borderRadius:
+                                                    BorderRadius.vertical(
+                                                      bottom: Radius.circular(
+                                                        8,
+                                                      ),
+                                                    ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                product['name'] ?? 'Unknown',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        left: 2,
+                                        child: GestureDetector(
+                                          onTap: () => _unselectProduct(id),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              price,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 10,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      )
-                                          : Icon(Icons.camera_alt, color: hasPhoto ? Colors.green : Colors.white, size: 20),
-                                    ),
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Positioned.fill(
-                                    child: Align(
-                                      alignment: Alignment.center,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.7),
-                                          border: Border.all(color: Colors.grey, width: 1),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        child: Text(
-                                          qtyText,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: GestureDetector(
+                                          onTap: () => _handleCameraTap(id),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: hasPhoto
+                                                  ? Border.all(
+                                                      color: Colors.green,
+                                                      width: 2,
+                                                    )
+                                                  : null,
+                                            ),
+                                            child:
+                                                provider.getTempPhoto(id) !=
+                                                        null &&
+                                                    provider
+                                                        .getTempPhoto(id)!
+                                                        .existsSync()
+                                                ? ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    child: Image.file(
+                                                      provider.getTempPhoto(
+                                                        id,
+                                                      )!,
+                                                      width: 24,
+                                                      height: 24,
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  )
+                                                : provider.getPhotoUrl(id) !=
+                                                      null
+                                                ? ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    child: CachedNetworkImage(
+                                                      imageUrl: provider
+                                                          .getPhotoUrl(id)!,
+                                                      width: 24,
+                                                      height: 24,
+                                                      fit: BoxFit.cover,
+
+                                                      placeholder: (context, url) =>
+                                                          const CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                      errorWidget:
+                                                          (
+                                                            context,
+                                                            url,
+                                                            error,
+                                                          ) => Icon(
+                                                            Icons.camera_alt,
+                                                            color: hasPhoto
+                                                                ? Colors.green
+                                                                : Colors.white,
+                                                            size: 20,
+                                                          ),
+                                                    ),
+                                                  )
+                                                : Icon(
+                                                    Icons.camera_alt,
+                                                    color: hasPhoto
+                                                        ? Colors.green
+                                                        : Colors.white,
+                                                    size: 20,
+                                                  ),
                                           ),
                                         ),
                                       ),
-                                    ),
+                                      if (isSelected)
+                                        Positioned.fill(
+                                          child: Align(
+                                            alignment: Alignment.center,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(
+                                                  0.7,
+                                                ),
+                                                border: Border.all(
+                                                  color: Colors.grey,
+                                                  width: 1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              child: Text(
+                                                qtyText,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                              ],
+                                );
+                              },
                             ),
                           );
                         },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

@@ -12,7 +12,8 @@ Future<void> initializeService() async {
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'my_foreground', // id
     'TRACKER BACKGROUND SERVICE', // title
-    description: 'Maintains background location monitoring for auto attendance.',
+    description:
+        'Maintains background location monitoring for auto attendance.',
     importance: Importance.low,
   );
 
@@ -21,7 +22,8 @@ Future<void> initializeService() async {
 
   await flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+        AndroidFlutterLocalNotificationsPlugin
+      >()
       ?.createNotificationChannel(channel);
 
   await service.configure(

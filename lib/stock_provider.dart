@@ -202,7 +202,11 @@ class StockProvider extends ChangeNotifier {
             : user["branch"];
         final comp = user["branch"] is Map ? user["branch"]["company"] : null;
         _companyId = comp is Map ? comp["id"] : comp;
-      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
+      } else if (_userRole == "waiter" ||
+          _userRole == "kitchen" ||
+          _userRole == "chef" ||
+          _userRole == "manager" ||
+          _userRole == "cashier") {
         await _detectWaiterBranch(token);
       }
 
@@ -308,7 +312,11 @@ class StockProvider extends ChangeNotifier {
     if (_userRole != "superadmin") {
       if (_companyId != null) {
         query += "&where[company][equals]=$_companyId";
-      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
+      } else if (_userRole == "waiter" ||
+          _userRole == "kitchen" ||
+          _userRole == "chef" ||
+          _userRole == "manager" ||
+          _userRole == "cashier") {
         final ip = await _deviceIp();
         final matches = await _matchingCompanies(token, ip);
 
@@ -506,8 +514,12 @@ class StockProvider extends ChangeNotifier {
         return null;
       }
 
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final body = jsonEncode({
         "branch": branchId,

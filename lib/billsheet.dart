@@ -260,11 +260,13 @@ class Bill {
           } else if (settledByJson['name'] != null) {
             cashierName = formatAssigneeLabel(settledByJson['name'].toString());
           } else if (settledByJson['username'] != null) {
-            cashierName =
-                formatAssigneeLabel(settledByJson['username'].toString());
+            cashierName = formatAssigneeLabel(
+              settledByJson['username'].toString(),
+            );
           } else if (settledByJson['email'] != null) {
-            cashierName =
-                formatAssigneeLabel(settledByJson['email'].toString());
+            cashierName = formatAssigneeLabel(
+              settledByJson['email'].toString(),
+            );
           }
         }
       }
@@ -2019,7 +2021,11 @@ class _BillSheetPageState extends State<BillSheetPage> {
     );
   }
 
-  double _extractItemFinalLineTotal(dynamic item, double qty, double unitPrice) {
+  double _extractItemFinalLineTotal(
+    dynamic item,
+    double qty,
+    double unitPrice,
+  ) {
     if (item is! Map) return qty * unitPrice;
     final direct = _toDouble(
       item['finalLineTotal'] ??
@@ -2058,7 +2064,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
       final effectiveLineTotalInclusive = lineTotalInclusive
           .clamp(0.0, double.infinity)
           .toDouble();
-      final lineTotalInclusivePaise = (effectiveLineTotalInclusive * 100).round();
+      final lineTotalInclusivePaise = (effectiveLineTotalInclusive * 100)
+          .round();
 
       final hasTaxableAmount = _hasField(item, 'taxableAmount');
       final hasGstAmount = _hasField(item, 'gstAmount');
@@ -2155,7 +2162,9 @@ class _BillSheetPageState extends State<BillSheetPage> {
 
     double payableTotalAmount = totalAmount;
     if (payableTotalAmount <= 0 && totalAmountBeforeRoundOff > 0) {
-      payableTotalAmount = _roundMoney(totalAmountBeforeRoundOff.roundToDouble());
+      payableTotalAmount = _roundMoney(
+        totalAmountBeforeRoundOff.roundToDouble(),
+      );
     }
 
     final roundOffAmount = bill.hasRoundOffAmountField
@@ -2493,13 +2502,18 @@ class _BillSheetPageState extends State<BillSheetPage> {
     );
   }
 
-  Future<void> _printReceipt(Bill bill,
-      {String? paymentMethodOverride, String? cashierNameOverride}) async {
+  Future<void> _printReceipt(
+    Bill bill, {
+    String? paymentMethodOverride,
+    String? cashierNameOverride,
+  }) async {
     await _printFullReceipt(bill, paymentMethodOverride: paymentMethodOverride);
   }
 
-  Future<void> _printFullReceipt(Bill bill,
-      {String? paymentMethodOverride}) async {
+  Future<void> _printFullReceipt(
+    Bill bill, {
+    String? paymentMethodOverride,
+  }) async {
     try {
       const PaperSize paper = PaperSize.mm80;
       final profile = await CapabilityProfile.load();
@@ -2753,8 +2767,7 @@ class _BillSheetPageState extends State<BillSheetPage> {
             styles: const PosStyles(align: PosAlign.left, bold: true),
           ),
           PosColumn(
-            text:
-                'GRAND TOTAL RS ${_formatReceiptMoney(summary.totalAmount)}',
+            text: 'GRAND TOTAL RS ${_formatReceiptMoney(summary.totalAmount)}',
             width: 7,
             styles: const PosStyles(align: PosAlign.right, bold: true),
           ),
@@ -2778,8 +2791,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
       } else {
         final message =
             hasBluetoothPrinter || ((_printerIp ?? '').trim().isNotEmpty)
-                ? 'Could not connect to the printer. Check Bluetooth or network printer.'
-                : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
+            ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+            : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
         _showMessage(message);
       }
     } catch (e) {
@@ -2787,8 +2800,10 @@ class _BillSheetPageState extends State<BillSheetPage> {
     }
   }
 
-  Future<void> _printSettlementReceipt(Bill bill,
-      {String? cashierNameOverride}) async {
+  Future<void> _printSettlementReceipt(
+    Bill bill, {
+    String? cashierNameOverride,
+  }) async {
     try {
       const PaperSize paper = PaperSize.mm80;
       final profile = await CapabilityProfile.load();
@@ -2827,18 +2842,20 @@ class _BillSheetPageState extends State<BillSheetPage> {
         }
         String cashier = (cashierNameOverride ?? bill.cashierName).trim();
         if (cashier.isEmpty || cashier == 'Unknown') {
-          cashier = (prefs.getString('employee_name') ??
-                  prefs.getString('user_name') ??
-                  prefs.getString('email') ??
-                  '')
-              .trim();
+          cashier =
+              (prefs.getString('employee_name') ??
+                      prefs.getString('user_name') ??
+                      prefs.getString('email') ??
+                      '')
+                  .trim();
         }
 
         final displayCashier = _formatAssigneeLabel(cashier);
 
         try {
-          final ByteData bytes =
-              await rootBundle.load('assets/settlement_tamil_text.png');
+          final ByteData bytes = await rootBundle.load(
+            'assets/settlement_tamil_text.png',
+          );
           final Uint8List list = bytes.buffer.asUint8List();
           img.Image? decodedImage = img.decodeImage(list);
 
@@ -2872,8 +2889,8 @@ class _BillSheetPageState extends State<BillSheetPage> {
       } else {
         final message =
             hasBluetoothPrinter || ((_printerIp ?? '').trim().isNotEmpty)
-                ? 'Could not connect to the printer. Check Bluetooth or network printer.'
-                : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
+            ? 'Could not connect to the printer. Check Bluetooth or network printer.'
+            : 'No printer configured. Connect a Bluetooth printer or set a branch printer.';
         _showMessage(message);
       }
     } catch (e) {
@@ -3034,204 +3051,222 @@ class _BillSheetPageState extends State<BillSheetPage> {
                               color: Colors.grey.shade200,
                               padding: EdgeInsets.all(8),
                               child: _buildReceiptPreviewPanel(
-                        bill,
-                        selectedPaymentMethod: pay,
-                        showCustomerHistoryButton: showCustomerHistoryButton,
-                        isCustomerHistoryLoading: isHistoryLoading,
-                        onCustomerHistoryTap: () async {
-                          final phone = bill.customerPhone.trim();
-                          if (phone.isEmpty) {
-                            _showMessage(
-                              'No customer mobile number in this bill.',
-                            );
-                            return;
-                          }
+                                bill,
+                                selectedPaymentMethod: pay,
+                                showCustomerHistoryButton:
+                                    showCustomerHistoryButton,
+                                isCustomerHistoryLoading: isHistoryLoading,
+                                onCustomerHistoryTap: () async {
+                                  final phone = bill.customerPhone.trim();
+                                  if (phone.isEmpty) {
+                                    _showMessage(
+                                      'No customer mobile number in this bill.',
+                                    );
+                                    return;
+                                  }
 
-                          sheetSetState(() => isHistoryLoading = true);
-                          final history = await _fetchCustomerHistoryBills(
-                            phone,
-                            excludeBillId: bill.id,
-                            excludeBill: bill,
-                          );
-                          if (!mounted || !statefulContext.mounted) return;
-
-                          if (history.isEmpty) {
-                            sheetSetState(() => isHistoryLoading = false);
-                            sheetSetState(
-                              () => showCustomerHistoryButton = false,
-                            );
-                            _showMessage('No previous customer history found.');
-                            return;
-                          }
-
-                          _ReviewedProductsLookupResult reviewedLookup =
-                              const _ReviewedProductsLookupResult(
-                                keys: <String>{},
-                                messagesByProductKey: <String, String>{},
-                                messagesByBillProductKey: <String, String>{},
-                                messagesByBillTimeProductKey:
-                                    <String, String>{},
-                              );
-                          try {
-                            reviewedLookup =
-                                await _fetchReviewedProductKeysForPhone(
-                                  phone,
-                                  knownBills: history,
-                                );
-                          } catch (_) {}
-                          if (!mounted || !statefulContext.mounted) return;
-                          sheetSetState(() => isHistoryLoading = false);
-
-                          await _showCustomerHistorySheet(
-                            phone,
-                            history,
-                            currentBillId: bill.id,
-                            reviewedLookup: reviewedLookup,
-                          );
-                        },
-                              ),
-                            ),
-                          ),
-                        ),
-                    SizedBox(height: 12),
-                    Row(
-                      children: [
-                        btn("Cash"),
-                        btn("UPI"),
-                        btn("Card"),
-                        Container(
-                          width: 60,
-                          margin: EdgeInsets.only(left: 8),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueGrey,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                             onPressed: () async {
-                               await _printFullReceipt(
-                                 bill,
-                                 paymentMethodOverride: pay,
-                               );
-                               if (mounted && sheetContext.mounted) {
-                                 Navigator.pop(sheetContext);
-                               }
-                             },
-                            child: Icon(Icons.print, size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isAlreadySettled) ...[
-                      SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black87,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              onPressed: canSettleNow
-                                  ? () async {
-                                      final paymentMethod = pay;
-                                      if (paymentMethod == null) {
-                                        _showMessage(
-                                          "Payment method is required before settling the bill.",
-                                        );
-                                        return;
-                                      }
-
-                                      if (billStatus != 'completed') {
-                                        _showMessage(
-                                          "Bill can be settled only after it is completed.",
-                                        );
-                                        return;
-                                      }
-
-                                      sheetSetState(() => isSettling = true);
-                                      final prefs =
-                                          await SharedPreferences.getInstance();
-                                      final currentCashierName =
-                                          prefs.getString('employee_name') ??
-                                          prefs.getString('user_name') ??
-                                          prefs.getString('email') ??
-                                          '';
-                                      final currentCashierId =
-                                          prefs.getString('user_id') ??
-                                          prefs.getString('employee_id');
-
-                                      final result = await settleBill(
-                                        bill.id,
-                                        paymentMethod,
-                                        token,
-                                        cashierName: currentCashierName,
-                                        cashierId: currentCashierId,
+                                  sheetSetState(() => isHistoryLoading = true);
+                                  final history =
+                                      await _fetchCustomerHistoryBills(
+                                        phone,
+                                        excludeBillId: bill.id,
+                                        excludeBill: bill,
                                       );
-                                      if (!mounted ||
-                                          !statefulContext.mounted) {
-                                        return;
-                                      }
-                                      sheetSetState(() => isSettling = false);
+                                  if (!mounted || !statefulContext.mounted)
+                                    return;
 
-                                      if (result.success) {
-                                        if (mounted && sheetContext.mounted) {
-                                          Navigator.pop(sheetContext);
-                                        }
-                                        _showMessage(
-                                          "Bill settled successfully.",
+                                  if (history.isEmpty) {
+                                    sheetSetState(
+                                      () => isHistoryLoading = false,
+                                    );
+                                    sheetSetState(
+                                      () => showCustomerHistoryButton = false,
+                                    );
+                                    _showMessage(
+                                      'No previous customer history found.',
+                                    );
+                                    return;
+                                  }
+
+                                  _ReviewedProductsLookupResult reviewedLookup =
+                                      const _ReviewedProductsLookupResult(
+                                        keys: <String>{},
+                                        messagesByProductKey:
+                                            <String, String>{},
+                                        messagesByBillProductKey:
+                                            <String, String>{},
+                                        messagesByBillTimeProductKey:
+                                            <String, String>{},
+                                      );
+                                  try {
+                                    reviewedLookup =
+                                        await _fetchReviewedProductKeysForPhone(
+                                          phone,
+                                          knownBills: history,
                                         );
-                                        unawaited(_fetchBills());
-                                        unawaited(
-                                          _printSettlementReceipt(
-                                            bill,
-                                            cashierNameOverride:
-                                                currentCashierName,
-                                          ),
-                                        );
-                                      } else {
-                                        _showMessage(
-                                          result.message ??
-                                              "Failed to settle bill.",
-                                        );
-                                      }
-                                    }
-                                  : () {
-                                      if (!_canUpdateOrSettleBills) {
-                                        _showMessage(
-                                          "You don't have permission to settle this bill.",
-                                        );
-                                      } else if (pay == null) {
-                                        _showMessage(
-                                          "Payment method is required before settling the bill.",
-                                        );
-                                      } else if (billStatus != 'completed') {
-                                        _showMessage(
-                                          "Bill can be settled only after it is completed.",
-                                        );
-                                      }
-                                    },
-                              child: Text(
-                                isSettling
-                                    ? "PROCESSING..."
-                                    : "BILL SETTLEMENT",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                  } catch (_) {}
+                                  if (!mounted || !statefulContext.mounted)
+                                    return;
+                                  sheetSetState(() => isHistoryLoading = false);
+
+                                  await _showCustomerHistorySheet(
+                                    phone,
+                                    history,
+                                    currentBillId: bill.id,
+                                    reviewedLookup: reviewedLookup,
+                                  );
+                                },
                               ),
                             ),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                        Row(
+                          children: [
+                            btn("Cash"),
+                            btn("UPI"),
+                            btn("Card"),
+                            Container(
+                              width: 60,
+                              margin: EdgeInsets.only(left: 8),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueGrey,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  await _printFullReceipt(
+                                    bill,
+                                    paymentMethodOverride: pay,
+                                  );
+                                  if (mounted && sheetContext.mounted) {
+                                    Navigator.pop(sheetContext);
+                                  }
+                                },
+                                child: Icon(Icons.print, size: 20),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (!isAlreadySettled) ...[
+                          SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black87,
+                                    foregroundColor: Colors.white,
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: canSettleNow
+                                      ? () async {
+                                          final paymentMethod = pay;
+                                          if (paymentMethod == null) {
+                                            _showMessage(
+                                              "Payment method is required before settling the bill.",
+                                            );
+                                            return;
+                                          }
+
+                                          if (billStatus != 'completed') {
+                                            _showMessage(
+                                              "Bill can be settled only after it is completed.",
+                                            );
+                                            return;
+                                          }
+
+                                          sheetSetState(
+                                            () => isSettling = true,
+                                          );
+                                          final prefs =
+                                              await SharedPreferences.getInstance();
+                                          final currentCashierName =
+                                              prefs.getString(
+                                                'employee_name',
+                                              ) ??
+                                              prefs.getString('user_name') ??
+                                              prefs.getString('email') ??
+                                              '';
+                                          final currentCashierId =
+                                              prefs.getString('user_id') ??
+                                              prefs.getString('employee_id');
+
+                                          final result = await settleBill(
+                                            bill.id,
+                                            paymentMethod,
+                                            token,
+                                            cashierName: currentCashierName,
+                                            cashierId: currentCashierId,
+                                          );
+                                          if (!mounted ||
+                                              !statefulContext.mounted) {
+                                            return;
+                                          }
+                                          sheetSetState(
+                                            () => isSettling = false,
+                                          );
+
+                                          if (result.success) {
+                                            if (mounted &&
+                                                sheetContext.mounted) {
+                                              Navigator.pop(sheetContext);
+                                            }
+                                            _showMessage(
+                                              "Bill settled successfully.",
+                                            );
+                                            unawaited(_fetchBills());
+                                            unawaited(
+                                              _printSettlementReceipt(
+                                                bill,
+                                                cashierNameOverride:
+                                                    currentCashierName,
+                                              ),
+                                            );
+                                          } else {
+                                            _showMessage(
+                                              result.message ??
+                                                  "Failed to settle bill.",
+                                            );
+                                          }
+                                        }
+                                      : () {
+                                          if (!_canUpdateOrSettleBills) {
+                                            _showMessage(
+                                              "You don't have permission to settle this bill.",
+                                            );
+                                          } else if (pay == null) {
+                                            _showMessage(
+                                              "Payment method is required before settling the bill.",
+                                            );
+                                          } else if (billStatus !=
+                                              'completed') {
+                                            _showMessage(
+                                              "Bill can be settled only after it is completed.",
+                                            );
+                                          }
+                                        },
+                                  child: Text(
+                                    isSettling
+                                        ? "PROCESSING..."
+                                        : "BILL SETTLEMENT",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
                       ],
                     ),
                   ),

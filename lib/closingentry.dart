@@ -102,9 +102,14 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
     _branchId = prefs.getString('branchId') ?? prefs.getString('branch');
-    _userName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+    _userName =
+        prefs.getString('employee_name') ??
+        prefs.getString('user_name') ??
+        prefs.getString('username');
     _userId = prefs.getString('user_id');
-    debugPrint('[Closing Entry Debug] Loaded _userId: $_userId, _userName: $_userName, _branchId: $_branchId');
+    debugPrint(
+      '[Closing Entry Debug] Loaded _userId: $_userId, _userName: $_userName, _branchId: $_branchId',
+    );
     if (_token == null || _branchId == null || _branchId!.isEmpty) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -121,7 +126,10 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
     // Check if manager enabled closing entry
     try {
       final branchUri = Uri.parse('${ApiConfig.baseUrl}/branches/$_branchId');
-      final branchRes = await http.get(branchUri, headers: ApiConfig.getHeaders(_token));
+      final branchRes = await http.get(
+        branchUri,
+        headers: ApiConfig.getHeaders(_token),
+      );
       if (branchRes.statusCode == 200) {
         final branchData = jsonDecode(branchRes.body);
         if (branchData['isClosingEntryEnabled'] != true) {
@@ -135,7 +143,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
               barrierDismissible: false,
               builder: (context) => AlertDialog(
                 title: const Text('Access Denied'),
-                content: const Text('Closing Entry form is locked. Please contact your manager to enable it.'),
+                content: const Text(
+                  'Closing Entry form is locked. Please contact your manager to enable it.',
+                ),
                 actions: [
                   TextButton(
                     onPressed: () {
@@ -332,8 +342,6 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
       // Or just filter all active stock orders?
       // Since 'sendingDate' is on item level, and we want items sent TODAY > lastClosing.
 
-
-
       // Fetching stock orders created/updated recently?
       // Actually stock orders might be created earlier but items sent today.
       // So filtering by 'items.sendingDate' would be ideal but Payload doesn't support deep nested queries easily on arrays sometimes.
@@ -425,7 +433,9 @@ class _ClosingEntryPageState extends State<ClosingEntryPage> {
         'createdByUser': _userId,
         'createdBy': _userId,
       };
-      debugPrint('[Closing Entry Debug] Submitting payload to API: ${jsonEncode(payload)}');
+      debugPrint(
+        '[Closing Entry Debug] Submitting payload to API: ${jsonEncode(payload)}',
+      );
       // final uri = Uri.https(_apiHost, '/api/closing-entries');
       final uri = Uri.parse('${ApiConfig.baseUrl}/closing-entries');
       final res = await http.post(

@@ -28,8 +28,8 @@ class _ExpenseItem {
     this.imageId,
     this.imageFile,
     this.imageUrl,
-  })  : reason = reason ?? TextEditingController(),
-        amount = amount ?? TextEditingController();
+  }) : reason = reason ?? TextEditingController(),
+       amount = amount ?? TextEditingController();
 
   void dispose() {
     reason.dispose();
@@ -64,7 +64,7 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     'RAW MATERIAL',
     'SALARY',
     'OC PRODUCTS',
-    'OTHERS'
+    'OTHERS',
   ];
 
   bool _isSubmitting = false;
@@ -105,13 +105,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
   }
 
   void _updateTotalExpenses() {
-    double total = _expenseItems.fold(
-      0.0,
-      (sum, item) {
-        final val = double.tryParse(item.amount.text);
-        return sum + (val ?? 0.0);
-      },
-    );
+    double total = _expenseItems.fold(0.0, (sum, item) {
+      final val = double.tryParse(item.amount.text);
+      return sum + (val ?? 0.0);
+    });
     _totalExpensesController.text = total.toStringAsFixed(2);
   }
 
@@ -164,8 +161,12 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final expenseData = {
         'branch': _branchId,
@@ -200,7 +201,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to submit: ${response.statusCode} - ${response.body}'),
+            content: Text(
+              'Failed to submit: ${response.statusCode} - ${response.body}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -226,9 +229,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
     }
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No camera found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No camera found')));
       return;
     }
     final XFile? photo = await Navigator.push<XFile>(
@@ -267,7 +270,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
 
     if (mediaId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_lastUploadError ?? 'Upload failed, saved locally')),
+        SnackBar(
+          content: Text(_lastUploadError ?? 'Upload failed, saved locally'),
+        ),
       );
     }
   }
@@ -351,7 +356,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
         final response = await request.send();
         final body = await response.stream.bytesToString();
 
-        debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+        debugPrint(
+          'Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body',
+        );
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           final data = jsonDecode(body);
@@ -371,21 +378,27 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'expense';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            debugPrint('Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
-            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+            debugPrint(
+              'Redirect upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody',
+            );
+            if (redirResponse.statusCode == 201 ||
+                redirResponse.statusCode == 200) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
             }
-            _lastUploadError = 'Upload failed (${redirResponse.statusCode}): $redirBody';
+            _lastUploadError =
+                'Upload failed (${redirResponse.statusCode}): $redirBody';
           }
         } else {
           _lastUploadError = 'Upload failed (${response.statusCode}): $body';
@@ -427,7 +440,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
       if (item.imageFile != null && await item.imageFile!.exists()) {
         previewWidget = Image.file(item.imageFile!);
       } else if (item.imageUrl != null) {
-        previewWidget = CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.contain);
+        previewWidget = CachedNetworkImage(
+          imageUrl: item.imageUrl!,
+          fit: BoxFit.contain,
+        );
       } else {
         previewWidget = const Text('No preview available');
       }
@@ -437,9 +453,18 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
           title: const Text('Current Photo'),
           content: previewWidget,
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, 'remove'), child: const Text('Remove', style: TextStyle(color: Colors.red))),
-            TextButton(onPressed: () => Navigator.pop(context, 'keep'), child: const Text('Keep')),
-            TextButton(onPressed: () => Navigator.pop(context, 'retake'), child: const Text('Retake')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'remove'),
+              child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'keep'),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'retake'),
+              child: const Text('Retake'),
+            ),
           ],
         ),
       );
@@ -501,7 +526,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
             // Header Card
             Card(
               elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -511,7 +538,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                       children: [
                         const Text(
                           'Total Expenses',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           '₹${_totalExpensesController.text.isEmpty ? "0.00" : _totalExpensesController.text}',
@@ -537,7 +567,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                             children: [
                               Text(
                                 "${_selectedDate.toLocal()}".split(' ')[0],
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               const SizedBox(width: 4),
                               const Icon(Icons.calendar_today, size: 16),
@@ -545,13 +577,13 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                           ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Expense List Form
             Form(
               key: _formKey,
@@ -577,7 +609,7 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
             ),
 
             const SizedBox(height: 16),
-            
+
             // Add Button
             ElevatedButton.icon(
               onPressed: _addExpenseDetail,
@@ -585,11 +617,13 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
               label: const Text('Add Expense'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Submit Button
             ElevatedButton.icon(
               onPressed: _isSubmitting ? null : _submitForm,
@@ -597,7 +631,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.check),
               label: Text(_isSubmitting ? 'Submitting...' : 'Submit Expenses'),
@@ -605,7 +642,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                 backgroundColor: Colors.purple,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -644,7 +683,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                 children: [
                   Text(
                     'Expense #${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -653,44 +695,64 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                 ],
               ),
               const SizedBox(height: 8),
-              
+
               // Source Dropdown
               DropdownButtonFormField<String>(
                 value: item.source,
-                items: _expenseSources.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                items: _expenseSources
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
                 onChanged: (val) => setState(() => item.source = val),
                 decoration: InputDecoration(
                   labelText: 'Source',
                   prefixIcon: const Icon(Icons.category_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 validator: (val) => val == null ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              
+
               // Reason Input
               TextFormField(
                 controller: item.reason,
                 decoration: InputDecoration(
                   labelText: 'Reason',
                   prefixIcon: const Icon(Icons.description_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+                validator: (val) =>
+                    (val == null || val.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              
+
               // Amount Input
               TextFormField(
                 controller: item.amount,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Amount',
                   prefixText: '₹ ',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 validator: (val) {
                   if (val == null || val.isEmpty) return 'Required';
@@ -701,7 +763,7 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                 },
               ),
               const SizedBox(height: 12),
-              
+
               // Camera / Image Preview
               Row(
                 children: [
@@ -718,16 +780,28 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: item.imageFile != null
-                                    ? Image.file(item.imageFile!, fit: BoxFit.cover, width: double.infinity)
-                                    : (item.imageUrl != null 
-                                        ? CachedNetworkImage(
-                                            imageUrl: item.imageUrl!,
-                                            fit: BoxFit.cover,
-                                            width: double.infinity,
-                                            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                            errorWidget: (context, url, error) => const Icon(Icons.error),
-                                          )
-                                        : const Center(child: Text("Uploading..."))),
+                                    ? Image.file(
+                                        item.imageFile!,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      )
+                                    : (item.imageUrl != null
+                                          ? CachedNetworkImage(
+                                              imageUrl: item.imageUrl!,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              placeholder: (context, url) =>
+                                                  const Center(
+                                                    child:
+                                                        CircularProgressIndicator(),
+                                                  ),
+                                              errorWidget:
+                                                  (context, url, error) =>
+                                                      const Icon(Icons.error),
+                                            )
+                                          : const Center(
+                                              child: Text("Uploading..."),
+                                            )),
                               ),
                             ),
                           )
@@ -737,7 +811,9 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                             label: const Text('Add Receipt/Photo'),
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                   ),
@@ -751,7 +827,10 @@ class _ExpenseDetailsPageState extends State<ExpenseDetailsPage> {
                           tooltip: 'Retake',
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
                           onPressed: () => _removeExpensePhoto(index),
                           tooltip: 'Remove',
                         ),

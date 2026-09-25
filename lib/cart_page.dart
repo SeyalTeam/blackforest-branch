@@ -192,7 +192,11 @@ class _CartPageState extends State<CartPage> {
               : user['branch'];
           _branchName = (user['branch'] is Map) ? user['branch']['name'] : null;
           await _fetchBranchDetails(token, _branchId!);
-        } else if (user['role'] == 'waiter' || user['role'] == 'kitchen' || user['role'] == 'chef' || user['role'] == 'manager' || user['role'] == 'cashier') {
+        } else if (user['role'] == 'waiter' ||
+            user['role'] == 'kitchen' ||
+            user['role'] == 'chef' ||
+            user['role'] == 'manager' ||
+            user['role'] == 'cashier') {
           await _fetchWaiterBranch(token);
         }
 
@@ -577,8 +581,12 @@ class _CartPageState extends State<CartPage> {
         return;
       }
 
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final billingData = {
         'items': cartProvider.cartItems
@@ -1332,20 +1340,28 @@ class _CartPageState extends State<CartPage> {
                                                     color: Colors.white24,
                                                   ),
                                                 ),
-                                                enabledBorder: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  borderSide: const BorderSide(
-                                                    color: Colors.white24,
-                                                  ),
-                                                ),
-                                                focusedBorder: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  borderSide: BorderSide(
-                                                    color: _accent,
-                                                  ),
-                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                            color:
+                                                                Colors.white24,
+                                                          ),
+                                                    ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color: _accent,
+                                                      ),
+                                                    ),
                                                 contentPadding:
                                                     const EdgeInsets.symmetric(
                                                       horizontal: 4,
@@ -1372,49 +1388,55 @@ class _CartPageState extends State<CartPage> {
                                                 color: Colors.white,
                                                 fontSize: 12,
                                               ),
-                                          decoration: InputDecoration(
-                                            labelText: 'Req',
-                                            labelStyle: const TextStyle(
-                                              color: Colors.white54,
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.black12,
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              borderSide: BorderSide(
-                                                color: Colors.white24,
-                                              ),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              borderSide: BorderSide(
-                                                color: Colors.white24,
-                                              ),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              borderSide: BorderSide(
-                                                color: _accent,
-                                              ),
-                                            ),
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 8,
+                                              decoration: InputDecoration(
+                                                labelText: 'Req',
+                                                labelStyle: const TextStyle(
+                                                  color: Colors.white54,
                                                 ),
+                                                filled: true,
+                                                fillColor: Colors.black12,
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  borderSide: BorderSide(
+                                                    color: Colors.white24,
+                                                  ),
+                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color: Colors.white24,
+                                                      ),
+                                                    ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color: _accent,
+                                                      ),
+                                                    ),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                    ),
+                                              ),
+                                              onChanged: (val) {
+                                                final newQty =
+                                                    double.tryParse(val) ?? 0.0;
+                                                sp.updateQuantity(pid, newQty);
+                                              },
+                                            ),
                                           ),
-                                          onChanged: (val) {
-                                            final newQty =
-                                                double.tryParse(val) ?? 0.0;
-                                            sp.updateQuantity(pid, newQty);
-                                          },
-                                        ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         "Total: ₹ ${lineTotal.toStringAsFixed(2)}",
                                         style: const TextStyle(

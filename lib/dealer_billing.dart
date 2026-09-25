@@ -31,7 +31,7 @@ class DealerBillingPage extends StatefulWidget {
 
 class _DealerBillingPageState extends State<DealerBillingPage> {
   final _formKey = GlobalKey<FormState>();
-  
+
   List<Map<String, dynamic>> _dealers = [];
   String? _selectedDealerId;
   bool _isLoadingDealers = false;
@@ -52,7 +52,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
   void initState() {
     super.initState();
     _billCopySlot = _PhotoSlot(label: 'Dealer Bill Copy', prefix: 'dealerbill');
-    _deliveryPersonSlot = _PhotoSlot(label: 'Delivery Person Photo', prefix: 'deliveryperson');
+    _deliveryPersonSlot = _PhotoSlot(
+      label: 'Delivery Person Photo',
+      prefix: 'deliveryperson',
+    );
     _addBillField(); // Start with one field
     _fetchDealers();
   }
@@ -80,7 +83,8 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
   }
 
   void _removeBillField(int index) {
-    if (_billControllers.length > 1 && _invoiceNumberControllers.length > index) {
+    if (_billControllers.length > 1 &&
+        _invoiceNumberControllers.length > index) {
       setState(() {
         _billControllers[index].dispose();
         _billControllers.removeAt(index);
@@ -116,13 +120,18 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
         final List<Map<String, dynamic>> loadedDealers = [];
         for (var doc in docs) {
           final id = doc['id']?.toString() ?? '';
-          final name = doc['companyName']?.toString() ??
+          final name =
+              doc['companyName']?.toString() ??
               doc['name']?.toString() ??
               'Unknown Dealer';
           loadedDealers.add({'id': id, 'name': name});
         }
         // Sort alphabetically by name
-        loadedDealers.sort((a, b) => a['name'].toString().toLowerCase().compareTo(b['name'].toString().toLowerCase()));
+        loadedDealers.sort(
+          (a, b) => a['name'].toString().toLowerCase().compareTo(
+            b['name'].toString().toLowerCase(),
+          ),
+        );
         setState(() {
           _dealers = loadedDealers;
         });
@@ -132,7 +141,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching dealers: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error fetching dealers: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -148,7 +160,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/products?where[dealer][equals]=$dealerId&limit=500&depth=0'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/products?where[dealer][equals]=$dealerId&limit=500&depth=0',
+        ),
         headers: ApiConfig.getHeaders(token),
       );
 
@@ -161,7 +175,11 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
           final name = doc['name']?.toString() ?? 'Unknown Product';
           loadedProducts.add({'id': id, 'name': name});
         }
-        loadedProducts.sort((a, b) => a['name'].toString().toLowerCase().compareTo(b['name'].toString().toLowerCase()));
+        loadedProducts.sort(
+          (a, b) => a['name'].toString().toLowerCase().compareTo(
+            b['name'].toString().toLowerCase(),
+          ),
+        );
         setState(() {
           _products = loadedProducts;
         });
@@ -171,7 +189,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching products: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error fetching products: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -191,9 +212,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No camera found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No camera found')));
       }
       return;
     }
@@ -257,9 +278,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No camera found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No camera found')));
       }
       return;
     }
@@ -355,7 +376,11 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                             backgroundColor: Colors.red.withOpacity(0.9),
                             child: IconButton(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.close, size: 14, color: Colors.white),
+                              icon: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white,
+                              ),
                               onPressed: () {
                                 setState(() {
                                   try {
@@ -380,7 +405,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
               label: const Text('Add Product Photo'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 45),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -431,10 +458,11 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
-    if (token == null) throw Exception('No login token found. Please log in again.');
+    if (token == null)
+      throw Exception('No login token found. Please log in again.');
 
     final filename = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    
+
     // Try both without and with trailing slash if needed (non-trailing slash first to avoid Vercel 308 redirect)
     final urlsToTry = [
       '${ApiConfig.baseUrl}/media?prefix=$prefix',
@@ -468,7 +496,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
       lastStatusCode = response.statusCode;
       lastResponseBody = body;
 
-      debugPrint('Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body');
+      debugPrint(
+        'Upload attempt to $urlStr -> Status: ${response.statusCode}, Body: $body',
+      );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(body);
@@ -481,7 +511,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
         final location = response.headers['location'];
         if (location != null) {
           final resolvedUri = Uri.parse(urlStr).resolve(location);
-          debugPrint('Upload redirected to: $location (resolved: $resolvedUri). Retrying POST with body...');
+          debugPrint(
+            'Upload redirected to: $location (resolved: $resolvedUri). Retrying POST with body...',
+          );
           final redirRequest = http.MultipartRequest('POST', resolvedUri);
           redirRequest.headers['Authorization'] = 'Bearer $token';
           redirRequest.fields['_payload'] = jsonEncode({
@@ -490,16 +522,21 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
           });
           redirRequest.fields['alt'] = altText;
           redirRequest.fields['prefix'] = prefix;
-          redirRequest.files.add(await http.MultipartFile.fromPath(
-            'file',
-            uploadFile.path,
-            filename: filename,
-            contentType: MediaType('image', 'jpeg'),
-          ));
+          redirRequest.files.add(
+            await http.MultipartFile.fromPath(
+              'file',
+              uploadFile.path,
+              filename: filename,
+              contentType: MediaType('image', 'jpeg'),
+            ),
+          );
           final redirResponse = await redirRequest.send();
           final redirBody = await redirResponse.stream.bytesToString();
-          debugPrint('Redirected upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody');
-          if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+          debugPrint(
+            'Redirected upload response -> Status: ${redirResponse.statusCode}, Body: $redirBody',
+          );
+          if (redirResponse.statusCode == 201 ||
+              redirResponse.statusCode == 200) {
             final data = jsonDecode(redirBody);
             final doc = data['doc'] ?? data;
             return doc['id']?.toString();
@@ -526,31 +563,46 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDealerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a dealer'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select a dealer'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_selectedProductQuantities.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one product'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select at least one product'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_billCopySlot.file == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dealer Bill Copy photo is required'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Dealer Bill Copy photo is required'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_deliveryPersonSlot.file == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delivery Person photo is required'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Delivery Person photo is required'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_productPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('At least one Dealer Product photo is required'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('At least one Dealer Product photo is required'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -561,21 +613,35 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
       final branchId = prefs.getString('branchId');
-      if (token == null) throw Exception('No session token found. Please login again.');
+      if (token == null)
+        throw Exception('No session token found. Please login again.');
 
       // 1. Upload Bill Copy Photo
       final billCopyAlt = 'Dealer Bill Copy for dealer $_selectedDealerId';
-      final billCopyId = (await _uploadPhoto(_billCopySlot.file!, billCopyAlt, 'dealerbill'))!;
+      final billCopyId = (await _uploadPhoto(
+        _billCopySlot.file!,
+        billCopyAlt,
+        'dealerbill',
+      ))!;
 
       // 2. Upload Delivery Person Photo
       final deliveryPersonAlt = 'Delivery Person for dealer $_selectedDealerId';
-      final deliveryPersonId = (await _uploadPhoto(_deliveryPersonSlot.file!, deliveryPersonAlt, 'deliveryperson'))!;
+      final deliveryPersonId = (await _uploadPhoto(
+        _deliveryPersonSlot.file!,
+        deliveryPersonAlt,
+        'deliveryperson',
+      ))!;
 
       // 3. Upload Multiple Product Photos
       final List<String> productsPhotoIds = [];
       for (var i = 0; i < _productPhotos.length; i++) {
-        final productsAlt = 'Dealer Product Photo ${i + 1} for dealer $_selectedDealerId';
-        final id = (await _uploadPhoto(_productPhotos[i], productsAlt, 'dealerproducts'))!;
+        final productsAlt =
+            'Dealer Product Photo ${i + 1} for dealer $_selectedDealerId';
+        final id = (await _uploadPhoto(
+          _productPhotos[i],
+          productsAlt,
+          'dealerproducts',
+        ))!;
         productsPhotoIds.add(id);
       }
 
@@ -584,10 +650,7 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
       for (var i = 0; i < _billControllers.length; i++) {
         final val = double.tryParse(_billControllers[i].text) ?? 0.0;
         final invNum = _invoiceNumberControllers[i].text.trim();
-        billsData.add({
-          'amount': val,
-          'invoiceNumber': invNum,
-        });
+        billsData.add({'amount': val, 'invoiceNumber': invNum});
       }
 
       // 5. Compile productsList
@@ -600,7 +663,11 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
         final File? itemPhotoFile = data['photoFile'] as File?;
         if (itemPhotoFile != null && itemPhotoFile.existsSync()) {
           final altText = 'Dealer Product Photo for product $id';
-          itemPhotoMediaId = await _uploadPhoto(itemPhotoFile, altText, 'dealerproductitem');
+          itemPhotoMediaId = await _uploadPhoto(
+            itemPhotoFile,
+            altText,
+            'dealerproductitem',
+          );
         }
 
         final itemMap = <String, dynamic>{
@@ -615,8 +682,12 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
         productsListData.add(itemMap);
       }
 
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       // 6. Submit Dealer Billing Document
       final payload = {
@@ -643,17 +714,25 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
       if (response.statusCode == 201 || response.statusCode == 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Dealer Billing submitted successfully!'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Dealer Billing submitted successfully!'),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pop(context);
         }
       } else {
-        throw Exception('Server returned ${response.statusCode}: ${response.body}');
+        throw Exception(
+          'Server returned ${response.statusCode}: ${response.body}',
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Submission failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Submission failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -701,7 +780,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                           label: Text('Take ${slot.label}'),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                 ),
@@ -715,15 +796,18 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                         tooltip: 'Retake',
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
                         onPressed: () => _removePhoto(slot),
                         tooltip: 'Remove',
                       ),
                     ],
-                  )
-                ]
+                  ),
+                ],
               ],
-            )
+            ),
           ],
         ),
       ),
@@ -731,15 +815,16 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
   }
 
   Future<void> _navigateToProductSelection() async {
-    final Map<String, Map<String, dynamic>>? result = await Navigator.push<Map<String, Map<String, dynamic>>>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProductSelectionPage(
-          products: _products,
-          initialData: _selectedProductQuantities,
-        ),
-      ),
-    );
+    final Map<String, Map<String, dynamic>>? result =
+        await Navigator.push<Map<String, Map<String, dynamic>>>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductSelectionPage(
+              products: _products,
+              initialData: _selectedProductQuantities,
+            ),
+          ),
+        );
     if (result != null) {
       setState(() {
         _selectedProductQuantities = result;
@@ -784,7 +869,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                   InkWell(
                     onTap: _navigateToProductSelection,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(12),
@@ -798,7 +886,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                   ? 'Select products'
                                   : '${_selectedProductQuantities.length} products selected',
                               style: TextStyle(
-                                color: _selectedProductQuantities.isEmpty ? Colors.grey : Colors.black87,
+                                color: _selectedProductQuantities.isEmpty
+                                    ? Colors.grey
+                                    : Colors.black87,
                                 fontSize: 15,
                               ),
                             ),
@@ -815,15 +905,22 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: _selectedProductQuantities.entries.map((entry) {
+                          children: _selectedProductQuantities.entries.map((
+                            entry,
+                          ) {
                             final id = entry.key;
                             final qty = entry.value['quantity'] ?? 0.0;
                             final amt = entry.value['totalAmount'] ?? 0.0;
-                            final product = _products.firstWhere((p) => p['id'] == id, orElse: () => {'name': 'Unknown'});
+                            final product = _products.firstWhere(
+                              (p) => p['id'] == id,
+                              orElse: () => {'name': 'Unknown'},
+                            );
                             return Padding(
                               padding: const EdgeInsets.only(right: 8.0),
                               child: Chip(
-                                label: Text('${product['name']} (Qty: $qty, ₹$amt)'),
+                                label: Text(
+                                  '${product['name']} (Qty: $qty, ₹$amt)',
+                                ),
                                 onDeleted: () {
                                   setState(() {
                                     _selectedProductQuantities.remove(id);
@@ -861,7 +958,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                   // Dealer Dropdown card
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -869,15 +968,24 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                         children: [
                           const Text(
                             'Select Dealer',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             isExpanded: true,
                             initialValue: _selectedDealerId,
                             hint: _isLoadingDealers
-                                ? const Text('Loading dealers...', overflow: TextOverflow.ellipsis)
-                                : const Text('Select a dealer', overflow: TextOverflow.ellipsis),
+                                ? const Text(
+                                    'Loading dealers...',
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : const Text(
+                                    'Select a dealer',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                             items: _dealers.map((dealer) {
                               return DropdownMenuItem<String>(
                                 value: dealer['id'],
@@ -901,23 +1009,34 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                   },
                             decoration: InputDecoration(
                               prefixIcon: const Icon(Icons.business_outlined),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             ),
-                            validator: (val) => val == null ? 'Dealer selection is required' : null,
+                            validator: (val) => val == null
+                                ? 'Dealer selection is required'
+                                : null,
                           ),
                         ],
                       ),
                     ),
                   ),
-                  _selectedDealerId == null ? const SizedBox.shrink() : const SizedBox(height: 16),
+                  _selectedDealerId == null
+                      ? const SizedBox.shrink()
+                      : const SizedBox(height: 16),
                   _buildProductSelector(),
                   const SizedBox(height: 16),
 
                   // Bill copy entries card
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -928,7 +1047,10 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                             children: [
                               const Text(
                                 'Bill Amount Entries',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                               TextButton.icon(
                                 onPressed: _addBillField,
@@ -942,17 +1064,27 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _billControllers.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               return Row(
                                 children: [
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _invoiceNumberControllers[index],
+                                      controller:
+                                          _invoiceNumberControllers[index],
                                       decoration: InputDecoration(
                                         labelText: 'Invoice Number',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
                                       ),
                                       validator: (val) {
                                         if (val == null || val.trim().isEmpty) {
@@ -966,17 +1098,30 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                   Expanded(
                                     child: TextFormField(
                                       controller: _billControllers[index],
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
                                       decoration: InputDecoration(
                                         labelText: 'Bill #${index + 1} Amount',
                                         prefixText: '₹ ',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
                                       ),
                                       validator: (val) {
-                                        if (val == null || val.isEmpty) return 'Required';
+                                        if (val == null || val.isEmpty)
+                                          return 'Required';
                                         final num = double.tryParse(val);
-                                        if (num == null) return 'Invalid amount';
+                                        if (num == null)
+                                          return 'Invalid amount';
                                         if (num <= 0) return 'Must be > 0';
                                         return null;
                                       },
@@ -985,11 +1130,14 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                                   if (_billControllers.length > 1) ...[
                                     const SizedBox(width: 8),
                                     IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                      ),
                                       onPressed: () => _removeBillField(index),
                                       tooltip: 'Remove entry',
-                                    )
-                                  ]
+                                    ),
+                                  ],
                                 ],
                               );
                             },
@@ -1012,7 +1160,9 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                   Card(
                     elevation: 4,
                     color: Colors.teal.shade50,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Column(
@@ -1022,11 +1172,19 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                             children: [
                               const Text(
                                 'Total Billing Amount:',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black54),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black54,
+                                ),
                               ),
                               Text(
                                 '₹ ${_calculateTotal().toStringAsFixed(2)}',
-                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal.shade900,
+                                ),
                               ),
                             ],
                           ),
@@ -1037,16 +1195,23 @@ class _DealerBillingPageState extends State<DealerBillingPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal.shade700,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                               onPressed: _submitBilling,
                               child: const Text(
                                 'SUBMIT DEALER BILLING',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -1123,8 +1288,12 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
       final id = p['id'] as String;
       final qty = _quantities[id];
       final amt = _amounts[id];
-      _qtyControllers[id] = TextEditingController(text: qty != null && qty > 0 ? qty.toString() : '');
-      _amtControllers[id] = TextEditingController(text: amt != null && amt > 0 ? amt.toString() : '');
+      _qtyControllers[id] = TextEditingController(
+        text: qty != null && qty > 0 ? qty.toString() : '',
+      );
+      _amtControllers[id] = TextEditingController(
+        text: amt != null && amt > 0 ? amt.toString() : '',
+      );
     }
   }
 
@@ -1140,9 +1309,9 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No camera found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No camera found')));
       }
       return;
     }
@@ -1166,7 +1335,9 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
         final compressed = img_lib.encodeJpg(image, quality: 70);
         final tempDir = await getTemporaryDirectory();
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final tempFile = File('${tempDir.path}/dealerproduct_${id}_$timestamp.jpg');
+        final tempFile = File(
+          '${tempDir.path}/dealerproduct_${id}_$timestamp.jpg',
+        );
         await tempFile.writeAsBytes(compressed);
         finalFile = tempFile;
       } else {
@@ -1227,7 +1398,9 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
               if (hasInvalid) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Please enter a quantity greater than 0 for all selected items.'),
+                    content: Text(
+                      'Please enter a quantity greater than 0 for all selected items.',
+                    ),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -1236,7 +1409,7 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
 
               Navigator.pop(context, result);
             },
-          )
+          ),
         ],
       ),
       body: Column(
@@ -1298,14 +1471,22 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                 Expanded(
                                   child: Text(
                                     product['name'],
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                             if (isSelected)
                               Padding(
-                                padding: const EdgeInsets.only(left: 12.0, right: 8.0, top: 4.0, bottom: 4.0),
+                                padding: const EdgeInsets.only(
+                                  left: 12.0,
+                                  right: 8.0,
+                                  top: 4.0,
+                                  bottom: 4.0,
+                                ),
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
@@ -1314,16 +1495,24 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                         width: 100,
                                         child: TextField(
                                           controller: _qtyControllers[id],
-                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
+                                              ),
                                           decoration: const InputDecoration(
                                             hintText: 'Qty',
                                             labelText: 'Quantity',
                                             isDense: true,
                                             border: OutlineInputBorder(),
-                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 8,
+                                                ),
                                           ),
                                           onChanged: (val) {
-                                            final qty = double.tryParse(val) ?? 0.0;
+                                            final qty =
+                                                double.tryParse(val) ?? 0.0;
                                             setState(() {
                                               _quantities[id] = qty;
                                             });
@@ -1335,17 +1524,25 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                         width: 110,
                                         child: TextField(
                                           controller: _amtControllers[id],
-                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
+                                              ),
                                           decoration: const InputDecoration(
                                             hintText: 'Amount',
                                             labelText: 'Total Amount',
                                             isDense: true,
                                             prefixText: '₹ ',
                                             border: OutlineInputBorder(),
-                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 8,
+                                                ),
                                           ),
                                           onChanged: (val) {
-                                            final amt = double.tryParse(val) ?? 0.0;
+                                            final amt =
+                                                double.tryParse(val) ?? 0.0;
                                             setState(() {
                                               _amounts[id] = amt;
                                             });
@@ -1358,17 +1555,25 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                           clipBehavior: Clip.none,
                                           children: [
                                             GestureDetector(
-                                              onTap: () => _capturePhotoForProduct(id),
+                                              onTap: () =>
+                                                  _capturePhotoForProduct(id),
                                               child: Container(
                                                 width: 40,
                                                 height: 40,
                                                 decoration: BoxDecoration(
-                                                  border: Border.all(color: Colors.grey.shade400),
-                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: Colors.grey.shade400,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
                                                 ),
                                                 child: ClipRRect(
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  child: Image.file(_productPhotoFiles[id]!, fit: BoxFit.cover),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: Image.file(
+                                                    _productPhotoFiles[id]!,
+                                                    fit: BoxFit.cover,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -1379,15 +1584,23 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                                 onTap: () {
                                                   setState(() {
                                                     try {
-                                                      _productPhotoFiles[id]?.deleteSync();
+                                                      _productPhotoFiles[id]
+                                                          ?.deleteSync();
                                                     } catch (_) {}
-                                                    _productPhotoFiles.remove(id);
+                                                    _productPhotoFiles.remove(
+                                                      id,
+                                                    );
                                                   });
                                                 },
                                                 child: CircleAvatar(
                                                   radius: 9,
-                                                  backgroundColor: Colors.red.withValues(alpha: 0.9),
-                                                  child: const Icon(Icons.close, size: 10, color: Colors.white),
+                                                  backgroundColor: Colors.red
+                                                      .withValues(alpha: 0.9),
+                                                  child: const Icon(
+                                                    Icons.close,
+                                                    size: 10,
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -1395,24 +1608,40 @@ class _ProductSelectionPageState extends State<ProductSelectionPage> {
                                         ),
                                       ] else ...[
                                         InkWell(
-                                          onTap: () => _capturePhotoForProduct(id),
-                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () =>
+                                              _capturePhotoForProduct(id),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           child: Container(
                                             height: 40,
-                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                            ),
                                             decoration: BoxDecoration(
-                                              border: Border.all(color: Colors.teal.shade400),
-                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.teal.shade400,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                               color: Colors.teal.shade50,
                                             ),
                                             child: const Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(Icons.camera_alt, size: 18, color: Colors.teal),
+                                                Icon(
+                                                  Icons.camera_alt,
+                                                  size: 18,
+                                                  color: Colors.teal,
+                                                ),
                                                 SizedBox(width: 4),
                                                 Text(
                                                   'Photo',
-                                                  style: TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.bold),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.teal,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ],
                                             ),

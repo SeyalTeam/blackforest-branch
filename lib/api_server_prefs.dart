@@ -45,10 +45,7 @@ Uri withActiveApiHost(Uri uri) {
 }
 
 List<Uri> buildApiHostCandidateUris(Uri baseUri) {
-  return <Uri>[
-    baseUri,
-    baseUri.replace(host: apiHostFallback),
-  ];
+  return <Uri>[baseUri, baseUri.replace(host: apiHostFallback)];
 }
 
 String resolveApiAssetUrl(String raw) {

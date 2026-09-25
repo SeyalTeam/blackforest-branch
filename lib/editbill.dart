@@ -8,9 +8,7 @@ class EditBillPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return CommonScaffold(
       title: 'Edit Bill',
-      body: const Center(
-        child: Text('Edit Bill screen coming soon'),
-      ),
+      body: const Center(child: Text('Edit Bill screen coming soon')),
       pageType: PageType.editbill,
     );
   }

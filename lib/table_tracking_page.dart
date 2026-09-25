@@ -129,7 +129,10 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
       final uri = Uri.parse(
         "${ApiConfig.baseUrl}/widgets/live-table-status?branchId=$_branchId${refresh ? '&refresh=true' : ''}",
       );
-      final response = await http.get(uri, headers: ApiConfig.getHeaders(_token));
+      final response = await http.get(
+        uri,
+        headers: ApiConfig.getHeaders(_token),
+      );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         // Response: { branches: [ { branchId, sections: [ { sectionName, tables: [...] } ] } ] }
@@ -170,7 +173,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     setState(() => _isLoadingWaiters = true);
     try {
       final response = await http.get(
-        Uri.parse("${ApiConfig.baseUrl}/widgets/live-logins?branchId=$_branchId"),
+        Uri.parse(
+          "${ApiConfig.baseUrl}/widgets/live-logins?branchId=$_branchId",
+        ),
         headers: ApiConfig.getHeaders(_token),
       );
       if (response.statusCode == 200) {
@@ -197,7 +202,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
           });
         }
       } else {
-        print("live-logins error: HTTP ${response.statusCode} ${response.body}");
+        print(
+          "live-logins error: HTTP ${response.statusCode} ${response.body}",
+        );
       }
     } catch (e) {
       print("Error fetching live waiters: $e");
@@ -211,15 +218,14 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     setState(() => _isSavingAllocation = true);
 
     final waiter = _liveWaiters[_selectedWaiterIndex!];
-    final waiterId = (waiter['userId'] ?? waiter['id'] ?? waiter['_id'] ?? '').toString();
-    final waiterName = (waiter['name'] ?? waiter['username'] ?? 'Unknown').toString();
+    final waiterId = (waiter['userId'] ?? waiter['id'] ?? waiter['_id'] ?? '')
+        .toString();
+    final waiterName = (waiter['name'] ?? waiter['username'] ?? 'Unknown')
+        .toString();
 
     final List<Map<String, String>> tablesList = _selectedTableKeys.map((key) {
       final parts = key.split('|');
-      return {
-        "sectionName": parts[0],
-        "tableNumber": parts[1],
-      };
+      return {"sectionName": parts[0], "tableNumber": parts[1]};
     }).toList();
 
     bool isSuccess = false;
@@ -237,7 +243,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         isSuccess = true;
       } else {
-        print("Allocate bulk error: HTTP ${response.statusCode} ${response.body}");
+        print(
+          "Allocate bulk error: HTTP ${response.statusCode} ${response.body}",
+        );
       }
     } catch (e) {
       print("Error allocating tables: $e");
@@ -263,8 +271,7 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
                 ? '$count table${count > 1 ? "s" : ""} assigned to $waiterName'
                 : 'Failed to assign tables. Please try again.',
           ),
-          backgroundColor:
-              isSuccess ? const Color(0xFF006C67) : Colors.red,
+          backgroundColor: isSuccess ? const Color(0xFF006C67) : Colors.red,
         ),
       );
     }
@@ -326,9 +333,14 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     });
   }
 
-  void _showTableActionDialog(String sectionName, Map<String, dynamic> tableData) {
-    final tableNumber = (tableData['tableNumber'] ?? tableData['tableKey'] ?? '').toString();
-    final tableLabel = (tableData['tableLabel'] ?? 'Table $tableNumber').toString();
+  void _showTableActionDialog(
+    String sectionName,
+    Map<String, dynamic> tableData,
+  ) {
+    final tableNumber =
+        (tableData['tableNumber'] ?? tableData['tableKey'] ?? '').toString();
+    final tableLabel = (tableData['tableLabel'] ?? 'Table $tableNumber')
+        .toString();
     final bool isOffline = tableData['isOffline'] == true;
 
     showDialog(
@@ -348,13 +360,16 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
             children: [
               Text(
                 'This table is currently ${isOffline ? "OFFLINE" : "ONLINE"}.',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
-                isOffline 
-                  ? 'Making it online will allow customers and waiters to select it.' 
-                  : 'Making it offline will hide/lock it from customer scans and waiter selections.',
+                isOffline
+                    ? 'Making it online will allow customers and waiters to select it.'
+                    : 'Making it offline will hide/lock it from customer scans and waiter selections.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ],
@@ -366,7 +381,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isOffline ? const Color(0xFF006C67) : Colors.redAccent,
+                backgroundColor: isOffline
+                    ? const Color(0xFF006C67)
+                    : Colors.redAccent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -384,9 +401,13 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     );
   }
 
-  Future<void> _toggleTableOfflineStatus(String sectionName, String tableNumber, bool targetOffline) async {
+  Future<void> _toggleTableOfflineStatus(
+    String sectionName,
+    String tableNumber,
+    bool targetOffline,
+  ) async {
     if (_branchId == null || _token == null) return;
-    
+
     setState(() {
       _isLoading = true;
     });
@@ -407,22 +428,23 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Table $tableNumber is now ${targetOffline ? "offline" : "online"}'),
+              content: Text(
+                'Table $tableNumber is now ${targetOffline ? "offline" : "online"}',
+              ),
               backgroundColor: const Color(0xFF006C67),
             ),
           );
         }
       } else {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
-        throw Exception(body['message'] ?? 'Failed to update table offline status');
+        throw Exception(
+          body['message'] ?? 'Failed to update table offline status',
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -456,8 +478,8 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
       title: _isAllocationMode
           ? "Assign Tables"
           : _isBulkOfflineMode
-              ? "Bulk Status Edit"
-              : "Live Tables",
+          ? "Bulk Status Edit"
+          : "Live Tables",
       pageType: PageType.table,
       actions: [
         if (_isAllocationMode)
@@ -516,7 +538,12 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
                             left: 16,
                             right: 16,
                             top: 16,
-                            bottom: (_isAllocationMode || (_isBulkOfflineMode && _selectedBulkTables.isNotEmpty)) ? 100 : 16,
+                            bottom:
+                                (_isAllocationMode ||
+                                    (_isBulkOfflineMode &&
+                                        _selectedBulkTables.isNotEmpty))
+                                ? 100
+                                : 16,
                           ),
                           itemCount: _liveSections.length,
                           itemBuilder: (context, index) {
@@ -555,8 +582,8 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
   Widget _buildWaiterChipBar() {
     final selectedWaiterName = _selectedWaiterIndex != null
         ? (_liveWaiters[_selectedWaiterIndex!]['name'] ??
-            _liveWaiters[_selectedWaiterIndex!]['username'] ??
-            'Waiter')
+              _liveWaiters[_selectedWaiterIndex!]['username'] ??
+              'Waiter')
         : null;
 
     return Container(
@@ -639,34 +666,31 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
                           _selectedTableKeys.clear();
                         });
                       },
-                      items: List.generate(
-                        _liveWaiters.length,
-                        (i) {
-                          final w = _liveWaiters[i];
-                          final name =
-                              w['name'] ?? w['username'] ?? 'Waiter ${i + 1}';
-                          return DropdownMenuItem<int>(
-                            value: i,
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.person_outline,
-                                  size: 18,
-                                  color: Color(0xFF006C67),
+                      items: List.generate(_liveWaiters.length, (i) {
+                        final w = _liveWaiters[i];
+                        final name =
+                            w['name'] ?? w['username'] ?? 'Waiter ${i + 1}';
+                        return DropdownMenuItem<int>(
+                          value: i,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.person_outline,
+                                size: 18,
+                                color: Color(0xFF006C67),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ),
                   ),
                 ),
@@ -696,7 +720,8 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     } else if (_selectedTableKeys.isEmpty) {
       label = "Tap tables to select";
     } else {
-      final waiterName = _liveWaiters[_selectedWaiterIndex!]['name'] ??
+      final waiterName =
+          _liveWaiters[_selectedWaiterIndex!]['name'] ??
           _liveWaiters[_selectedWaiterIndex!]['username'] ??
           'Waiter';
       final count = _selectedTableKeys.length;
@@ -751,10 +776,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
 
   Widget _buildSectionGrid(Map<String, dynamic> section) {
     // Live-table-status shape: { sectionName, tables: [...] }
-    final sectionName =
-        (section['sectionName'] ?? section['name'] ?? 'Section').toString();
-    final tables =
-        (section['tables'] as List? ?? []).whereType<Map>().toList();
+    final sectionName = (section['sectionName'] ?? section['name'] ?? 'Section')
+        .toString();
+    final tables = (section['tables'] as List? ?? []).whereType<Map>().toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -798,8 +822,8 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
   Widget _buildTableCard(String sectionName, Map<String, dynamic> tableData) {
     final tableNumber =
         (tableData['tableNumber'] ?? tableData['tableKey'] ?? '').toString();
-    final tableLabel =
-        (tableData['tableLabel'] ?? 'Table $tableNumber').toString();
+    final tableLabel = (tableData['tableLabel'] ?? 'Table $tableNumber')
+        .toString();
     final bool isOccupied = tableData['occupied'] == true;
     final bool isOffline = tableData['isOffline'] == true;
     final String selectionKey = '$sectionName|$tableNumber';
@@ -809,16 +833,16 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     // Waiter badge: prefer live assigned name from allocation
     final String? assignedWaiter =
         (tableData['assignedWaiterName'] ?? '').toString().trim().isEmpty
-            ? null
-            : tableData['assignedWaiterName'].toString().trim();
+        ? null
+        : tableData['assignedWaiterName'].toString().trim();
 
     // Occupied table info from live status
     final String? kotNumber = tableData['kotNumber']?.toString();
-    final String? servedBy = (tableData['servedBy'] ?? '').toString().trim().isEmpty
+    final String? servedBy =
+        (tableData['servedBy'] ?? '').toString().trim().isEmpty
         ? null
         : tableData['servedBy'].toString().trim();
-    final double? totalAmount =
-        (tableData['totalAmount'] as num?)?.toDouble();
+    final double? totalAmount = (tableData['totalAmount'] as num?)?.toDouble();
     final int? elapsedSeconds = tableData['elapsedSeconds'] as int?;
     final String? billId = tableData['billId']?.toString();
 
@@ -851,10 +875,12 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
 
     return GestureDetector(
       onTap: _isAllocationMode
-          ? (isOffline ? null : () => _toggleTableSelection(sectionName, tableNumber))
+          ? (isOffline
+                ? null
+                : () => _toggleTableSelection(sectionName, tableNumber))
           : _isBulkOfflineMode
-              ? () => _toggleBulkTableSelection(sectionName, tableNumber)
-              : () => _showTableActionDialog(sectionName, tableData),
+          ? () => _toggleBulkTableSelection(sectionName, tableNumber)
+          : () => _showTableActionDialog(sectionName, tableData),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -866,7 +892,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
               color: cardColor,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: (_isAllocationMode && isSelected) || (_isBulkOfflineMode && isBulkSelected)
+              boxShadow:
+                  (_isAllocationMode && isSelected) ||
+                      (_isBulkOfflineMode && isBulkSelected)
                   ? [
                       BoxShadow(
                         color: _isBulkOfflineMode
@@ -898,128 +926,134 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
                   child: Stack(
                     children: [
                       Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                      // Offline label
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Offline label
+                                if (isOffline)
+                                  const Text(
+                                    'Offline',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+
+                                // Elapsed timer (server-side seconds)
+                                if (isOccupied && elapsedSeconds != null) ...[
+                                  Text(
+                                    _formatElapsed(elapsedSeconds),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+
+                                // Table label moved to cap
+
+                                // Occupied details
+                                if (isOccupied) ...[
+                                  const SizedBox(height: 4),
+                                  if (kotNumber != null && kotNumber.isNotEmpty)
+                                    Text(
+                                      kotNumber,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+
+                                  if (totalAmount != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Rs ${totalAmount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // ── Selected checkmark (allocation mode or bulk offline mode) ──
+                      if ((_isAllocationMode && isSelected) ||
+                          (_isBulkOfflineMode && isBulkSelected))
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: _isBulkOfflineMode
+                                  ? Colors.blue
+                                  : const Color(0xFF006C67),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+
+                      // ── Offline lock icon (top-right) ──
                       if (isOffline)
-                        const Text(
-                          'Offline',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                        const Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Icon(
+                            Icons.lock_outline,
+                            size: 14,
                             color: Colors.grey,
                           ),
                         ),
-
-                      // Elapsed timer (server-side seconds)
-                      if (isOccupied && elapsedSeconds != null) ...[
-                        Text(
-                          _formatElapsed(elapsedSeconds),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      // Table label moved to cap
-
-                      // Occupied details
-                      if (isOccupied) ...[
-                        const SizedBox(height: 4),
-                        if (kotNumber != null && kotNumber.isNotEmpty)
-                          Text(
-                            kotNumber,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black54,
-                            ),
-                          ),
-
-                        if (totalAmount != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Rs ${totalAmount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ],
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
-
-
-
-                // ── Selected checkmark (allocation mode or bulk offline mode) ──
-                if ((_isAllocationMode && isSelected) || (_isBulkOfflineMode && isBulkSelected))
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: _isBulkOfflineMode ? Colors.blue : const Color(0xFF006C67),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check,
+                if (assignedWaiter != null || servedBy != null)
+                  Container(
+                    color: Colors.blue,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      (assignedWaiter ?? servedBy)!,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
-                        size: 14,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-
-                // ── Offline lock icon (top-right) ──
-                if (isOffline)
-                  const Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Icon(Icons.lock_outline, size: 14, color: Colors.grey),
                   ),
               ],
             ),
           ),
-          if (assignedWaiter != null || servedBy != null)
-            Container(
-              color: Colors.blue,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                (assignedWaiter ?? servedBy)!,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
         ],
       ),
-    ),
-  ],
-),
-);
-}
+    );
+  }
 
   Future<void> _submitBulkToggleStatus(bool targetOffline) async {
-    if (_branchId == null || _token == null || _selectedBulkTables.isEmpty) return;
+    if (_branchId == null || _token == null || _selectedBulkTables.isEmpty)
+      return;
 
     setState(() {
       _isLoading = true;
@@ -1027,10 +1061,7 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
 
     final List<Map<String, String>> tablesList = _selectedBulkTables.map((key) {
       final parts = key.split('|');
-      return {
-        "sectionName": parts[0],
-        "tableNumber": parts[1],
-      };
+      return {"sectionName": parts[0], "tableNumber": parts[1]};
     }).toList();
 
     try {
@@ -1049,7 +1080,9 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
           final count = _selectedBulkTables.length;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$count table${count > 1 ? "s are" : " is"} now ${targetOffline ? "offline" : "online"}'),
+              content: Text(
+                '$count table${count > 1 ? "s are" : " is"} now ${targetOffline ? "offline" : "online"}',
+              ),
               backgroundColor: const Color(0xFF006C67),
             ),
           );
@@ -1060,15 +1093,14 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
         });
       } else {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
-        throw Exception(body['message'] ?? 'Failed to update tables offline status');
+        throw Exception(
+          body['message'] ?? 'Failed to update tables offline status',
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1157,7 +1189,4 @@ class _TableTrackingPageState extends State<TableTrackingPage> {
     if (m > 0) return '${m}m ${s}s';
     return '${s}s';
   }
-
-
-
 }

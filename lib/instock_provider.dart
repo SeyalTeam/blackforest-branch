@@ -113,7 +113,11 @@ class InstockProvider extends ChangeNotifier {
             : user["branch"];
         final comp = user["branch"] is Map ? user["branch"]["company"] : null;
         _companyId = comp is Map ? comp["id"] : comp;
-      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
+      } else if (_userRole == "waiter" ||
+          _userRole == "kitchen" ||
+          _userRole == "chef" ||
+          _userRole == "manager" ||
+          _userRole == "cashier") {
         await _detectWaiterBranch(token);
       }
     } catch (_) {}
@@ -174,7 +178,11 @@ class InstockProvider extends ChangeNotifier {
     if (_userRole != "superadmin") {
       if (_companyId != null) {
         query += "&where[company][equals]=$_companyId";
-      } else if (_userRole == "waiter" || _userRole == "kitchen" || _userRole == "chef" || _userRole == "manager" || _userRole == "cashier") {
+      } else if (_userRole == "waiter" ||
+          _userRole == "kitchen" ||
+          _userRole == "chef" ||
+          _userRole == "manager" ||
+          _userRole == "cashier") {
         final ip = await _deviceIp();
         final matches = await _matchingCompanies(token, ip);
         if (matches.isNotEmpty) {
@@ -541,15 +549,18 @@ class InstockProvider extends ChangeNotifier {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'product';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            if (redirResponse.statusCode == 200 || redirResponse.statusCode == 201) {
+            if (redirResponse.statusCode == 200 ||
+                redirResponse.statusCode == 201) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
@@ -595,8 +606,12 @@ class InstockProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token");
       if (token == null) return;
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final List<Map<String, dynamic>> items = [];
       _inStockQuery.forEach((pid, qty) {

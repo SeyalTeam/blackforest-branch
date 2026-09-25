@@ -52,7 +52,9 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
       if (branchRes.statusCode == 200) {
         final branchData = json.decode(branchRes.body);
         final company = branchData['company'];
-        _companyId = company is Map ? (company['id'] ?? company['_id']) : company;
+        _companyId = company is Map
+            ? (company['id'] ?? company['_id'])
+            : company;
       }
 
       // 2. Fetch all rules
@@ -63,18 +65,23 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List<dynamic> allRules = data['favoriteProductsByBranchRules'] ?? [];
-        final List<dynamic> allCategoryRules = data['favoriteCategoriesByBranchRules'] ?? [];
+        final List<dynamic> allRules =
+            data['favoriteProductsByBranchRules'] ?? [];
+        final List<dynamic> allCategoryRules =
+            data['favoriteCategoriesByBranchRules'] ?? [];
 
         // Filter strictly by checking if any branch assigned to the rule belongs to the current company
         final filteredRules = allRules.where((rule) {
           if (_companyId == null) return false;
-          
-          final List<dynamic> branches = rule['branches'] as List<dynamic>? ?? [];
+
+          final List<dynamic> branches =
+              rule['branches'] as List<dynamic>? ?? [];
           return branches.any((b) {
             if (b is Map && b['company'] != null) {
               final bComp = b['company'];
-              final compId = bComp is Map ? (bComp['id'] ?? bComp['_id']) : bComp;
+              final compId = bComp is Map
+                  ? (bComp['id'] ?? bComp['_id'])
+                  : bComp;
               return compId == _companyId;
             }
             return false;
@@ -83,12 +90,15 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
 
         final filteredCategoryRules = allCategoryRules.where((rule) {
           if (_companyId == null) return false;
-          
-          final List<dynamic> branches = rule['branches'] as List<dynamic>? ?? [];
+
+          final List<dynamic> branches =
+              rule['branches'] as List<dynamic>? ?? [];
           return branches.any((b) {
             if (b is Map && b['company'] != null) {
               final bComp = b['company'];
-              final compId = bComp is Map ? (bComp['id'] ?? bComp['_id']) : bComp;
+              final compId = bComp is Map
+                  ? (bComp['id'] ?? bComp['_id'])
+                  : bComp;
               return compId == _companyId;
             }
             return false;
@@ -121,14 +131,13 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/widgets/toggle-favorite-rule'),
         headers: ApiConfig.getHeaders(_token),
-        body: json.encode({
-          'ruleId': ruleId,
-          'enabled': isEnabled,
-        }),
+        body: json.encode({'ruleId': ruleId, 'enabled': isEnabled}),
       );
 
       if (response.statusCode != 200) {
-        debugPrint('Failed to update rule status: ${response.statusCode} - ${response.body}');
+        debugPrint(
+          'Failed to update rule status: ${response.statusCode} - ${response.body}',
+        );
         // Revert UI if it fails
         setState(() {
           _branchRules[index]['enabled'] = !isEnabled;
@@ -151,7 +160,11 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
     }
   }
 
-  Future<void> _toggleCategoryRule(String ruleId, bool isEnabled, int index) async {
+  Future<void> _toggleCategoryRule(
+    String ruleId,
+    bool isEnabled,
+    int index,
+  ) async {
     // Optimistic UI Update
     setState(() {
       _categoryRules[index]['enabled'] = isEnabled;
@@ -161,21 +174,22 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/widgets/toggle-favorite-category-rule'),
         headers: ApiConfig.getHeaders(_token),
-        body: json.encode({
-          'ruleId': ruleId,
-          'enabled': isEnabled,
-        }),
+        body: json.encode({'ruleId': ruleId, 'enabled': isEnabled}),
       );
 
       if (response.statusCode != 200) {
-        debugPrint('Failed to update category rule status: ${response.statusCode} - ${response.body}');
+        debugPrint(
+          'Failed to update category rule status: ${response.statusCode} - ${response.body}',
+        );
         // Revert UI if it fails
         setState(() {
           _categoryRules[index]['enabled'] = !isEnabled;
         });
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update category rule status')),
+          const SnackBar(
+            content: Text('Failed to update category rule status'),
+          ),
         );
       }
     } catch (e) {
@@ -199,179 +213,194 @@ class _FavoriteRulesPageState extends State<FavoriteRulesPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : (_branchId == null)
-              ? const Center(child: Text('Session expired. Please log in again.'))
-              : _branchRules.isEmpty && _categoryRules.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No QR Controller rules configured for this branch.',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Favorite Products',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _branchRules.length,
-                            itemBuilder: (context, index) {
-                              final rule = _branchRules[index];
-                              final ruleName = rule['ruleName'] ?? 'Unnamed Rule';
-                              final isEnabled = rule['enabled'] ?? false;
-                              final ruleId = rule['id'];
+          ? const Center(child: Text('Session expired. Please log in again.'))
+          : _branchRules.isEmpty && _categoryRules.isEmpty
+          ? const Center(
+              child: Text(
+                'No QR Controller rules configured for this branch.',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Favorite Products',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _branchRules.length,
+                    itemBuilder: (context, index) {
+                      final rule = _branchRules[index];
+                      final ruleName = rule['ruleName'] ?? 'Unnamed Rule';
+                      final isEnabled = rule['enabled'] ?? false;
+                      final ruleId = rule['id'];
 
-                              return Card(
-                                elevation: 4,
-                                margin: const EdgeInsets.only(bottom: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () async {
-                                    final products = rule['products'] as List<dynamic>? ?? [];
-                                    final productIds = products.map((p) {
-                                      if (p is Map) return (p['id'] ?? p['_id']).toString();
-                                      return p.toString();
-                                    }).toList();
+                      return Card(
+                        elevation: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            final products =
+                                rule['products'] as List<dynamic>? ?? [];
+                            final productIds = products.map((p) {
+                              if (p is Map)
+                                return (p['id'] ?? p['_id']).toString();
+                              return p.toString();
+                            }).toList();
 
-                                    final bool? updated = await Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => FavoriteRuleProductsPage(
-                                          ruleId: ruleId,
-                                          ruleName: ruleName,
-                                          initialProducts: productIds,
-                                          token: _token!,
-                                          companyId: _companyId!,
-                                        ),
-                                      ),
-                                    );
-                                    if (updated == true) {
-                                      _fetchRules(); // Refresh if products were updated
-                                    }
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            ruleName,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Switch(
-                                          value: isEnabled,
-                                          activeColor: Colors.green,
-                                          onChanged: (newValue) =>
-                                              _toggleRule(ruleId, newValue, index),
-                                        ),
-                                      ],
+                            final bool? updated = await Navigator.of(context)
+                                .push(
+                                  MaterialPageRoute(
+                                    builder: (_) => FavoriteRuleProductsPage(
+                                      ruleId: ruleId,
+                                      ruleName: ruleName,
+                                      initialProducts: productIds,
+                                      token: _token!,
+                                      companyId: _companyId!,
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                          if (_categoryRules.isNotEmpty) ...[
-                            const SizedBox(height: 32),
-                            const Text(
-                              'Favorite Categories',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                                );
+                            if (updated == true) {
+                              _fetchRules(); // Refresh if products were updated
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 8.0,
                             ),
-                            const SizedBox(height: 16),
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _categoryRules.length,
-                              itemBuilder: (context, index) {
-                                final rule = _categoryRules[index];
-                                final ruleName = rule['ruleName'] ?? 'Unnamed Rule';
-                                final isEnabled = rule['enabled'] ?? false;
-                                final ruleId = rule['id'];
-
-                                return Card(
-                                  elevation: 4,
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    ruleName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(12),
-                                    onTap: () async {
-                                      final categories = rule['categories'] as List<dynamic>? ?? [];
-                                      final categoryIds = categories.map((c) {
-                                        if (c is Map) return (c['id'] ?? c['_id']).toString();
-                                        return c.toString();
-                                      }).toList();
+                                ),
+                                Switch(
+                                  value: isEnabled,
+                                  activeColor: Colors.green,
+                                  onChanged: (newValue) =>
+                                      _toggleRule(ruleId, newValue, index),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (_categoryRules.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    const Text(
+                      'Favorite Categories',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _categoryRules.length,
+                      itemBuilder: (context, index) {
+                        final rule = _categoryRules[index];
+                        final ruleName = rule['ruleName'] ?? 'Unnamed Rule';
+                        final isEnabled = rule['enabled'] ?? false;
+                        final ruleId = rule['id'];
 
-                                      final bool? updated = await Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => FavoriteRuleCategoriesPage(
+                        return Card(
+                          elevation: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () async {
+                              final categories =
+                                  rule['categories'] as List<dynamic>? ?? [];
+                              final categoryIds = categories.map((c) {
+                                if (c is Map)
+                                  return (c['id'] ?? c['_id']).toString();
+                                return c.toString();
+                              }).toList();
+
+                              final bool? updated = await Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          FavoriteRuleCategoriesPage(
                                             ruleId: ruleId,
                                             ruleName: ruleName,
                                             initialCategories: categoryIds,
                                             token: _token!,
                                             companyId: _companyId!,
                                           ),
-                                        ),
-                                      );
-                                      if (updated == true) {
-                                        _fetchRules(); // Refresh if categories were updated
-                                      }
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              ruleName,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          Switch(
-                                            value: isEnabled,
-                                            activeColor: Colors.green,
-                                            onChanged: (newValue) =>
-                                                _toggleCategoryRule(ruleId, newValue, index),
-                                          ),
-                                        ],
+                                    ),
+                                  );
+                              if (updated == true) {
+                                _fetchRules(); // Refresh if categories were updated
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 8.0,
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      ruleName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
                                       ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                );
-                              },
+                                  Switch(
+                                    value: isEnabled,
+                                    activeColor: Colors.green,
+                                    onChanged: (newValue) =>
+                                        _toggleCategoryRule(
+                                          ruleId,
+                                          newValue,
+                                          index,
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ],
-                      ),
+                          ),
+                        );
+                      },
                     ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }

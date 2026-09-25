@@ -97,15 +97,16 @@ class _SettingsPageState extends State<SettingsPage> {
     String? deviceWifiIp;
     try {
       deviceWifiIp = await NetworkInfo().getWifiIP().timeout(
-            const Duration(seconds: 2),
-            onTimeout: () => null,
-          );
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
     } catch (_) {
       deviceWifiIp = null;
     }
 
     final savedPrinterIp = (resolvedPrefs.getString('printerIp') ?? '').trim();
-    final savedBranchIpRange = (resolvedPrefs.getString('branchIp') ?? '').trim();
+    final savedBranchIpRange = (resolvedPrefs.getString('branchIp') ?? '')
+        .trim();
     final currentWifiIp = (deviceWifiIp ?? '').trim();
 
     final connectedByRange =
@@ -120,7 +121,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     setState(() {
       _wifiPrinterIp = savedPrinterIp.isNotEmpty ? savedPrinterIp : null;
-      _branchIpRange = savedBranchIpRange.isNotEmpty ? savedBranchIpRange : null;
+      _branchIpRange = savedBranchIpRange.isNotEmpty
+          ? savedBranchIpRange
+          : null;
       _deviceWifiIp = currentWifiIp.isNotEmpty ? currentWifiIp : null;
       _isWifiPrinterConnected = connectedByRange || connectedBySubnet;
       _isCheckingWifiPrinter = false;
@@ -153,9 +156,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _openPrinterSettings() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const BluetoothPrinterSettingsPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const BluetoothPrinterSettingsPage()),
     );
     await _loadSettingsSummary();
   }
@@ -228,10 +229,7 @@ class _SettingsPageState extends State<SettingsPage> {
           backgroundColor: color.withValues(alpha: 0.12),
           child: Icon(icon, color: color),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -277,9 +275,7 @@ class _SettingsPageState extends State<SettingsPage> {
         : 'No Bluetooth printer configured';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: RefreshIndicator(
         onRefresh: _loadSettingsSummary,
         child: ListView(
@@ -287,9 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Card(
               child: ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.person_outline),
-                ),
+                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                 title: Text(_username),
                 subtitle: _branchName.isNotEmpty ? Text(_branchName) : null,
               ),

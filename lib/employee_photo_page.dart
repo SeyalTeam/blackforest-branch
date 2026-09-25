@@ -63,10 +63,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
         }
       } else {
         if (mounted) {
-           setState(() {
-             _errorMessage = 'Failed to load employees list.';
-             _isFetchingEmployees = false;
-           });
+          setState(() {
+            _errorMessage = 'Failed to load employees list.';
+            _isFetchingEmployees = false;
+          });
         }
       }
     } catch (e) {
@@ -81,7 +81,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
 
   String? _getEmployeePhotoUrl() {
     if (_employeeDoc == null) return null;
-    final photo = _employeeDoc!['photo'] ?? _employeeDoc!['image'] ?? _employeeDoc!['Photo'];
+    final photo =
+        _employeeDoc!['photo'] ??
+        _employeeDoc!['image'] ??
+        _employeeDoc!['Photo'];
     if (photo == null) return null;
 
     if (photo is Map) {
@@ -100,7 +103,7 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
   String _extractRole(Map<String, dynamic> doc) {
     final role = doc['role'];
     if (role != null && role.toString().isNotEmpty) return role.toString();
-    
+
     final team = doc['team'];
     if (team != null) {
       if (team is String) return team;
@@ -145,10 +148,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
       if (length < 1500 * 1024) return originalFile;
 
       final bytes = await originalFile.readAsBytes();
-      
+
       // Run the heavy image decode/encode in a background isolate
       final compressedBytes = await compute(_compressImageIsolate, bytes);
-      
+
       if (compressedBytes == null) return originalFile;
 
       final tempDir = await getTemporaryDirectory();
@@ -209,9 +212,9 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
 
   Future<void> _updateEmployeePhoto(String mediaId) async {
     if (_employeeDoc == null) return;
-    
+
     final docId = _employeeDoc!['id'];
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -220,21 +223,22 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      
+
       final url = '${ApiConfig.baseUrl}/employees/$docId';
       final response = await http.patch(
         Uri.parse(url),
         headers: ApiConfig.getHeaders(token),
-        body: jsonEncode({
-          'photo': mediaId,
-        }),
+        body: jsonEncode({'photo': mediaId}),
       );
 
       if (response.statusCode == 200) {
         // Re-fetch to get populated photo URL
         final fetchUrl = '${ApiConfig.baseUrl}/employees/$docId?depth=1';
-        final fetchResp = await http.get(Uri.parse(fetchUrl), headers: ApiConfig.getHeaders(token));
-        
+        final fetchResp = await http.get(
+          Uri.parse(fetchUrl),
+          headers: ApiConfig.getHeaders(token),
+        );
+
         setState(() {
           _successMessage = 'Photo updated successfully!';
           if (fetchResp.statusCode == 200) {
@@ -246,7 +250,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
         String errorDetail = 'Status ${response.statusCode}';
         try {
           final errBody = jsonDecode(response.body);
-          errorDetail = errBody['message']?.toString() ?? errBody['errors']?.toString() ?? errorDetail;
+          errorDetail =
+              errBody['message']?.toString() ??
+              errBody['errors']?.toString() ??
+              errorDetail;
         } catch (_) {}
         setState(() {
           _errorMessage = 'Failed to update employee: $errorDetail';
@@ -301,15 +308,17 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
 
         if (faces.isEmpty) {
           setState(() {
-            _errorMessage = 'No human face detected! Please take the photo again, ensuring the face is clearly visible.';
+            _errorMessage =
+                'No human face detected! Please take the photo again, ensuring the face is clearly visible.';
             _isLoading = false;
           });
           return;
         }
-        
+
         if (faces.length > 1) {
           setState(() {
-            _errorMessage = 'Multiple faces detected! Please ensure only the employee is in the photo.';
+            _errorMessage =
+                'Multiple faces detected! Please ensure only the employee is in the photo.';
             _isLoading = false;
           });
           return;
@@ -345,125 +354,143 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            
             const Text(
               'Search for an Employee to update their photo',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            
-               Autocomplete<Map<String, dynamic>>(
-                 optionsBuilder: (TextEditingValue textEditingValue) {
-                   if (textEditingValue.text.isEmpty) {
-                     return _allEmployees;
-                   }
-                   final search = textEditingValue.text.toLowerCase();
-                   return _allEmployees.where((employee) {
-                     final name = (employee['name'] ?? '').toString().toLowerCase();
-                     final empId = (employee['employeeId'] ?? employee['employeeID'] ?? '').toString().toLowerCase();
-                     return name.contains(search) || empId.contains(search);
-                   });
-                 },
-                 displayStringForOption: (option) {
-                   final name = (option['name']?.toString() ?? 'UNKNOWN').toUpperCase();
-                   final role = _extractRole(option);
-                   final id = option['employeeId'] ?? option['employeeID'] ?? 'N/A';
-                   return '$name - $role ($id)';
-                 },
-                 fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                   return ValueListenableBuilder<TextEditingValue>(
-                     valueListenable: controller,
-                     builder: (context, value, child) {
-                       return TextField(
-                         controller: controller,
-                         focusNode: focusNode,
-                         onEditingComplete: onEditingComplete,
-                         decoration: InputDecoration(
-                           labelText: 'Search by Name or ID',
-                           border: const OutlineInputBorder(),
-                           prefixIcon: const Icon(Icons.search),
-                           suffixIcon: value.text.isNotEmpty
-                               ? IconButton(
-                                   icon: const Icon(Icons.clear),
-                                   onPressed: () {
-                                     controller.clear();
-                                     setState(() {
-                                       _employeeDoc = null;
-                                     });
-                                   },
-                                 )
-                               : null,
-                         ),
-                       );
-                     },
-                   );
-                 },
-                 optionsViewBuilder: (context, onSelected, options) {
-                   return Align(
-                     alignment: Alignment.topLeft,
-                     child: Material(
-                       elevation: 4.0,
-                       borderRadius: BorderRadius.circular(8.0),
-                       child: ConstrainedBox(
-                         constraints: const BoxConstraints(maxHeight: 250),
-                         child: ListView.builder(
-                           padding: EdgeInsets.zero,
-                           shrinkWrap: true,
-                           itemCount: options.length,
-                           itemBuilder: (context, index) {
-                             final option = options.elementAt(index);
-                             final name = (option['name']?.toString() ?? 'UNKNOWN').toUpperCase();
-                             final role = _extractRole(option);
-                             final id = option['employeeId'] ?? option['employeeID'] ?? 'N/A';
-                             final hasPhoto = option['photo'] != null && option['photo'].toString().isNotEmpty;
-                             return InkWell(
-                               onTap: () => onSelected(option),
-                               child: Padding(
-                                 padding: const EdgeInsets.all(16.0),
-                                 child: Row(
-                                   children: [
-                                     Icon(
-                                       Icons.check_circle,
-                                       color: hasPhoto ? Colors.green : Colors.grey,
-                                       size: 20,
-                                     ),
-                                     const SizedBox(width: 8),
-                                     Expanded(
-                                       child: RichText(
-                                         text: TextSpan(
-                                           style: const TextStyle(color: Colors.black, fontSize: 13), // reduced font size
-                                           children: [
-                                             TextSpan(
-                                               text: name,
-                                               style: const TextStyle(fontWeight: FontWeight.bold),
-                                             ),
-                                             TextSpan(
-                                               text: ' - $role ($id)',
-                                             ),
-                                           ],
-                                         ),
-                                       ),
-                                     ),
-                                   ],
-                                 ),
-                               ),
-                             );
-                           },
-                         ),
-                       ),
-                     ),
-                   );
-                 },
-                 onSelected: (option) {
-                   setState(() {
-                     _employeeDoc = option;
-                     _errorMessage = null;
-                     _successMessage = null;
-                   });
-                 },
-               ),
+
+            Autocomplete<Map<String, dynamic>>(
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return _allEmployees;
+                }
+                final search = textEditingValue.text.toLowerCase();
+                return _allEmployees.where((employee) {
+                  final name = (employee['name'] ?? '')
+                      .toString()
+                      .toLowerCase();
+                  final empId =
+                      (employee['employeeId'] ?? employee['employeeID'] ?? '')
+                          .toString()
+                          .toLowerCase();
+                  return name.contains(search) || empId.contains(search);
+                });
+              },
+              displayStringForOption: (option) {
+                final name = (option['name']?.toString() ?? 'UNKNOWN')
+                    .toUpperCase();
+                final role = _extractRole(option);
+                final id =
+                    option['employeeId'] ?? option['employeeID'] ?? 'N/A';
+                return '$name - $role ($id)';
+              },
+              fieldViewBuilder:
+                  (context, controller, focusNode, onEditingComplete) {
+                    return ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, child) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          onEditingComplete: onEditingComplete,
+                          decoration: InputDecoration(
+                            labelText: 'Search by Name or ID',
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: value.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      controller.clear();
+                                      setState(() {
+                                        _employeeDoc = null;
+                                      });
+                                    },
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                    );
+                  },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    borderRadius: BorderRadius.circular(8.0),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 250),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final option = options.elementAt(index);
+                          final name = (option['name']?.toString() ?? 'UNKNOWN')
+                              .toUpperCase();
+                          final role = _extractRole(option);
+                          final id =
+                              option['employeeId'] ??
+                              option['employeeID'] ??
+                              'N/A';
+                          final hasPhoto =
+                              option['photo'] != null &&
+                              option['photo'].toString().isNotEmpty;
+                          return InkWell(
+                            onTap: () => onSelected(option),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: hasPhoto
+                                        ? Colors.green
+                                        : Colors.grey,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 13,
+                                        ), // reduced font size
+                                        children: [
+                                          TextSpan(
+                                            text: name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          TextSpan(text: ' - $role ($id)'),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+              onSelected: (option) {
+                setState(() {
+                  _employeeDoc = option;
+                  _errorMessage = null;
+                  _successMessage = null;
+                });
+              },
+            ),
             const SizedBox(height: 24),
-            
+
             if (_isLoading && !_isFetchingEmployees)
               const Center(child: CircularProgressIndicator())
             else ...[
@@ -485,7 +512,7 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
                     style: TextStyle(color: Colors.green.shade900),
                   ),
                 ),
-                
+
               if (_employeeDoc != null) ...[
                 const SizedBox(height: 24),
                 Card(
@@ -512,12 +539,17 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
                                     width: 100,
                                     height: 100,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      width: 100,
-                                      height: 100,
-                                      color: Colors.grey[300],
-                                      child: const Icon(Icons.broken_image, color: Colors.grey),
-                                    ),
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              width: 100,
+                                              height: 100,
+                                              color: Colors.grey[300],
+                                              child: const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
                                   ),
                                 ),
                               )
@@ -531,7 +563,11 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
                                     color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(8.0),
                                   ),
-                                  child: const Icon(Icons.person, size: 50, color: Colors.grey),
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 50,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ),
                             Expanded(
@@ -540,7 +576,10 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
                                 children: [
                                   Text(
                                     'Name: ${_employeeDoc!['name'] ?? 'N/A'}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text('Role: ${_getRole()}'),
@@ -549,7 +588,7 @@ class _EmployeePhotoPageState extends State<EmployeePhotoPage> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,

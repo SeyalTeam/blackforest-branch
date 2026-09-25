@@ -21,16 +21,25 @@ class CartItem {
     this.unit,
   });
 
-  factory CartItem.fromProduct(dynamic product, double quantity, {double? branchPrice}) {
+  factory CartItem.fromProduct(
+    dynamic product,
+    double quantity, {
+    double? branchPrice,
+  }) {
     String? imageUrl;
-    if (product['images'] != null && product['images'].isNotEmpty && product['images'][0]['image'] != null && product['images'][0]['image']['url'] != null) {
+    if (product['images'] != null &&
+        product['images'].isNotEmpty &&
+        product['images'][0]['image'] != null &&
+        product['images'][0]['image']['url'] != null) {
       imageUrl = product['images'][0]['image']['url'];
       if (imageUrl != null && imageUrl.startsWith('/')) {
         imageUrl = '${ApiConfig.domain}$imageUrl';
       }
     }
 
-    double price = branchPrice ?? (product['defaultPriceDetails']?['price']?.toDouble() ?? 0.0);
+    double price =
+        branchPrice ??
+        (product['defaultPriceDetails']?['price']?.toDouble() ?? 0.0);
 
     // ✅ read unit from product (default to 'pcs' if missing)
     String? unit = product['unit']?.toString().toLowerCase() ?? 'pcs';
@@ -76,7 +85,8 @@ class CartProvider extends ChangeNotifier {
   String? _printerProtocol = 'esc_pos';
 
   List<CartItem> get cartItems => _cartItems;
-  double get total => _cartItems.fold(0.0, (sum, item) => sum + (item.price * item.quantity));
+  double get total =>
+      _cartItems.fold(0.0, (sum, item) => sum + (item.price * item.quantity));
   String? get printerIp => _printerIp;
   int get printerPort => _printerPort;
   String? get printerProtocol => _printerProtocol;
@@ -97,7 +107,8 @@ class CartProvider extends ChangeNotifier {
     _saveCart();
   }
 
-  void updateQuantity(String id, double newQuantity) { // ✅ double now
+  void updateQuantity(String id, double newQuantity) {
+    // ✅ double now
     final index = _cartItems.indexWhere((i) => i.id == id);
     if (index != -1 && newQuantity > 0) {
       _cartItems[index].quantity = newQuantity;
@@ -124,7 +135,11 @@ class CartProvider extends ChangeNotifier {
     _branchId = branchId;
   }
 
-  void setPrinterDetails(String? printerIp, int? printerPort, String? printerProtocol) {
+  void setPrinterDetails(
+    String? printerIp,
+    int? printerPort,
+    String? printerProtocol,
+  ) {
     _printerIp = printerIp;
     if (printerPort != null) _printerPort = printerPort;
     if (printerProtocol != null && printerProtocol.isNotEmpty) {
@@ -156,12 +171,16 @@ class CartProvider extends ChangeNotifier {
       final token = prefs.getString('token');
       if (token == null) throw Exception('No token found. Please login again.');
 
-      final items = _cartItems.map((item) => {
-        'product': item.id,
-        'quantity': item.quantity, // ✅ supports decimals now
-        'price': item.price,
-        'unit': item.unit, // ✅ optional but helps in backend clarity
-      }).toList();
+      final items = _cartItems
+          .map(
+            (item) => {
+              'product': item.id,
+              'quantity': item.quantity, // ✅ supports decimals now
+              'price': item.price,
+              'unit': item.unit, // ✅ optional but helps in backend clarity
+            },
+          )
+          .toList();
 
       final body = jsonEncode({
         'branch': _branchId,
@@ -180,19 +199,22 @@ class CartProvider extends ChangeNotifier {
         final invoiceNumber = data['invoiceNumber'] ?? 'N/A';
         clearCart();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Billing Successful — Invoice: $invoiceNumber')),
+          SnackBar(
+            content: Text('✅ Billing Successful — Invoice: $invoiceNumber'),
+          ),
         );
         return invoiceNumber;
       } else {
         throw Exception('Failed to submit billing: ${response.body}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error submitting billing: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error submitting billing: $e')));
       return null;
     }
   }
+
   // Clear all data on logout
   void clearData() {
     _cartItems.clear();

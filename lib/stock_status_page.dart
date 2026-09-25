@@ -130,16 +130,20 @@ class _StockStatusPageState extends State<StockStatusPage> {
       _userRole = user['role'];
 
       if (_userRole == 'company') {
-        _companyId =
-            user['company'] is Map ? (user['company']['id'] ?? user['company']['_id'])?.toString() : user['company']?.toString();
+        _companyId = user['company'] is Map
+            ? (user['company']['id'] ?? user['company']['_id'])?.toString()
+            : user['company']?.toString();
       } else if (_userRole == 'branch') {
         final branch = user['branch'];
         if (branch != null) {
-          _branchId = branch is Map ? (branch['id'] ?? branch['_id'])?.toString() : branch?.toString();
+          _branchId = branch is Map
+              ? (branch['id'] ?? branch['_id'])?.toString()
+              : branch?.toString();
           final branchCompany = branch is Map ? branch['company'] : null;
           if (branchCompany != null) {
-            _companyId =
-                branchCompany is Map ? (branchCompany['id'] ?? branchCompany['_id'])?.toString() : branchCompany?.toString();
+            _companyId = branchCompany is Map
+                ? (branchCompany['id'] ?? branchCompany['_id'])?.toString()
+                : branchCompany?.toString();
           }
         }
       }
@@ -187,10 +191,9 @@ class _StockStatusPageState extends State<StockStatusPage> {
         final raw = b['ipAddress']?.toString();
         if (raw == null || raw.isEmpty) continue;
 
-        final matches =
-            raw.contains('-')
-                ? _ipInRange(deviceIp, raw)
-                : raw.trim() == deviceIp;
+        final matches = raw.contains('-')
+            ? _ipInRange(deviceIp, raw)
+            : raw.trim() == deviceIp;
 
         if (!matches) continue;
 
@@ -226,16 +229,16 @@ class _StockStatusPageState extends State<StockStatusPage> {
         final raw = branch['ipAddress']?.toString();
         if (raw == null || raw.isEmpty) continue;
 
-        final matches =
-            raw.contains('-')
-                ? _ipInRange(deviceIp, raw)
-                : raw.trim() == deviceIp;
+        final matches = raw.contains('-')
+            ? _ipInRange(deviceIp, raw)
+            : raw.trim() == deviceIp;
         if (!matches) continue;
 
         _branchId ??= (branch['id'] ?? branch['_id'])?.toString();
         final company = branch['company'];
-        _companyId ??=
-            company is Map ? (company['id'] ?? company['_id'])?.toString() : company?.toString();
+        _companyId ??= company is Map
+            ? (company['id'] ?? company['_id'])?.toString()
+            : company?.toString();
         break;
       }
     } catch (_) {}
@@ -292,13 +295,12 @@ class _StockStatusPageState extends State<StockStatusPage> {
 
   void _filterProducts() {
     final query = _searchCtrl.text.trim().toLowerCase();
-    final list =
-        _products.where((raw) {
-          if (query.isEmpty) return true;
-          final name = (raw['name'] ?? '').toString().toLowerCase();
-          final desc = (raw['description'] ?? '').toString().toLowerCase();
-          return name.contains(query) || desc.contains(query);
-        }).toList();
+    final list = _products.where((raw) {
+      if (query.isEmpty) return true;
+      final name = (raw['name'] ?? '').toString().toLowerCase();
+      final desc = (raw['description'] ?? '').toString().toLowerCase();
+      return name.contains(query) || desc.contains(query);
+    }).toList();
 
     list.sort((a, b) => _compareProducts(a, b));
 
@@ -330,7 +332,9 @@ class _StockStatusPageState extends State<StockStatusPage> {
         }
         return b.toString().trim();
       }
-      return (branch['id'] ?? branch['_id'] ?? branch[r'$oid'] ?? '').toString().trim();
+      return (branch['id'] ?? branch['_id'] ?? branch[r'$oid'] ?? '')
+          .toString()
+          .trim();
     }
     return branch?.toString().trim() ?? '';
   }
@@ -511,10 +515,9 @@ class _StockStatusPageState extends State<StockStatusPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        _selectedCategoryId == null
-            ? 'Stock Categories'
-            : (_selectedCategoryName ?? 'Products');
+    final title = _selectedCategoryId == null
+        ? 'Stock Categories'
+        : (_selectedCategoryName ?? 'Products');
 
     return PopScope(
       canPop: _selectedCategoryId == null,
@@ -527,24 +530,21 @@ class _StockStatusPageState extends State<StockStatusPage> {
         title: title,
         pageType: PageType.stockstatus,
         body: RefreshIndicator(
-          onRefresh:
-              _selectedCategoryId == null
-                  ? _loadCategories
-                  : () async {
-                    final selected = _categories.firstWhere(
-                      (c) => c['id']?.toString() == _selectedCategoryId,
-                      orElse:
-                          () => {
-                            'id': _selectedCategoryId,
-                            'name': _selectedCategoryName,
-                          },
-                    );
-                    await _selectCategory(selected);
-                  },
-          child:
-              _selectedCategoryId == null
-                  ? _buildCategoriesBody()
-                  : _buildProductsBody(),
+          onRefresh: _selectedCategoryId == null
+              ? _loadCategories
+              : () async {
+                  final selected = _categories.firstWhere(
+                    (c) => c['id']?.toString() == _selectedCategoryId,
+                    orElse: () => {
+                      'id': _selectedCategoryId,
+                      'name': _selectedCategoryName,
+                    },
+                  );
+                  await _selectCategory(selected);
+                },
+          child: _selectedCategoryId == null
+              ? _buildCategoriesBody()
+              : _buildProductsBody(),
         ),
       ),
     );
@@ -621,30 +621,28 @@ class _StockStatusPageState extends State<StockStatusPage> {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(12),
                     ),
-                    child:
-                        img == null
-                            ? Container(
+                    child: img == null
+                        ? Container(
+                            color: Colors.grey[200],
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.inventory_2_rounded,
+                              color: Colors.grey,
+                            ),
+                          )
+                        : Image.network(
+                            img,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (_, __, ___) => Container(
                               color: Colors.grey[200],
                               alignment: Alignment.center,
                               child: const Icon(
                                 Icons.inventory_2_rounded,
                                 color: Colors.grey,
                               ),
-                            )
-                            : Image.network(
-                              img,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorBuilder:
-                                  (_, __, ___) => Container(
-                                    color: Colors.grey[200],
-                                    alignment: Alignment.center,
-                                    child: const Icon(
-                                      Icons.inventory_2_rounded,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
                             ),
+                          ),
                   ),
                 ),
                 Padding(

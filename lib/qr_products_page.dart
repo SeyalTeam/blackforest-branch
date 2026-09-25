@@ -47,7 +47,8 @@ class _QrProductsPageState extends State<QrProductsPage>
     try {
       final resp = await http.get(
         Uri.parse(
-            "${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=500&depth=1"),
+          "${ApiConfig.baseUrl}/products?where[category][equals]=${widget.categoryId}&limit=500&depth=1",
+        ),
         headers: ApiConfig.getHeaders(_token),
       );
 
@@ -56,16 +57,21 @@ class _QrProductsPageState extends State<QrProductsPage>
         _products = data["docs"] ?? [];
 
         for (var p in _products) {
-          p["upcController"] =
-              TextEditingController(text: p["upc"]?.toString() ?? "");
+          p["upcController"] = TextEditingController(
+            text: p["upc"]?.toString() ?? "",
+          );
 
           p["animController"] = AnimationController(
             duration: const Duration(milliseconds: 250),
             vsync: this,
           );
 
-          p["animScale"] = Tween(begin: 1.0, end: 1.2)
-              .animate(CurvedAnimation(parent: p["animController"], curve: Curves.easeOutBack));
+          p["animScale"] = Tween(begin: 1.0, end: 1.2).animate(
+            CurvedAnimation(
+              parent: p["animController"],
+              curve: Curves.easeOutBack,
+            ),
+          );
 
           p["updated"] = false;
         }
@@ -97,12 +103,12 @@ class _QrProductsPageState extends State<QrProductsPage>
       if (resp.statusCode == 200) {
         setState(() {
           product["updated"] = true;
-          _selectedProduct = null;     // UNSELECT AFTER UPDATE
+          _selectedProduct = null; // UNSELECT AFTER UPDATE
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Updated Successfully!")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Updated Successfully!")));
 
         await Future.delayed(const Duration(seconds: 1));
 
@@ -113,9 +119,9 @@ class _QrProductsPageState extends State<QrProductsPage>
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network Error")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Network Error")));
     }
   }
 
@@ -158,127 +164,134 @@ class _QrProductsPageState extends State<QrProductsPage>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
-          padding: const EdgeInsets.all(10),
-          itemCount: _products.length,
-          itemBuilder: (context, index) {
-            final p = _products[index];
-            final img = _getImage(p);
+              padding: const EdgeInsets.all(10),
+              itemCount: _products.length,
+              itemBuilder: (context, index) {
+                final p = _products[index];
+                final img = _getImage(p);
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(
-                    color: p == _selectedProduct ? Colors.green : Colors.transparent,
-                    width: 2),
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  )
-                ],
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // ---------------- IMAGE TAP ----------------
-                  GestureDetector(
-                    onTap: () => _scanQR(p),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: CachedNetworkImage(
-                        imageUrl: img,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-
-                      ),
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: p == _selectedProduct
+                          ? Colors.green
+                          : Colors.transparent,
+                      width: 2,
                     ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // ---------------- TITLE + INPUT ----------------
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 60,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            p["name"] ?? "",
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-
-                          SizedBox(
-                            height: 32,
-                            child: TextField(
-                              controller: p["upcController"],
-                              decoration: InputDecoration(
-                                contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                        ],
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
+                    ],
                   ),
-
-                  const SizedBox(width: 10),
-
-                  // ---------------- UPDATE BUTTON ----------------
-                  AnimatedBuilder(
-                    animation: p["animController"],
-                    builder: (_, child) {
-                      return Transform.scale(
-                        scale: p["animScale"].value,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.25),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              )
-                            ],
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => _updateUPC(p),
-                            icon: Icon(
-                              p["updated"]
-                                  ? Icons.check_box
-                                  : Icons.check_box_outline_blank,
-                              color: p["updated"] ? Colors.green : Colors.black,
-                              size: 26,
-                            ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // ---------------- IMAGE TAP ----------------
+                      GestureDetector(
+                        onTap: () => _scanQR(p),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: CachedNetworkImage(
+                            imageUrl: img,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      );
-                    },
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // ---------------- TITLE + INPUT ----------------
+                      Expanded(
+                        flex: 2,
+                        child: SizedBox(
+                          height: 60,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                p["name"] ?? "",
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+
+                              SizedBox(
+                                height: 32,
+                                child: TextField(
+                                  controller: p["upcController"],
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      // ---------------- UPDATE BUTTON ----------------
+                      AnimatedBuilder(
+                        animation: p["animController"],
+                        builder: (_, child) {
+                          return Transform.scale(
+                            scale: p["animScale"].value,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.25),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _updateUPC(p),
+                                icon: Icon(
+                                  p["updated"]
+                                      ? Icons.check_box
+                                      : Icons.check_box_outline_blank,
+                                  color: p["updated"]
+                                      ? Colors.green
+                                      : Colors.black,
+                                  size: 26,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }),
+                );
+              },
+            ),
     );
   }
 }
@@ -317,7 +330,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
           if (scanned) return;
           scanned = true;
 
-          controller.stop();  // <<< IMPORTANT: STOP CAMERA SAFELY
+          controller.stop(); // <<< IMPORTANT: STOP CAMERA SAFELY
 
           final barcode = capture.barcodes.first;
           final value = barcode.rawValue;
@@ -332,4 +345,3 @@ class _QrScannerPageState extends State<QrScannerPage> {
     );
   }
 }
-

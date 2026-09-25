@@ -12,7 +12,7 @@ class ReturnItem {
   final String id;
   final String name;
   final double price;
-  final double quantity;  // Changed to double
+  final double quantity; // Changed to double
   final double subtotal;
 
   ReturnItem({
@@ -35,7 +35,8 @@ class ReturnProvider extends ChangeNotifier {
   List<ReturnItem> get returnItems => List.unmodifiable(_items);
   double get total => _items.fold(0.0, (sum, item) => sum + item.subtotal);
 
-  void addOrUpdateItem(String id, String name, double quantity, double price) {  // Changed quantity to double
+  void addOrUpdateItem(String id, String name, double quantity, double price) {
+    // Changed quantity to double
     if (quantity <= 0) {
       removeItem(id);
       return;
@@ -49,12 +50,15 @@ class ReturnProvider extends ChangeNotifier {
         quantity: quantity,
       );
     } else {
-      _items.add(ReturnItem(id: id, name: name, price: price, quantity: quantity));
+      _items.add(
+        ReturnItem(id: id, name: name, price: price, quantity: quantity),
+      );
     }
     notifyListeners();
   }
 
-  void updateQuantity(String id, double newQuantity) {  // New method
+  void updateQuantity(String id, double newQuantity) {
+    // New method
     final index = _items.indexWhere((i) => i.id == id);
     if (index != -1 && newQuantity > 0) {
       _items[index] = ReturnItem(
@@ -86,7 +90,8 @@ class ReturnProvider extends ChangeNotifier {
   }
 
   bool hasPhoto(String productId) {
-    return _productPhotos.containsKey(productId) || _tempPhotos.containsKey(productId);
+    return _productPhotos.containsKey(productId) ||
+        _tempPhotos.containsKey(productId);
   }
 
   String? getPhotoId(String productId) {
@@ -192,7 +197,8 @@ class ReturnProvider extends ChangeNotifier {
       final token = prefs.getString('token');
       if (token == null) return null;
 
-      final filename = 'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final filename =
+          'returnorder_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final urlsToTry = [
         '${ApiConfig.baseUrl}/media?prefix=returnorder',
         '${ApiConfig.baseUrl}/media/?prefix=returnorder',
@@ -238,15 +244,18 @@ class ReturnProvider extends ChangeNotifier {
             });
             redirRequest.fields['alt'] = altText;
             redirRequest.fields['prefix'] = 'returnorder';
-            redirRequest.files.add(await http.MultipartFile.fromPath(
-              'file',
-              uploadFile.path,
-              filename: filename,
-              contentType: MediaType('image', 'jpeg'),
-            ));
+            redirRequest.files.add(
+              await http.MultipartFile.fromPath(
+                'file',
+                uploadFile.path,
+                filename: filename,
+                contentType: MediaType('image', 'jpeg'),
+              ),
+            );
             final redirResponse = await redirRequest.send();
             final redirBody = await redirResponse.stream.bytesToString();
-            if (redirResponse.statusCode == 201 || redirResponse.statusCode == 200) {
+            if (redirResponse.statusCode == 201 ||
+                redirResponse.statusCode == 200) {
               final data = jsonDecode(redirBody);
               final doc = data['doc'] ?? data;
               return doc['id']?.toString();
@@ -271,7 +280,10 @@ class ReturnProvider extends ChangeNotifier {
           if (await file.exists()) {
             String altText = 'Proof for product $productId';
             if (products != null) {
-              final product = products.firstWhere((p) => p['id'] == productId, orElse: () => null);
+              final product = products.firstWhere(
+                (p) => p['id'] == productId,
+                orElse: () => null,
+              );
               if (product != null) {
                 altText = product['name'] ?? altText;
               }
@@ -293,7 +305,7 @@ class ReturnProvider extends ChangeNotifier {
 
   Future<void> submitReturn(BuildContext context, String? branchId) async {
     if (_isSubmitting) return;
-    
+
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No items selected for return')),
@@ -322,19 +334,25 @@ class ReturnProvider extends ChangeNotifier {
         );
         return;
       }
-      final cashierId = prefs.getString('user_id') ?? prefs.getString('employee_id');
-      final cashierName = prefs.getString('employee_name') ?? prefs.getString('user_name') ?? prefs.getString('username');
+      final cashierId =
+          prefs.getString('user_id') ?? prefs.getString('employee_id');
+      final cashierName =
+          prefs.getString('employee_name') ??
+          prefs.getString('user_name') ??
+          prefs.getString('username');
 
       final returnData = {
         'items': _items
-            .map((item) => {
-          'product': item.id,
-          'name': item.name,
-          'quantity': item.quantity,  // double is fine
-          'unitPrice': item.price,
-          'subtotal': item.subtotal,
-          'proofPhoto': getPhotoId(item.id) ?? '',
-        })
+            .map(
+              (item) => {
+                'product': item.id,
+                'name': item.name,
+                'quantity': item.quantity, // double is fine
+                'unitPrice': item.price,
+                'subtotal': item.subtotal,
+                'proofPhoto': getPhotoId(item.id) ?? '',
+              },
+            )
             .toList(),
         'totalAmount': total,
         'branch': branchId,
@@ -355,7 +373,11 @@ class ReturnProvider extends ChangeNotifier {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit return order: ${response.statusCode}')),
+          SnackBar(
+            content: Text(
+              'Failed to submit return order: ${response.statusCode}',
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -367,6 +389,7 @@ class ReturnProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
   // Clear all data on logout
   void clearData() {
     clearReturns(); // Clears items and photos

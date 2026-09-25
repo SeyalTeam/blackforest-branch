@@ -21,10 +21,12 @@ class FavoriteRuleCategoriesPage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _FavoriteRuleCategoriesPageState createState() => _FavoriteRuleCategoriesPageState();
+  _FavoriteRuleCategoriesPageState createState() =>
+      _FavoriteRuleCategoriesPageState();
 }
 
-class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage> {
+class _FavoriteRuleCategoriesPageState
+    extends State<FavoriteRuleCategoriesPage> {
   List<Map<String, dynamic>> _allCategories = [];
   List<Map<String, dynamic>> _displayedCategories = [];
   Set<String> _selectedCategoryIds = {};
@@ -57,12 +59,12 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final docs = data['docs'] as List<dynamic>? ?? [];
-        
+
         final List<Map<String, dynamic>> categoriesList = [];
         for (var doc in docs) {
           if (doc is Map) {
             bool belongsToCompany = false;
-            
+
             // 1. Check doc.company directly
             final catCompanies = doc['company'];
             if (catCompanies is List) {
@@ -74,7 +76,7 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
                 }
               }
             }
-            
+
             // 2. Check doc.department.company
             if (!belongsToCompany) {
               final department = doc['department'];
@@ -96,14 +98,14 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
               categoriesList.add({
                 'id': doc['id'] ?? doc['_id'],
                 'name': doc['name'] ?? 'Unknown Category',
-                'departmentName': (doc['department'] is Map) 
-                    ? (doc['department']['name'] ?? '') 
+                'departmentName': (doc['department'] is Map)
+                    ? (doc['department']['name'] ?? '')
                     : '',
               });
             }
           }
         }
-        
+
         setState(() {
           _allCategories = categoriesList;
           _updateDisplayedCategories();
@@ -129,7 +131,7 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
 
   void _updateDisplayedCategories() {
     final query = _searchController.text.trim().toLowerCase();
-    
+
     // Filter by search query
     List<Map<String, dynamic>> filtered = _allCategories.where((c) {
       if (query.isEmpty) return true;
@@ -142,13 +144,13 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
     filtered.sort((a, b) {
       final aSelected = _selectedCategoryIds.contains(a['id']);
       final bSelected = _selectedCategoryIds.contains(b['id']);
-      
+
       if (aSelected && !bSelected) return -1;
       if (!aSelected && bSelected) return 1;
 
       final aName = a['name'].toString().toLowerCase();
       final bName = b['name'].toString().toLowerCase();
-      
+
       if (query.isNotEmpty) {
         final aPrefix = aName.startsWith(query);
         final bPrefix = bName.startsWith(query);
@@ -173,7 +175,9 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
     setState(() => _isSaving = true);
     try {
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/widgets/update-favorite-category-rule-categories'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/widgets/update-favorite-category-rule-categories',
+        ),
         headers: ApiConfig.getHeaders(widget.token),
         body: json.encode({
           'ruleId': widget.ruleId,
@@ -194,9 +198,9 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
     } catch (e) {
       debugPrint('Error saving categories: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save changes')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to save changes')));
       }
     } finally {
       if (mounted) {
@@ -219,18 +223,31 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
     while (true) {
       final index = lowerText.indexOf(lowerQuery, start);
       if (index == -1) {
-        spans.add(TextSpan(text: text.substring(start), style: const TextStyle(color: Colors.black)));
+        spans.add(
+          TextSpan(
+            text: text.substring(start),
+            style: const TextStyle(color: Colors.black),
+          ),
+        );
         break;
       }
 
       if (index > start) {
-        spans.add(TextSpan(text: text.substring(start, index), style: const TextStyle(color: Colors.black)));
+        spans.add(
+          TextSpan(
+            text: text.substring(start, index),
+            style: const TextStyle(color: Colors.black),
+          ),
+        );
       }
 
       spans.add(
         TextSpan(
           text: text.substring(index, index + query.length),
-          style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       );
 
@@ -259,7 +276,10 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -281,7 +301,7 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
                             });
                           },
                           child: const Text('Clear All'),
-                        )
+                        ),
                     ],
                   ),
                 ),
@@ -293,13 +313,21 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
                           itemBuilder: (context, index) {
                             final category = _displayedCategories[index];
                             final categoryId = category['id'];
-                            final isSelected = _selectedCategoryIds.contains(categoryId);
+                            final isSelected = _selectedCategoryIds.contains(
+                              categoryId,
+                            );
 
                             return CheckboxListTile(
                               value: isSelected,
-                              title: _buildHighlightedText(category['name'], _searchController.text.trim()),
+                              title: _buildHighlightedText(
+                                category['name'],
+                                _searchController.text.trim(),
+                              ),
                               subtitle: category['departmentName'].isNotEmpty
-                                  ? Text('Dept: ${category['departmentName']}', style: const TextStyle(fontSize: 12))
+                                  ? Text(
+                                      'Dept: ${category['departmentName']}',
+                                      style: const TextStyle(fontSize: 12),
+                                    )
                                   : null,
                               onChanged: (bool? checked) {
                                 setState(() {
@@ -343,7 +371,10 @@ class _FavoriteRuleCategoriesPageState extends State<FavoriteRuleCategoriesPage>
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               'Save Changes',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                     ),
                   ),

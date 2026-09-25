@@ -12,7 +12,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:branch/camera_page.dart';
 
-
 class InstockProductsPage extends StatefulWidget {
   const InstockProductsPage({super.key});
 
@@ -21,7 +20,6 @@ class InstockProductsPage extends StatefulWidget {
 }
 
 // _ProductCameraDialog class removed in favor of shared CameraPage in camera_page.dart
-
 
 class _InstockProductsPageState extends State<InstockProductsPage> {
   // No need to set live mode as InstockProvider handles it implicitly
@@ -46,9 +44,7 @@ class _InstockProductsPageState extends State<InstockProductsPage> {
 
     final XFile? photo = await Navigator.push<XFile>(
       context,
-      MaterialPageRoute(
-        builder: (context) => CameraPage(cameras: cameras),
-      ),
+      MaterialPageRoute(builder: (context) => CameraPage(cameras: cameras)),
     );
     if (photo == null) return null;
 
@@ -165,226 +161,235 @@ class _InstockProductsPageState extends State<InstockProductsPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                      TextFormField(
-                        controller: nameCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: "Product Name",
-                          border: OutlineInputBorder(),
+                        TextFormField(
+                          controller: nameCtrl,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: "Product Name",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return "Product name is required";
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return "Product name is required";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedDealerId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: "Dealer",
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedDealerId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: "Dealer",
+                            border: OutlineInputBorder(),
+                          ),
+                          items: sp.dealers.map((dealer) {
+                            final id = dealer["id"]?.toString() ?? "";
+                            final name =
+                                dealer["name"]?.toString() ?? "Unknown Dealer";
+                            return DropdownMenuItem<String>(
+                              value: id,
+                              child: Text(
+                                name,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: isSubmitting
+                              ? null
+                              : (value) {
+                                  setDialogState(() {
+                                    selectedDealerId = value;
+                                  });
+                                },
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return "Dealer is required";
+                            }
+                            return null;
+                          },
                         ),
-                        items: sp.dealers.map((dealer) {
-                          final id = dealer["id"]?.toString() ?? "";
-                          final name =
-                              dealer["name"]?.toString() ?? "Unknown Dealer";
-                          return DropdownMenuItem<String>(
-                            value: id,
-                            child: Text(
-                              name,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: isSubmitting
-                            ? null
-                            : (value) {
-                                setDialogState(() {
-                                  selectedDealerId = value;
-                                });
-                              },
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return "Dealer is required";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: priceCtrl,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: priceCtrl,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: "Price",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(
+                              (value ?? "").trim(),
+                            );
+                            if (parsed == null || parsed <= 0) {
+                              return "Enter a valid price";
+                            }
+                            return null;
+                          },
                         ),
-                        decoration: const InputDecoration(
-                          labelText: "Price",
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: rateCtrl,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: "Rate",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(
+                              (value ?? "").trim(),
+                            );
+                            if (parsed == null || parsed < 0) {
+                              return "Enter a valid rate";
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          final parsed = double.tryParse((value ?? "").trim());
-                          if (parsed == null || parsed <= 0) {
-                            return "Enter a valid price";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: rateCtrl,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedUnit,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: "Unit",
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: "pcs", child: Text("pcs")),
+                            DropdownMenuItem(value: "kg", child: Text("kg")),
+                            DropdownMenuItem(value: "g", child: Text("g")),
+                          ],
+                          onChanged: isSubmitting
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setDialogState(() {
+                                    selectedUnit = value;
+                                  });
+                                },
                         ),
-                        decoration: const InputDecoration(
-                          labelText: "Rate",
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedGst,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: "GST",
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: "0", child: Text("0%")),
+                            DropdownMenuItem(value: "5", child: Text("5%")),
+                            DropdownMenuItem(value: "12", child: Text("12%")),
+                            DropdownMenuItem(value: "18", child: Text("18%")),
+                            DropdownMenuItem(value: "22", child: Text("22%")),
+                          ],
+                          onChanged: isSubmitting
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setDialogState(() {
+                                    selectedGst = value;
+                                  });
+                                },
                         ),
-                        validator: (value) {
-                          final parsed = double.tryParse((value ?? "").trim());
-                          if (parsed == null || parsed < 0) {
-                            return "Enter a valid rate";
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedUnit,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: "Unit",
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: "pcs", child: Text("pcs")),
-                          DropdownMenuItem(value: "kg", child: Text("kg")),
-                          DropdownMenuItem(value: "g", child: Text("g")),
-                        ],
-                        onChanged: isSubmitting
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setDialogState(() {
-                                  selectedUnit = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedGst,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: "GST",
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: "0", child: Text("0%")),
-                          DropdownMenuItem(value: "5", child: Text("5%")),
-                          DropdownMenuItem(value: "12", child: Text("12%")),
-                          DropdownMenuItem(value: "18", child: Text("18%")),
-                          DropdownMenuItem(value: "22", child: Text("22%")),
-                        ],
-                        onChanged: isSubmitting
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setDialogState(() {
-                                  selectedGst = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.camera_alt_outlined, size: 18),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    "Product Image",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 18,
                                   ),
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _captureAndConfirmPhoto();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: Text(
-                                        capturedImage == null
-                                            ? "Capture"
-                                            : "Retake",
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      "Product Image",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    TextButton(
-                                      onPressed: isSubmitting
-                                          ? null
-                                          : () async {
-                                              final file =
-                                                  await _pickAndConfirmPhotoFromGallery();
-                                              if (file == null) return;
-                                              setDialogState(() {
-                                                capturedImage = file;
-                                              });
-                                            },
-                                      child: const Text("Select from Gallery"),
-                                    ),
-                                  ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _captureAndConfirmPhoto();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: Text(
+                                          capturedImage == null
+                                              ? "Capture"
+                                              : "Retake",
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: isSubmitting
+                                            ? null
+                                            : () async {
+                                                final file =
+                                                    await _pickAndConfirmPhotoFromGallery();
+                                                if (file == null) return;
+                                                setDialogState(() {
+                                                  capturedImage = file;
+                                                });
+                                              },
+                                        child: const Text(
+                                          "Select from Gallery",
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              if (capturedImage != null) ...[
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.file(
+                                    capturedImage!,
+                                    height: 140,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ],
-                            ),
-                            if (capturedImage != null) ...[
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.file(
-                                  capturedImage!,
-                                  height: 140,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text("Is Veg"),
-                        value: isVeg,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            isVeg = value;
-                          });
-                        },
-                      ),
+                        const SizedBox(height: 10),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text("Is Veg"),
+                          value: isVeg,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isVeg = value;
+                            });
+                          },
+                        ),
                       ],
                     ),
                   ),

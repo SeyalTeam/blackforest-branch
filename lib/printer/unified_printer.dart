@@ -29,7 +29,8 @@ class UnifiedPrinter {
     final prefs = await SharedPreferences.getInstance();
     final generator = Generator(paperSize, profile);
 
-    final bluetoothEnabled = prefs.getBool('bluetooth_printing_enabled') ?? true;
+    final bluetoothEnabled =
+        prefs.getBool('bluetooth_printing_enabled') ?? true;
     final bluetoothMac = (prefs.getString('bt_printer_mac') ?? '').trim();
     if (bluetoothEnabled && bluetoothMac.isNotEmpty) {
       try {
@@ -65,7 +66,7 @@ class UnifiedPrinter {
 
     final wifiEnabled = prefs.getBool('wifi_printing_enabled') ?? true;
     final ip = (printerIp ?? '').trim();
-    
+
     bool canUseWifi = wifiEnabled && ip.isNotEmpty;
     if (canUseWifi) {
       if (purpose == PrintPurpose.billing) {

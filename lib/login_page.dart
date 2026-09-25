@@ -123,10 +123,7 @@ class _LoginPageState extends State<LoginPage> {
   static const String _appVersion = '2.0.0+1';
   static const Duration _loginRequestTimeout = Duration(seconds: 20);
   static const int _loginTimeoutRetryCount = 2;
-  static const Set<String> _staffRoles = <String>{
-    'branch',
-    'cashier',
-  };
+  static const Set<String> _staffRoles = <String>{'branch', 'cashier'};
   static const String _waiterDefaultPassword = '12345';
 
   final _formKey = GlobalKey<FormState>();
@@ -282,9 +279,10 @@ class _LoginPageState extends State<LoginPage> {
               final photo = emp['photo'];
               String? photoUrl;
               if (photo is Map) {
-                photoUrl = photo['thumbnailURL']?.toString() ??
-                           photo['thumbnailUrl']?.toString() ??
-                           photo['url']?.toString();
+                photoUrl =
+                    photo['thumbnailURL']?.toString() ??
+                    photo['thumbnailUrl']?.toString() ??
+                    photo['url']?.toString();
               } else if (photo is String) {
                 photoUrl = photo;
               }
@@ -292,7 +290,6 @@ class _LoginPageState extends State<LoginPage> {
                 final resolvedPhotoUrl = resolveApiAssetUrl(photoUrl);
                 await prefs.setString('employee_photo_url', resolvedPhotoUrl);
               }
-
 
               final empCode =
                   emp['employeeId']?.toString() ??
@@ -1243,7 +1240,12 @@ class _LoginPageState extends State<LoginPage> {
           companyId = comp is Map
               ? (comp['id'] ?? comp['_id'] ?? comp[r'$oid'])?.toString()
               : comp.toString();
-        } else if ((normalizedRole == 'branch' || normalizedRole == 'waiter' || normalizedRole == 'cashier' || normalizedRole == 'chef' || normalizedRole == 'manager' || normalizedRole == 'supervisor') &&
+        } else if ((normalizedRole == 'branch' ||
+                normalizedRole == 'waiter' ||
+                normalizedRole == 'cashier' ||
+                normalizedRole == 'chef' ||
+                normalizedRole == 'manager' ||
+                normalizedRole == 'supervisor') &&
             user['branch'] != null &&
             user['branch'] is Map &&
             user['branch']['company'] != null) {
@@ -1467,19 +1469,22 @@ class _LoginPageState extends State<LoginPage> {
             if (empName != null && empName.isNotEmpty) {
               backgroundWrites.add(prefs.setString('employee_name', empName));
             }
-            
+
             final photo = emp['photo'];
             String? photoUrl;
             if (photo is Map) {
-              photoUrl = photo['thumbnailURL']?.toString() ??
-                         photo['thumbnailUrl']?.toString() ??
-                         photo['url']?.toString();
+              photoUrl =
+                  photo['thumbnailURL']?.toString() ??
+                  photo['thumbnailUrl']?.toString() ??
+                  photo['url']?.toString();
             } else if (photo is String) {
               photoUrl = photo;
             }
             if (photoUrl != null && photoUrl.isNotEmpty) {
               final resolvedPhotoUrl = resolveApiAssetUrl(photoUrl);
-              backgroundWrites.add(prefs.setString('employee_photo_url', resolvedPhotoUrl));
+              backgroundWrites.add(
+                prefs.setString('employee_photo_url', resolvedPhotoUrl),
+              );
             }
 
             final empCode =
@@ -1502,9 +1507,7 @@ class _LoginPageState extends State<LoginPage> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => IdleTimeoutWrapper(
-              child: const HomePage(),
-            ),
+            builder: (_) => IdleTimeoutWrapper(child: const HomePage()),
           ),
         );
       } else {
