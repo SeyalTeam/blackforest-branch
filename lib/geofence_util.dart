@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 
 class GeofenceResult {
@@ -84,6 +85,7 @@ class GeofenceUtil {
     }
 
     try {
+      final prefs = await SharedPreferences.getInstance();
       final data = await ApiConfig.fetchBranchGeoSettings(prefs.getString('token') ?? '');
       final locations = data['locations'] as List?;
       if (locations != null && locations.isNotEmpty) {

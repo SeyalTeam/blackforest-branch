@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -12,14 +12,16 @@ import 'package:image/image.dart' as img_lib;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'api_config.dart';
+import 'api_service.dart';
 import 'camera_page.dart';
 import 'login_page.dart';
 import 'geofence_util.dart';
 import 'notification_service.dart';
 import 'attendance_manager.dart';
-import 'common_scaffold.dart';
-import 'settings_page.dart';
+import 'attendance_calendar_page.dart';
+import 'daily_tasks_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'session_prefs.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -29,6 +31,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  final _storage = const FlutterSecureStorage();
   bool _profileLoading = true;
   String? _employeeName;
   String? _employeeRole;
@@ -56,6 +59,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Duration _breakDuration = Duration.zero;
   List<Map<String, dynamic>> _activities = [];
   String? _dayType; // 'full_day' | 'half_day' | null
+  bool _loadingTasks = false;
+  List<Map<String, dynamic>> _dailyTasks = [];
+  final Set<String> _togglingTaskIds = {};
 
   @override
   void initState() {
@@ -91,10 +97,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadEmployeeData() async {
-    final prefs = await SharedPreferences.getInstance();
     try {
-      final cachedName = prefs.getString('userName');
-      final cachedRole = prefs.getString('userRole');
+      final prefs = await SharedPreferences.getInstance();
+      final cachedName = (await _storage.read(key: 'userName')) ??
+          prefs.getString('userName') ??
+          prefs.getString('user_name') ??
+          prefs.getString('employee_name');
+      final cachedRole = (await _storage.read(key: 'userRole')) ??
+          prefs.getString('userRole') ??
+          prefs.getString('role');
 
       if (mounted) {
         setState(() {
@@ -105,6 +116,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       await _fetchEmployeeProfile();
       await _fetchAttendance();
+      await _fetchDailyTasks();
     } catch (e) {
       debugPrint('Error loading employee data: $e');
     } finally {
@@ -139,11 +151,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _fetchEmployeeProfile() async {
-    final prefs = await SharedPreferences.getInstance();
     try {
-      final profile = await ApiConfig.fetchUserProfile(
-        prefs.getString('token') ?? '',
-      );
+      final profile = await ApiService.instance.fetchUserProfile();
       if (profile.isNotEmpty) {
         final user = profile['user'] ?? profile;
         final employee = user['employee'] ?? {};
@@ -201,9 +210,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _fetchAttendance() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    final userId = prefs.getString('userId');
+    final token = await _storage.read(key: 'token');
+    final userId = await _storage.read(key: 'userId');
 
     if (token == null || userId == null) return;
 
@@ -216,7 +224,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       final url =
-          '${ApiConfig.baseUrl}/attendance?where[user][equals]=$userId&where[date][greater_than_equal]=$queryDate&sort=-date&limit=10';
+          '${ApiService.baseUrl}/attendance?where[user][equals]=$userId&where[date][greater_than_equal]=$queryDate&sort=-date&limit=10';
       final response = await http.get(
         Uri.parse(url),
         headers: token.isNotEmpty ? {'Authorization': 'Bearer $token'} : {},
@@ -337,7 +345,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   http
                       .patch(
                         Uri.parse(
-                          '${ApiConfig.baseUrl}/attendance/$ownerDocId',
+                          '${ApiService.baseUrl}/attendance/$ownerDocId',
                         ),
                         headers: {
                           'Authorization': 'Bearer $storedToken',
@@ -554,15 +562,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<String?> _uploadMedia(File file) async {
-    final prefs = await SharedPreferences.getInstance();
     final uploadFile = await _prepareImageForUpload(file);
     if (!await uploadFile.exists()) return null;
 
-    final token = prefs.getString('token');
+    final token = await _storage.read(key: 'token');
     if (token == null) return null;
 
     final filename = 'selfie_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final urlStr = '${ApiConfig.baseUrl}/media?prefix=attendance';
+    final urlStr = '${ApiService.baseUrl}/media?prefix=attendance';
 
     try {
       final request = http.MultipartRequest('POST', Uri.parse(urlStr));
@@ -640,11 +647,17 @@ class _ProfilePageState extends State<ProfilePage> {
       _isProcessingPunch = true;
     });
 
-    // GPS Geofence Check
-    final isInside = await GeofenceUtil.isInsideAnyBranch(context);
-    if (!isInside && mounted) {
-      setState(() => _isProcessingPunch = false);
-      return; // Block punch in if not inside branch circle
+    final role = (_employeeRole ?? await _storage.read(key: 'userRole'))?.toLowerCase();
+    final isWatcher = role == 'watcher';
+
+    // GPS Geofence Check (bypassed for watcher working from home)
+    if (!isWatcher) {
+      if (!mounted) return;
+      final isInside = await GeofenceUtil.isInsideAnyBranch(context);
+      if (!isInside && mounted) {
+        setState(() => _isProcessingPunch = false);
+        return; // Block punch in if not inside branch circle
+      }
     }
 
     try {
@@ -675,9 +688,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _punchIn(String mediaId, {bool isAuto = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    final userId = prefs.getString('userId');
+    final token = await _storage.read(key: 'token');
+    final userId = await _storage.read(key: 'userId');
     if (token == null || userId == null) return;
 
     Position? position;
@@ -705,7 +717,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       if (_attendanceDocId != null) {
         final updatedActivities = List.from(_rawActivities)..add(newActivity);
-        final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+        final url = '${ApiService.baseUrl}/attendance/$_attendanceDocId';
         final response = await http.patch(
           Uri.parse(url),
           headers: token.isNotEmpty
@@ -723,13 +735,13 @@ class _ProfilePageState extends State<ProfilePage> {
           await _fetchEmployeeProfile();
           await _fetchAttendance();
           _lastPunchOutType = null;
-          await prefs.remove('lastPunchOutType');
+          await _storage.delete(key: 'lastPunchOutType');
         }
       } else {
         final localMidnight = DateTime(now.year, now.month, now.day);
         final dateString = DateFormat('yyyy-MM-dd').format(localMidnight);
 
-        final url = '${ApiConfig.baseUrl}/attendance';
+        final url = '${ApiService.baseUrl}/attendance';
         final response = await http.post(
           Uri.parse(url),
           headers: token.isNotEmpty
@@ -752,7 +764,7 @@ class _ProfilePageState extends State<ProfilePage> {
           await _fetchEmployeeProfile();
           await _fetchAttendance();
           _lastPunchOutType = null;
-          await prefs.remove('lastPunchOutType');
+          await _storage.delete(key: 'lastPunchOutType');
         }
       }
     } catch (e) {
@@ -768,11 +780,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ── Geofence watcher ────────────────────────────────────────────────────────
 
-  /// Starts a 60-second periodic GPS check. If the employee is outside every
-  /// branch geofence while a session is active, auto punch-out fires once.
-  void _startGeofenceWatcher() {
+  void _startGeofenceWatcher() async {
     _geofenceTimer?.cancel();
     _geofenceTimer = null;
+
+    final role = (_employeeRole ?? await _storage.read(key: 'userRole'))?.toLowerCase();
+    if (role == 'watcher') {
+      debugPrint('Geofence watcher skipped for watcher role');
+      return;
+    }
 
     // Check IMMEDIATELY on start / refresh
     _checkGeofence();
@@ -783,21 +799,19 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _checkGeofence() async {
-    final prefs = await SharedPreferences.getInstance();
     if (!mounted || _isProcessingPunch) return;
     await AttendanceManager.instance.checkNow();
   }
 
   Future<void> _autoPunchInWithoutSelfie() async {
-    final prefs = await SharedPreferences.getInstance();
     if (_hasActiveSession || _isProcessingPunch) return;
 
     setState(() {
       _isProcessingPunch = true;
     });
 
-    final token = prefs.getString('token');
-    final userId = prefs.getString('userId');
+    final token = await _storage.read(key: 'token');
+    final userId = await _storage.read(key: 'userId');
     if (token == null || userId == null) {
       setState(() => _isProcessingPunch = false);
       return;
@@ -831,7 +845,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       if (_attendanceDocId != null) {
         final updatedActivities = List.from(_rawActivities)..add(newActivity);
-        final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+        final url = '${ApiService.baseUrl}/attendance/$_attendanceDocId';
         final response = await http.patch(
           Uri.parse(url),
           headers: token.isNotEmpty
@@ -886,7 +900,7 @@ class _ProfilePageState extends State<ProfilePage> {
         final localMidnight = DateTime(now.year, now.month, now.day);
         final dateString = DateFormat('yyyy-MM-dd').format(localMidnight);
 
-        final url = '${ApiConfig.baseUrl}/attendance';
+        final url = '${ApiService.baseUrl}/attendance';
         final response = await http.post(
           Uri.parse(url),
           headers: token.isNotEmpty
@@ -955,7 +969,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _attachSelfieToActiveSession() async {
-    final prefs = await SharedPreferences.getInstance();
     if (_isProcessingPunch) return;
 
     final cameras = await availableCameras();
@@ -992,7 +1005,7 @@ class _ProfilePageState extends State<ProfilePage> {
         return;
       }
 
-      final token = prefs.getString('token');
+      final token = await _storage.read(key: 'token');
       if (token == null || _attendanceDocId == null) return;
 
       final updatedActivities = List.from(_rawActivities);
@@ -1006,7 +1019,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+      final url = '${ApiService.baseUrl}/attendance/$_attendanceDocId';
       final response = await http.patch(
         Uri.parse(url),
         headers: token.isNotEmpty
@@ -1109,13 +1122,12 @@ class _ProfilePageState extends State<ProfilePage> {
   /// Identical to _punchOut() but stamps punchOutType:'auto' and shows a
   /// different banner explaining the reason.
   Future<void> _autoPunchOut() async {
-    final prefs = await SharedPreferences.getInstance();
     if (!_hasActiveSession || _attendanceDocId == null || _isProcessingPunch)
       return;
 
     setState(() => _isProcessingPunch = true);
 
-    final token = prefs.getString('token');
+    final token = await _storage.read(key: 'token');
     if (token == null) {
       setState(() => _isProcessingPunch = false);
       return;
@@ -1140,7 +1152,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+      final url = '${ApiService.baseUrl}/attendance/$_attendanceDocId';
       final response = await http.patch(
         Uri.parse(url),
         headers: token.isNotEmpty
@@ -1191,7 +1203,6 @@ class _ProfilePageState extends State<ProfilePage> {
   // ── Manual Punch Out ────────────────────────────────────────────────────────
 
   Future<void> _punchOut() async {
-    final prefs = await SharedPreferences.getInstance();
     if (!_hasActiveSession || _attendanceDocId == null || _isProcessingPunch)
       return;
 
@@ -1240,7 +1251,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _isProcessingPunch = true;
     });
 
-    final token = prefs.getString('token');
+    final token = await _storage.read(key: 'token');
     if (token == null) return;
 
     try {
@@ -1261,7 +1272,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      final url = '${ApiConfig.baseUrl}/attendance/$_attendanceDocId';
+      final url = '${ApiService.baseUrl}/attendance/$_attendanceDocId';
       final response = await http.patch(
         Uri.parse(url),
         headers: token.isNotEmpty
@@ -1281,7 +1292,7 @@ class _ProfilePageState extends State<ProfilePage> {
         await _fetchAttendance();
         _autoPunchInFired = false;
         _lastPunchOutType = 'manual';
-        await prefs.setString('lastPunchOutType', 'manual');
+        await _storage.write(key: 'lastPunchOutType', value: 'manual');
       }
     } catch (e) {
       debugPrint('Punch Out Error: $e');
@@ -1326,14 +1337,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
       _isLoggingOut = true;
     });
 
     try {
       AttendanceManager.instance.stopForegroundWatcher();
-      await prefs.clear();
+      await _storage.deleteAll();
+      final prefs = await SharedPreferences.getInstance();
+      await clearSessionPreservingFavorites(prefs);
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -1374,6 +1386,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 onRefresh: () async {
                   await _fetchEmployeeProfile();
                   await _fetchAttendance();
+                  await _fetchDailyTasks();
                   _autoPunchInFired = false;
                   await _checkGeofence();
                 },
@@ -1968,16 +1981,24 @@ class _ProfilePageState extends State<ProfilePage> {
 
                       const SizedBox(height: 24),
                       GestureDetector(
-                        onTap: () => _showActivitiesBottomSheet(context),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const AttendanceCalendarPage(),
+                            ),
+                          );
+                        },
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -1993,7 +2014,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
-                                  Icons.history,
+                                  Icons.calendar_month,
                                   color: Colors.blue,
                                 ),
                               ),
@@ -2003,7 +2024,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'Your Activity',
+                                      'Attendance & Activity',
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
@@ -2012,7 +2033,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'View your punch-in and break history',
+                                      'View your history and calendar',
                                       style: TextStyle(
                                         fontSize: 13,
                                         color: Colors.grey[600],
@@ -2030,6 +2051,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      _buildDailyTasksSection(),
                     ],
                   ),
                 ),
@@ -2267,6 +2290,190 @@ class _ProfilePageState extends State<ProfilePage> {
           style: const TextStyle(color: Colors.white38, fontSize: 10),
         ),
       ],
+    );
+  }
+
+  Future<void> _fetchDailyTasks() async {
+    try {
+      if (mounted) setState(() => _loadingTasks = true);
+      final res = await ApiService.instance.fetchMyDailyTasks();
+      if (res['success'] == true && res['tasks'] is List) {
+        if (mounted) {
+          setState(() {
+            _dailyTasks = List<Map<String, dynamic>>.from(
+              (res['tasks'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
+            );
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading daily tasks: $e');
+    } finally {
+      if (mounted) setState(() => _loadingTasks = false);
+    }
+  }
+
+  Future<void> _toggleTask(String taskId, bool currentCompleted) async {
+    if (_togglingTaskIds.contains(taskId)) return;
+
+    final targetCompleted = !currentCompleted;
+
+    // Optimistic UI update
+    setState(() {
+      _togglingTaskIds.add(taskId);
+      final index = _dailyTasks.indexWhere((t) => t['id']?.toString() == taskId);
+      if (index != -1) {
+        _dailyTasks[index]['completed'] = targetCompleted;
+        if (targetCompleted) {
+          _dailyTasks[index]['completedAt'] = DateTime.now().toIso8601String();
+        } else {
+          _dailyTasks[index]['completedAt'] = null;
+        }
+      }
+    });
+
+    try {
+      final res = await ApiService.instance.toggleDailyTask(
+        taskId: taskId,
+        completed: targetCompleted,
+      );
+      if (res['success'] != true) {
+        // Revert on failure
+        if (mounted) {
+          setState(() {
+            final index = _dailyTasks.indexWhere((t) => t['id']?.toString() == taskId);
+            if (index != -1) {
+              _dailyTasks[index]['completed'] = currentCompleted;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error toggling task: $e');
+      if (mounted) {
+        setState(() {
+          final index = _dailyTasks.indexWhere((t) => t['id']?.toString() == taskId);
+          if (index != -1) {
+            _dailyTasks[index]['completed'] = currentCompleted;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update task: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _togglingTaskIds.remove(taskId);
+        });
+      }
+    }
+  }
+
+  Widget _buildDailyTasksSection() {
+    final completedCount =
+        _dailyTasks.where((t) => t['completed'] == true).length;
+    final totalCount = _dailyTasks.length;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DailyTasksPage(),
+          ),
+        ).then((_) => _fetchDailyTasks());
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.assignment_turned_in_rounded,
+                color: Colors.indigo,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Work Tasks',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    totalCount == 0
+                        ? 'View and manage your daily tasks'
+                        : '$completedCount of $totalCount tasks completed today',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (totalCount > 0) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: completedCount == totalCount
+                      ? Colors.green.withValues(alpha: 0.15)
+                      : Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  completedCount == totalCount
+                      ? 'Done ✓'
+                      : '$completedCount / $totalCount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: completedCount == totalCount
+                        ? Colors.green[800]
+                        : Colors.amber[900],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey[400],
+              size: 16,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
