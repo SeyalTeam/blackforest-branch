@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'auth_service.dart';
 import 'home.dart';
+import 'package:geolocator/geolocator.dart';
+import 'geofence_util.dart';
 
 // ---------------------------------------------------------
 //  IDLE TIMEOUT WRAPPER
@@ -264,16 +266,36 @@ class _LoginPageState extends State<LoginPage> {
         await _fetchIp();
       }
 
+      // Quick GPS capture to send with login request headers
+      Position? loginPosition;
+      try {
+        loginPosition = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        ).timeout(const Duration(seconds: 4));
+      } catch (_) {
+        try {
+          loginPosition = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+      }
+
       try {
         final rawInput = _branchController.text.trim();
         final emailToUse = rawInput.contains('@') ? rawInput : '$rawInput@bf.com';
 
+        final headers = {
+          'Content-Type': 'application/json',
+          'x-private-ip': _privateIp ?? '',
+          if (loginPosition != null) ...{
+            'x-latitude': loginPosition.latitude.toString(),
+            'x-longitude': loginPosition.longitude.toString(),
+          },
+        };
+
         var res = await http.post(
           Uri.parse('https://dev1-blacforest.vseyal.com/api/users/login'),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-private-ip': _privateIp ?? '',
-          },
+          headers: headers,
           body: jsonEncode({
             'email': emailToUse,
             'password': _passwordController.text,
@@ -285,10 +307,7 @@ class _LoginPageState extends State<LoginPage> {
         if (res.statusCode != 200 && !rawInput.contains('@')) {
           final fallbackRes = await http.post(
             Uri.parse('https://dev1-blacforest.vseyal.com/api/users/login'),
-            headers: {
-              'Content-Type': 'application/json',
-              'x-private-ip': _privateIp ?? '',
-            },
+            headers: headers,
             body: jsonEncode({
               'email': rawInput,
               'password': _passwordController.text,
@@ -309,8 +328,6 @@ class _LoginPageState extends State<LoginPage> {
           final data = jsonDecode(res.body);
           final token = data['token'];
           final user = data['user'] ?? {};
-
-          setState(() => _isLoading = false);
 
           // Fetch full profile to populate nested fields like employee, branch, kitchen
           Map<String, dynamic> fullUser = user;
@@ -349,6 +366,62 @@ class _LoginPageState extends State<LoginPage> {
           } else if (branchObj is String) {
             branchId = branchObj;
           }
+
+          // Strict GPS Geofence Check (matching tracker app behavior)
+          // Watcher, admin, and superadmin do not require branch geofence circle to login
+          final isExemptFromGeofence = userRole == 'watcher' ||
+              userRole == 'admin' ||
+              userRole == 'superadmin';
+
+          if (!isExemptFromGeofence) {
+            if (!mounted) return;
+
+            final geoResult = await GeofenceUtil.checkLocationAndGeofence(
+              existingPosition: loginPosition,
+              targetBranchId: (userRole == 'manager' || branchId.isEmpty) ? null : branchId,
+              targetBranchName: (userRole == 'manager' || branchName.isEmpty) ? null : branchName,
+            );
+
+            if (!geoResult.isInside) {
+              if (mounted) {
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.location_off, color: Colors.white),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            geoResult.errorMessage ?? 'Not inside branch geofence. Login blocked.',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.red[800],
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              }
+              return; // STRICTLY BLOCK LOGIN! Do not save session or navigate.
+            }
+
+            // If user is manager or account had no branch pre-assigned, bind to current physical branch
+            if ((branchId.isEmpty || userRole == 'manager') &&
+                geoResult.branchId != null &&
+                geoResult.branchId!.isNotEmpty) {
+              branchId = geoResult.branchId!;
+              if (geoResult.branchName != null && geoResult.branchName!.isNotEmpty) {
+                branchName = geoResult.branchName!;
+              }
+              debugPrint('Active branch resolved from GPS: $branchName ($branchId)');
+            }
+          }
+
+          setState(() => _isLoading = false);
 
           // Extract Photo URL
           String? photoUrl;
@@ -416,7 +489,14 @@ class _LoginPageState extends State<LoginPage> {
             String kitchenId = '';
             List<String> categories = [];
 
-            if (kitchenObj is Map) {
+            if (kitchenObj is List && kitchenObj.isNotEmpty) {
+              final firstK = kitchenObj.first;
+              if (firstK is Map) {
+                kitchenId = (firstK['id'] ?? firstK['_id'])?.toString() ?? '';
+              } else if (firstK is String) {
+                kitchenId = firstK;
+              }
+            } else if (kitchenObj is Map) {
               kitchenId = (kitchenObj['id'] ?? kitchenObj['_id'])?.toString() ?? '';
             } else if (kitchenObj is String) {
               kitchenId = kitchenObj;
@@ -431,6 +511,16 @@ class _LoginPageState extends State<LoginPage> {
                   if (cId.isNotEmpty) categories.add(cId);
                 }
               } catch (_) {}
+            }
+
+            final userCats = fullUser['categories'] as List?;
+            if (userCats != null) {
+              for (var c in userCats) {
+                final cId = (c is Map ? (c['id'] ?? c['_id']) : c)?.toString() ?? '';
+                if (cId.isNotEmpty && !categories.contains(cId)) {
+                  categories.add(cId);
+                }
+              }
             }
 
             await storage.write(key: 'userKitchenId', value: kitchenId);

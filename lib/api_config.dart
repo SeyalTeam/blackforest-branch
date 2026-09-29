@@ -31,10 +31,16 @@ class ApiConfig {
 
   static Future<Map<String, dynamic>> fetchBranchGeoSettings(String token) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/globals/branchGeoSettings'),
+      var response = await http.get(
+        Uri.parse('$baseUrl/globals/branch-geo-settings'),
         headers: getHeaders(token),
       );
+      if (response.statusCode != 200) {
+        response = await http.get(
+          Uri.parse('$baseUrl/globals/branchGeoSettings'),
+          headers: getHeaders(token),
+        );
+      }
       if (response.statusCode == 200) {
         return json.decode(response.body);
       }
