@@ -154,7 +154,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _employeeName = cachedName;
           _employeeRole = cachedRole;
           if (cachedKitchenName != null && cachedKitchenName.isNotEmpty) {
-            _kitchenName = cachedKitchenName;
+            _branchName = cachedKitchenName;
           }
           if (cachedBranchName != null && cachedBranchName.isNotEmpty) {
             _branchName = cachedBranchName;
@@ -2167,8 +2167,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
               ),
-      ),
-    );
+            ),
+          ),
+        ),
+      );
   }
 
   void _showActivitiesBottomSheet(BuildContext context) {
