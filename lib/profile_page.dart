@@ -2169,8 +2169,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
-        ),
-      );
+        );
   }
 
   void _showActivitiesBottomSheet(BuildContext context) {
