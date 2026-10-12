@@ -59,6 +59,10 @@ Future<Map<String, String>> _prepareHeaders(
   if (!map.containsKey('x-app-version') && !map.containsKey('X-App-Version')) {
     map['x-app-version'] = AppVersion.current;
   }
+  if (!map.containsKey('x-app-secret')) {
+    map['x-app-secret'] = 'bf_branch_3a2b1c4d5e6f7a8b';
+    map['x-app-key'] = 'bf_branch_3a2b1c4d5e6f7a8b';
+  }
   return map;
 }
 

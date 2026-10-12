@@ -3,11 +3,16 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 class ApiConfig {
-  static const String domain = "https://dev1-blacforest.vseyal.com";
+  static const String domain = "https://blackforest.vseyal.com";
   static const String baseUrl = "$domain/api";
+  static const String appKey = "bf_branch_3a2b1c4d5e6f7a8b";
 
   static Map<String, String> getHeaders(String? token) {
-    final headers = {"Content-Type": "application/json"};
+    final headers = {
+      "Content-Type": "application/json",
+      "x-app-secret": appKey,
+      "x-app-key": appKey,
+    };
     if (token != null) {
       headers["Authorization"] = "Bearer $token";
     }

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:branch/app_http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -132,7 +132,7 @@ class _LoginPageState extends State<LoginPage> {
       if (token != null && token.isNotEmpty) {
         // Validate token by fetching user profile
         final res = await http.get(
-          Uri.parse('https://dev1-blacforest.vseyal.com/api/users/me'),
+          Uri.parse('https://blackforest.vseyal.com/api/users/me'),
           headers: {'Authorization': 'Bearer $token'},
         ).timeout(const Duration(seconds: 8));
 
@@ -164,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _fetchDynamicRanges() async {
     try {
       final res = await http.get(
-        Uri.parse('https://dev1-blacforest.vseyal.com/api/branches?limit=1000'),
+        Uri.parse('https://blackforest.vseyal.com/api/branches?limit=1000'),
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -294,7 +294,7 @@ class _LoginPageState extends State<LoginPage> {
         };
 
         var res = await http.post(
-          Uri.parse('https://dev1-blacforest.vseyal.com/api/users/login'),
+          Uri.parse('https://blackforest.vseyal.com/api/users/login'),
           headers: headers,
           body: jsonEncode({
             'email': emailToUse,
@@ -306,7 +306,7 @@ class _LoginPageState extends State<LoginPage> {
         // Fallback: If @bf.com failed and input had no @, try sending rawInput directly
         if (res.statusCode != 200 && !rawInput.contains('@')) {
           final fallbackRes = await http.post(
-            Uri.parse('https://dev1-blacforest.vseyal.com/api/users/login'),
+            Uri.parse('https://blackforest.vseyal.com/api/users/login'),
             headers: headers,
             body: jsonEncode({
               'email': rawInput,
@@ -531,7 +531,7 @@ class _LoginPageState extends State<LoginPage> {
           if (branchId.isNotEmpty) {
             try {
               final bRes = await http.get(
-                Uri.parse('https://dev1-blacforest.vseyal.com/api/branches/$branchId'),
+                Uri.parse('https://blackforest.vseyal.com/api/branches/$branchId'),
                 headers: {'Authorization': 'Bearer $token'},
               ).timeout(const Duration(seconds: 4));
               if (bRes.statusCode == 200) {
