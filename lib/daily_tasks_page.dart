@@ -1068,137 +1068,150 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                                 ],
                                 const SizedBox(height: 10),
 
-                                // Action Buttons (Yes & No directly under the text)
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    // YES BUTTON
-                                    Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: isToggling ? null : () => _handleTaskAction(task, 'yes'),
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 180),
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                                          decoration: BoxDecoration(
-                                            color: isNo
-                                                ? const Color(0xFFDCFCE7)
-                                                : const Color(0xFF00C853),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: isNo
-                                                ? Border.all(color: const Color(0xFF86EFAC), width: 1)
-                                                : null,
-                                            boxShadow: !isNo
-                                                ? [
-                                                    BoxShadow(
-                                                      color: const Color(0xFF00C853).withValues(alpha: 0.25),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 2),
-                                                    )
-                                                  ]
-                                                : null,
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: isToggling && isYes
-                                              ? const SizedBox(
-                                                  width: 14,
-                                                  height: 14,
-                                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                                )
-                                              : Text(
-                                                  yesButtonText,
-                                                  style: TextStyle(
-                                                    color: isNo ? const Color(0xFF15803D) : Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // NO BUTTON
-                                    Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: isToggling ? null : () => _handleTaskAction(task, 'no'),
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 180),
-                                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
-                                          decoration: BoxDecoration(
-                                            color: isNo ? const Color(0xFFDC2626) : const Color(0xFFFEE2E2),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: isNo ? null : Border.all(color: const Color(0xFFFECACA), width: 1),
-                                            boxShadow: isNo
-                                                ? [
-                                                    BoxShadow(
-                                                      color: const Color(0xFFDC2626).withValues(alpha: 0.25),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 2),
-                                                    )
-                                                  ]
-                                                : null,
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: isToggling && isNo
-                                              ? const SizedBox(
-                                                  width: 14,
-                                                  height: 14,
-                                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                                )
-                                              : Text(
-                                                  'No',
-                                                  style: TextStyle(
-                                                    color: isNo ? Colors.white : const Color(0xFFDC2626),
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // OPTIONAL NO COMPLAINT BUTTON
-                                    if (hasComplaintOption)
+                                // Action Buttons (Yes & No strictly in one line, no breaking)
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const BouncingScrollPhysics(),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // YES BUTTON
                                       Material(
                                         color: Colors.transparent,
                                         child: InkWell(
-                                          onTap: isToggling ? null : () => _handleTaskAction(task, 'no_complaint'),
+                                          onTap: isToggling ? null : () => _handleTaskAction(task, 'yes'),
                                           borderRadius: BorderRadius.circular(8),
                                           child: AnimatedContainer(
                                             duration: const Duration(milliseconds: 180),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                                             decoration: BoxDecoration(
-                                              color: isNoComplaint ? const Color(0xFF0284C7) : const Color(0xFFE0F2FE),
+                                              color: isNo
+                                                  ? const Color(0xFFDCFCE7)
+                                                  : const Color(0xFF00C853),
                                               borderRadius: BorderRadius.circular(8),
-                                              border: isNoComplaint ? null : Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
+                                              border: isNo
+                                                  ? Border.all(color: const Color(0xFF86EFAC), width: 1)
+                                                  : null,
+                                              boxShadow: !isNo
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: const Color(0xFF00C853).withValues(alpha: 0.25),
+                                                        blurRadius: 4,
+                                                        offset: const Offset(0, 2),
+                                                      )
+                                                    ]
+                                                  : null,
                                             ),
-                                            child: Text(
-                                              'No Complaint',
-                                              style: TextStyle(
-                                                color: isNoComplaint ? Colors.white : const Color(0xFF0284C7),
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
+                                            alignment: Alignment.center,
+                                            child: isToggling && isYes
+                                                ? const SizedBox(
+                                                    width: 14,
+                                                    height: 14,
+                                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                  )
+                                                : Text(
+                                                    yesButtonText,
+                                                    maxLines: 1,
+                                                    softWrap: false,
+                                                    style: TextStyle(
+                                                      color: isNo ? const Color(0xFF15803D) : Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+
+                                      // NO BUTTON
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: isToggling ? null : () => _handleTaskAction(task, 'no'),
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 180),
+                                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
+                                            decoration: BoxDecoration(
+                                              color: isNo ? const Color(0xFFDC2626) : const Color(0xFFFEE2E2),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: isNo ? null : Border.all(color: const Color(0xFFFECACA), width: 1),
+                                              boxShadow: isNo
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                                                        blurRadius: 4,
+                                                        offset: const Offset(0, 2),
+                                                      )
+                                                    ]
+                                                  : null,
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: isToggling && isNo
+                                                ? const SizedBox(
+                                                    width: 14,
+                                                    height: 14,
+                                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                  )
+                                                : Text(
+                                                    'No',
+                                                    maxLines: 1,
+                                                    softWrap: false,
+                                                    style: TextStyle(
+                                                      color: isNo ? Colors.white : const Color(0xFFDC2626),
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+
+                                      // OPTIONAL NO COMPLAINT BUTTON
+                                      if (hasComplaintOption) ...[
+                                        const SizedBox(width: 8),
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: isToggling ? null : () => _handleTaskAction(task, 'no_complaint'),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 180),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                              decoration: BoxDecoration(
+                                                color: isNoComplaint ? const Color(0xFF0284C7) : const Color(0xFFE0F2FE),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: isNoComplaint ? null : Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
+                                              ),
+                                              child: Text(
+                                                'No Complaint',
+                                                maxLines: 1,
+                                                softWrap: false,
+                                                style: TextStyle(
+                                                  color: isNoComplaint ? Colors.white : const Color(0xFF0284C7),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
+                                      ],
 
-                                    // PHOTO PREVIEW LINK (if task completed with photo)
-                                    if (isYes && task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty)
-                                      IconButton(
-                                        icon: const Icon(Icons.photo_camera, size: 20, color: Color(0xFF00C853)),
-                                        tooltip: 'View Photo Proof',
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                        onPressed: () => _showImagePreviewDialog(task['photoUrl'].toString(), title),
-                                      ),
-                                  ],
+                                      // PHOTO PREVIEW LINK (if task completed with photo)
+                                      if (isYes && task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty) ...[
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.photo_camera, size: 20, color: Color(0xFF00C853)),
+                                          tooltip: 'View Photo Proof',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () => _showImagePreviewDialog(task['photoUrl'].toString(), title),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
