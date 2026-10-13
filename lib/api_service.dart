@@ -2381,5 +2381,69 @@ Future<List<dynamic>> fetchEmployees() async {
 
     return {'success': false};
   }
+
+  Future<Map<String, dynamic>> startWork({String? dateString}) async {
+    final token = await _getToken();
+    final today = dateString ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final endpoints = [
+      '$_baseUrl/attendance/start-work',
+      '$_baseUrl/start-work',
+    ];
+
+    for (final url in endpoints) {
+      try {
+        final res = await http.post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'dateString': today,
+          }),
+        );
+        if (res.statusCode == 200) {
+          return jsonDecode(res.body) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        debugPrint('startWork endpoint error ($url): $e');
+      }
+    }
+    return {'success': false, 'message': 'Failed to record work start time'};
+  }
+
+  Future<Map<String, dynamic>> completeWork({String? dateString}) async {
+    final token = await _getToken();
+    final today = dateString ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final endpoints = [
+      '$_baseUrl/attendance/complete-work',
+      '$_baseUrl/complete-work',
+    ];
+
+    for (final url in endpoints) {
+      try {
+        final res = await http.post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'dateString': today,
+          }),
+        );
+        if (res.statusCode == 200) {
+          return jsonDecode(res.body) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        debugPrint('completeWork endpoint error ($url): $e');
+      }
+    }
+    return {'success': false, 'message': 'Failed to record work completion time'};
+  }
 }
 

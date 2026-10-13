@@ -48,6 +48,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _lastPunchOutType;
   File? _capturedPunchInPhoto;
   List<dynamic> _rawActivities = [];
+  String _workStatus = 'not_started'; // 'not_started' | 'in_progress' | 'completed'
+  DateTime? _workStartTime;
+  DateTime? _workCompletedTime;
+  bool _isStartingWork = false;
 
   Timer? _timer;
   Timer? _geofenceTimer; // polls GPS every 60s while session is active
@@ -337,10 +341,20 @@ class _ProfilePageState extends State<ProfilePage> {
           _attendanceDocId = firstDoc['id']?.toString();
           _rawActivities = (firstDoc['activities'] as List?) ?? [];
           _dayType = firstDoc['dayType']?.toString();
+          _workStatus = firstDoc['workStatus']?.toString() ?? 'not_started';
+          _workStartTime = firstDoc['workStartTime'] != null
+              ? DateTime.tryParse(firstDoc['workStartTime'].toString())
+              : null;
+          _workCompletedTime = firstDoc['workCompletedTime'] != null
+              ? DateTime.tryParse(firstDoc['workCompletedTime'].toString())
+              : null;
         } else {
           _attendanceDocId = null;
           _rawActivities = [];
           _dayType = null;
+          _workStatus = 'not_started';
+          _workStartTime = null;
+          _workCompletedTime = null;
         }
       } else {
         _attendanceDocId = null;
@@ -826,6 +840,7 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           await _fetchEmployeeProfile();
           await _fetchAttendance();
+          await _fetchDailyTasks();
           _lastPunchOutType = null;
           await _storage.delete(key: 'lastPunchOutType');
         }
@@ -855,6 +870,7 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           await _fetchEmployeeProfile();
           await _fetchAttendance();
+          await _fetchDailyTasks();
           _lastPunchOutType = null;
           await _storage.delete(key: 'lastPunchOutType');
         }
@@ -2089,6 +2105,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
 
+                      _buildWorkStatusSection(),
+
                       const SizedBox(height: 24),
                       GestureDetector(
                         onTap: () {
@@ -2414,6 +2432,15 @@ class _ProfilePageState extends State<ProfilePage> {
             _dailyTasks = List<Map<String, dynamic>>.from(
               (res['tasks'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
             );
+            if (res['workStatus'] != null) {
+              _workStatus = res['workStatus'].toString();
+            }
+            if (res['workStartTime'] != null) {
+              _workStartTime = DateTime.tryParse(res['workStartTime'].toString());
+            }
+            if (res['workCompletedTime'] != null) {
+              _workCompletedTime = DateTime.tryParse(res['workCompletedTime'].toString());
+            }
           });
         }
       }
@@ -2484,6 +2511,262 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _handleStartWork() async {
+    if (_isStartingWork) return;
+    setState(() => _isStartingWork = true);
+
+    try {
+      final res = await ApiService.instance.startWork();
+      if (res['success'] == true) {
+        final now = DateTime.now();
+        setState(() {
+          _workStatus = 'in_progress';
+          _workStartTime = now;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.play_circle_fill, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Work officially started! 🚀 Good luck!')),
+                ],
+              ),
+              backgroundColor: Color(0xFF00C853),
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const DailyTasksPage()),
+          ).then((_) {
+            _fetchAttendance();
+            _fetchDailyTasks();
+          });
+        }
+      } else {
+        throw Exception(res['message'] ?? 'Failed to start work');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start work: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isStartingWork = false);
+    }
+  }
+
+  Widget _buildWorkStatusSection() {
+    final hasPunchedIn = _hasActiveSession || _attendanceDocId != null;
+
+    if (!hasPunchedIn && _workStatus == 'not_started') {
+      return const SizedBox.shrink();
+    }
+
+    if (_workStatus == 'not_started') {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1565C0),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 2,
+            ),
+            onPressed: _isStartingWork ? null : _handleStartWork,
+            icon: _isStartingWork
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.rocket_launch_rounded, size: 20),
+            label: Text(
+              _isStartingWork ? 'Starting Work...' : 'Start My Work 🚀',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_workStatus == 'in_progress') {
+      final startTimeStr = _workStartTime != null
+          ? DateFormat('hh:mm a').format(_workStartTime!)
+          : 'Just now';
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE3F2FD),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF1E88E5).withValues(alpha: 0.35),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E88E5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Work In Progress ⏱️',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0D47A1),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Started at $startTimeStr',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DailyTasksPage(),
+                    ),
+                  ).then((_) {
+                    _fetchAttendance();
+                    _fetchDailyTasks();
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E88E5),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.assignment, size: 16),
+                label: const Text(
+                  'Tasks',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_workStatus == 'completed') {
+      final startStr = _workStartTime != null
+          ? DateFormat('hh:mm a').format(_workStartTime!)
+          : null;
+      final completedStr = _workCompletedTime != null
+          ? DateFormat('hh:mm a').format(_workCompletedTime!)
+          : null;
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F5E9),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2E7D32),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Work Completed Today 🎉',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1B5E20),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (startStr != null && completedStr != null)
+                          ? '$startStr - $completedStr'
+                          : 'All daily tasks completed!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[800],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   Widget _buildDailyTasksSection() {
     final answeredCount = _dailyTasks.where((t) {
       final s = t['status']?.toString();
@@ -2502,7 +2785,10 @@ class _ProfilePageState extends State<ProfilePage> {
           MaterialPageRoute(
             builder: (context) => const DailyTasksPage(),
           ),
-        ).then((_) => _fetchDailyTasks());
+        ).then((_) {
+          _fetchAttendance();
+          _fetchDailyTasks();
+        });
       },
       child: Container(
         width: double.infinity,

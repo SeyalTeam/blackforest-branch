@@ -14,6 +14,7 @@ class DailyTasksPage extends StatefulWidget {
 class _DailyTasksPageState extends State<DailyTasksPage> {
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = true;
+  bool _isCompletingWork = false;
   List<Map<String, dynamic>> _tasks = [];
   final Set<String> _togglingTaskIds = {};
   String _filter = 'all'; // 'all' | 'pending' | 'completed'
@@ -1243,34 +1244,62 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {
-              if (!allAnswered) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Please answer all questions ($remainingCount remaining).'),
-                    backgroundColor: Colors.orange[800],
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.white),
-                        SizedBox(width: 8),
-                        Expanded(child: Text('All tasks completed and recorded!')),
-                      ],
-                    ),
-                    backgroundColor: Color(0xFF15803D),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-                Future.delayed(const Duration(milliseconds: 600), () {
-                  if (mounted) Navigator.pop(context);
-                });
-              }
-            },
+            onTap: _isCompletingWork
+                ? null
+                : () async {
+                    if (!allAnswered) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Please answer all questions ($remainingCount remaining).'),
+                          backgroundColor: Colors.orange[800],
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    setState(() => _isCompletingWork = true);
+                    try {
+                      final res = await ApiService.instance.completeWork();
+                      final nowTime = DateTime.now();
+                      final timeStr = DateFormat('hh:mm a').format(nowTime);
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: Colors.white),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Work officially completed and recorded in Attendance at $timeStr! ✓',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: const Color(0xFF15803D),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                        Future.delayed(const Duration(milliseconds: 700), () {
+                          if (mounted) Navigator.pop(context, true);
+                        });
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to record work completion: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isCompletingWork = false);
+                    }
+                  },
             borderRadius: BorderRadius.circular(16),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
@@ -1289,18 +1318,27 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 26,
-                  ),
+                  _isCompletingWork
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 26,
+                        ),
                   const SizedBox(width: 12),
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'COMPLETE MY WORK',
-                        style: TextStyle(
+                      Text(
+                        _isCompletingWork ? 'RECORDING COMPLETION...' : 'COMPLETE MY WORK',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
