@@ -2107,6 +2107,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
                       _buildWorkStatusSection(),
 
+                      _buildRoutineTasksSection(),
+
                       const SizedBox(height: 24),
                       GestureDetector(
                         onTap: () {
@@ -2179,8 +2181,6 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      _buildDailyTasksSection(),
                     ],
                   ),
                 ),
@@ -2767,115 +2767,457 @@ class _ProfilePageState extends State<ProfilePage> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildDailyTasksSection() {
-    final answeredCount = _dailyTasks.where((t) {
-      final s = t['status']?.toString();
-      return (s != null && s.isNotEmpty) || t['completed'] == true;
-    }).length;
-    final yesCount = _dailyTasks.where((t) {
-      final s = t['status']?.toString();
-      return s == 'yes' || s == 'no_complaint' || (s == null && t['completed'] == true);
-    }).length;
-    final totalCount = _dailyTasks.length;
+  bool _isRoutineTask(Map<String, dynamic> task) {
+    final labels = task['labels'];
+    if (labels is List) {
+      for (final l in labels) {
+        if (l is Map) {
+          final text = (l['text'] ?? l['name'] ?? l['label'])?.toString().toLowerCase().trim();
+          if (text == 'routine') return true;
+        } else if (l is String) {
+          if (l.toLowerCase().trim() == 'routine') return true;
+        }
+      }
+    }
+    final singleLabel = task['label']?.toString().toLowerCase().trim();
+    if (singleLabel == 'routine') return true;
+    return false;
+  }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const DailyTasksPage(),
-          ),
-        ).then((_) {
-          _fetchAttendance();
-          _fetchDailyTasks();
+  bool _isTaskYes(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    if (status == 'yes') return true;
+    if (status == null && task['completed'] == true) return true;
+    return false;
+  }
+
+  bool _isTaskNo(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    return status == 'no';
+  }
+
+  bool _isTaskNoComplaint(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    return status == 'no_complaint';
+  }
+
+  bool _isTaskAnswered(Map<String, dynamic> task) {
+    return _isTaskYes(task) || _isTaskNo(task) || _isTaskNoComplaint(task);
+  }
+
+  String _getYesButtonText(Map<String, dynamic> task) {
+    final customYes = task['yesText']?.toString().trim();
+    if (customYes != null && customYes.isNotEmpty) {
+      return customYes.contains('✓') ? customYes : '$customYes ✓';
+    }
+    final title = task['title']?.toString() ?? '';
+    final desc = task['description']?.toString() ?? '';
+    final lower = '$title $desc'.toLowerCase();
+    if (lower.contains('தயாரா') || lower.contains('ready')) {
+      return "Yes, I'm Ready ✓";
+    }
+    return 'Yes ✓';
+  }
+
+  Widget _buildTaskIconWidget(Map<String, dynamic> task) {
+    final title = task['title']?.toString() ?? '';
+    final desc = task['description']?.toString() ?? '';
+    final iconField = task['icon']?.toString().trim() ?? '';
+
+    String emoji = '';
+    if (iconField.isNotEmpty) {
+      switch (iconField) {
+        case 'smile':
+          final lowerCase = '$title $desc'.toLowerCase();
+          if (lowerCase.contains('தயாரா') || lowerCase.contains('ready') || lowerCase.contains('smile') || lowerCase.contains('மனநிலை')) {
+            emoji = '😊';
+          }
+          break;
+        case 'brain':
+          emoji = '🧠';
+          break;
+        case 'cleaning':
+          emoji = '🧹';
+          break;
+        case 'settings':
+          emoji = '⚙️';
+          break;
+        case 'complaint':
+          emoji = '💬';
+          break;
+        case 'team':
+          emoji = '👥';
+          break;
+        case 'checklist':
+          emoji = '📋';
+          break;
+        case 'hygiene':
+          emoji = '🧼';
+          break;
+        case 'cash':
+          emoji = '💰';
+          break;
+        case 'inventory':
+          emoji = '📦';
+          break;
+        case 'time':
+          emoji = '⏰';
+          break;
+        case 'uniform':
+          emoji = '⭐';
+          break;
+        case 'food':
+          emoji = '🍲';
+          break;
+        case 'cake':
+          emoji = '🎂';
+          break;
+        default:
+          emoji = iconField;
+      }
+    }
+
+    if (emoji.isEmpty) {
+      final lower = '$title $desc'.toLowerCase();
+      if (lower.contains('தயாரா') || lower.contains('ready') || lower.contains('work') || lower.contains('வேலைக்கு')) {
+        emoji = '😊';
+      } else if (lower.contains('மனநிலை') || lower.contains('mind') || lower.contains('mental') || lower.contains('brain')) {
+        emoji = '🧠';
+      } else if (lower.contains('complaint') || lower.contains('புகார்') || lower.contains('customer') || lower.contains('வாடிக்கையாளர்')) {
+        emoji = '💬';
+      } else if (lower.contains('clean') || lower.contains('neat') || lower.contains('sweep') || lower.contains('தூய்மை') || lower.contains('சுத்தம்')) {
+        emoji = '🧹';
+      } else if (lower.contains('equipment') || lower.contains('machine') || lower.contains('கருவி') || lower.contains('maintain')) {
+        emoji = '⚙️';
+      } else if (lower.contains('team') || lower.contains('support') || lower.contains('குழு') || lower.contains('உதவி')) {
+        emoji = '👥';
+      } else if (lower.contains('stock') || lower.contains('inventory') || lower.contains('பொருட்கள்')) {
+        emoji = '📦';
+      } else if (lower.contains('cash') || lower.contains('bill') || lower.contains('money') || lower.contains('பணம்')) {
+        emoji = '💰';
+      } else if (lower.contains('kitchen') || lower.contains('food') || lower.contains('cake') || lower.contains('சமையல்')) {
+        emoji = '🍲';
+      } else {
+        emoji = '📋';
+      }
+    }
+
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: 32),
+      ),
+    );
+  }
+
+  Future<void> _handleTaskAction(Map<String, dynamic> task, String targetStatus) async {
+    final taskId = task['id']?.toString() ?? '';
+    final currentStatus = task['status']?.toString();
+    if (currentStatus == targetStatus) return;
+
+    if (_togglingTaskIds.contains(taskId)) return;
+
+    final index = _dailyTasks.indexWhere((t) => t['id']?.toString() == taskId);
+    if (index == -1) return;
+
+    final bool targetCompleted = targetStatus == 'yes' || targetStatus == 'no_complaint';
+
+    // Optimistic UI update
+    setState(() {
+      _togglingTaskIds.add(taskId);
+      _dailyTasks[index]['status'] = targetStatus;
+      _dailyTasks[index]['completed'] = targetCompleted;
+      _dailyTasks[index]['completedAt'] = DateTime.now().toIso8601String();
+    });
+
+    try {
+      final res = await ApiService.instance.toggleDailyTask(
+        taskId: taskId,
+        status: targetStatus,
+        completed: targetCompleted,
+      );
+      if (res['success'] != true) {
+        // Revert on failure
+        if (mounted) {
+          setState(() {
+            _dailyTasks[index]['status'] = currentStatus;
+            _dailyTasks[index]['completed'] = currentStatus == 'yes';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error updating task: $e');
+      if (mounted) {
+        setState(() {
+          _dailyTasks[index]['status'] = currentStatus;
+          _dailyTasks[index]['completed'] = currentStatus == 'yes';
         });
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.indigo.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.assignment_turned_in_rounded,
-                color: Colors.indigo,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Work Tasks',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    totalCount == 0
-                        ? 'View and manage your daily tasks'
-                        : '$answeredCount of $totalCount answered ($yesCount Yes)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (totalCount > 0) ...[
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: answeredCount == totalCount
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : Colors.amber.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  answeredCount == totalCount
-                      ? 'Done ✓'
-                      : '$answeredCount / $totalCount',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: answeredCount == totalCount
-                        ? Colors.green[800]
-                        : Colors.amber[900],
-                  ),
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _togglingTaskIds.remove(taskId);
+        });
+      }
+    }
+  }
+
+  Widget _buildRoutineTasksSection() {
+    final routineTasks = _dailyTasks.where((t) => _isRoutineTask(t)).toList();
+    if (routineTasks.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Routine',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
               const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${routineTasks.where((t) => _isTaskAnswered(t)).length}/${routineTasks.length}',
+                  style: const TextStyle(
+                    color: Color(0xFF2E7D32),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
-            Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.grey[400],
-              size: 16,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: routineTasks.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final task = routineTasks[index];
+              final taskId = task['id']?.toString() ?? '';
+              final isYes = _isTaskYes(task);
+              final isNo = _isTaskNo(task);
+              final isNoComplaint = _isTaskNoComplaint(task);
+              final isAnswered = _isTaskAnswered(task);
+              final isToggling = _togglingTaskIds.contains(taskId);
+              final title = task['title']?.toString() ?? 'Task';
+              final desc = task['description']?.toString() ?? '';
+              final hasComplaintOption = title.toLowerCase().contains('complaint') ||
+                  title.contains('புகார்') ||
+                  desc.toLowerCase().contains('complaint') ||
+                  desc.contains('புகார்');
+              final yesButtonText = _getYesButtonText(task);
+
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: isYes
+                      ? const Color(0xFFF0FDF4)
+                      : (isNo
+                          ? const Color(0xFFFEF2F2)
+                          : (isNoComplaint ? const Color(0xFFF0F9FF) : Colors.white)),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: isYes
+                        ? const Color(0xFF86EFAC)
+                        : (isNo
+                            ? const Color(0xFFFECACA)
+                            : (isNoComplaint ? const Color(0xFFBAE6FD) : Colors.grey[200]!)),
+                    width: isAnswered ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTaskIconWidget(task),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: isYes
+                                  ? const Color(0xFF15803D)
+                                  : (isNo ? const Color(0xFF991B1B) : const Color(0xFF1E293B)),
+                              height: 1.25,
+                            ),
+                          ),
+                          if (desc.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              desc,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF64748B),
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: isToggling ? null : () => _handleTaskAction(task, 'yes'),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: isNo
+                                            ? const Color(0xFFDCFCE7)
+                                            : const Color(0xFF00C853),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: isNo
+                                            ? Border.all(color: const Color(0xFF86EFAC), width: 1)
+                                            : null,
+                                        boxShadow: !isNo
+                                            ? [
+                                                BoxShadow(
+                                                  color: const Color(0xFF00C853).withValues(alpha: 0.25),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                )
+                                              ]
+                                            : null,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: isToggling && isYes
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            )
+                                          : Text(
+                                              yesButtonText,
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              style: TextStyle(
+                                                color: isNo ? const Color(0xFF15803D) : Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: isToggling ? null : () => _handleTaskAction(task, 'no'),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: isNo ? const Color(0xFFDC2626) : const Color(0xFFFEE2E2),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: isNo ? null : Border.all(color: const Color(0xFFFECACA), width: 1),
+                                        boxShadow: isNo
+                                            ? [
+                                                BoxShadow(
+                                                  color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                )
+                                              ]
+                                            : null,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: isToggling && isNo
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            )
+                                          : Text(
+                                              'No',
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              style: TextStyle(
+                                                color: isNo ? Colors.white : const Color(0xFFDC2626),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                if (hasComplaintOption) ...[
+                                  const SizedBox(width: 8),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: isToggling ? null : () => _handleTaskAction(task, 'no_complaint'),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                        decoration: BoxDecoration(
+                                          color: isNoComplaint ? const Color(0xFF0284C7) : const Color(0xFFE0F2FE),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: isNoComplaint ? null : Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
+                                        ),
+                                        child: Text(
+                                          'No Complaint',
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          style: TextStyle(
+                                            color: isNoComplaint ? Colors.white : const Color(0xFF0284C7),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
