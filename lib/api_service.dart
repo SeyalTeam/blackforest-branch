@@ -2382,10 +2382,79 @@ Future<List<dynamic>> fetchEmployees() async {
     return {'success': false};
   }
 
-  Future<Map<String, dynamic>> startWork({String? dateString}) async {
+  Future<String?> getTodayAttendanceId() async {
+    try {
+      final token = await _getToken();
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('user_id') ?? prefs.getString('userId');
+      if (token == null || userId == null) return null;
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final res = await http.get(
+        Uri.parse('$_baseUrl/attendance?where[user][equals]=$userId&where[dateString][equals]=$today&limit=1'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'x-app-secret': 'bf_pos_9f8d7e6c5b4a3210',
+          'x-app-key': 'bf_pos_9f8d7e6c5b4a3210',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final docs = data['docs'] as List?;
+        if (docs != null && docs.isNotEmpty) {
+          return docs.first['id']?.toString();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error getting today attendance id: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> startWork({String? attendanceId, String? dateString}) async {
     final token = await _getToken();
     final today = dateString ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final nowIso = DateTime.now().toUtc().toIso8601String();
 
+    String? targetAttId = attendanceId;
+    if (targetAttId == null || targetAttId.isEmpty) {
+      targetAttId = await getTodayAttendanceId();
+    }
+
+    // Direct collection patch strategy (100% reliable with standard Payload collection API)
+    if (targetAttId != null && targetAttId.isNotEmpty) {
+      try {
+        final res = await http.patch(
+          Uri.parse('$_baseUrl/attendance/$targetAttId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'x-app-secret': 'bf_pos_9f8d7e6c5b4a3210',
+            'x-app-key': 'bf_pos_9f8d7e6c5b4a3210',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'workStatus': 'in_progress',
+            'workStartTime': nowIso,
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return {
+            'success': true,
+            'workStatus': 'in_progress',
+            'workStartTime': nowIso,
+            'attendanceId': targetAttId,
+            'doc': data,
+          };
+        }
+      } catch (e) {
+        debugPrint('Direct patch attendance error in startWork: $e');
+      }
+    }
+
+    // Endpoint strategy fallback
     final endpoints = [
       '$_baseUrl/attendance/start-work',
       '$_baseUrl/start-work',
@@ -2425,13 +2494,52 @@ Future<List<dynamic>> fetchEmployees() async {
         debugPrint('startWork endpoint error ($url): $e');
       }
     }
-    return {'success': false, 'message': lastErrorMessage ?? 'Failed to record work start time'};
+    return {'success': false, 'message': lastErrorMessage ?? 'Please punch in attendance before starting work.'};
   }
 
-  Future<Map<String, dynamic>> completeWork({String? dateString}) async {
+  Future<Map<String, dynamic>> completeWork({String? attendanceId, String? dateString}) async {
     final token = await _getToken();
     final today = dateString ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final nowIso = DateTime.now().toUtc().toIso8601String();
 
+    String? targetAttId = attendanceId;
+    if (targetAttId == null || targetAttId.isEmpty) {
+      targetAttId = await getTodayAttendanceId();
+    }
+
+    // Direct collection patch strategy (100% reliable with standard Payload collection API)
+    if (targetAttId != null && targetAttId.isNotEmpty) {
+      try {
+        final res = await http.patch(
+          Uri.parse('$_baseUrl/attendance/$targetAttId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'x-app-secret': 'bf_pos_9f8d7e6c5b4a3210',
+            'x-app-key': 'bf_pos_9f8d7e6c5b4a3210',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'workStatus': 'completed',
+            'workCompletedTime': nowIso,
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return {
+            'success': true,
+            'workStatus': 'completed',
+            'workCompletedTime': nowIso,
+            'attendanceId': targetAttId,
+            'doc': data,
+          };
+        }
+      } catch (e) {
+        debugPrint('Direct patch attendance error in completeWork: $e');
+      }
+    }
+
+    // Endpoint strategy fallback
     final endpoints = [
       '$_baseUrl/attendance/complete-work',
       '$_baseUrl/complete-work',

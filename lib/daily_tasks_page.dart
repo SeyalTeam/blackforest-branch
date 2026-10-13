@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import 'api_service.dart';
 
 class DailyTasksPage extends StatefulWidget {
-  const DailyTasksPage({super.key});
+  final String? attendanceId;
+  const DailyTasksPage({super.key, this.attendanceId});
 
   @override
   State<DailyTasksPage> createState() => _DailyTasksPageState();
@@ -15,6 +16,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = true;
   bool _isCompletingWork = false;
+  String? _attendanceId;
   List<Map<String, dynamic>> _tasks = [];
   final Set<String> _togglingTaskIds = {};
   String _filter = 'all'; // 'all' | 'pending' | 'completed'
@@ -22,6 +24,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
   @override
   void initState() {
     super.initState();
+    _attendanceId = widget.attendanceId;
     _fetchTasks();
   }
 
@@ -32,6 +35,9 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
       if (res['success'] == true && res['tasks'] is List) {
         if (mounted) {
           setState(() {
+            if (res['attendanceId'] != null) {
+              _attendanceId = res['attendanceId'].toString();
+            }
             _tasks = List<Map<String, dynamic>>.from(
               (res['tasks'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
             );
@@ -1260,7 +1266,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
 
                     setState(() => _isCompletingWork = true);
                     try {
-                      final res = await ApiService.instance.completeWork();
+                      final res = await ApiService.instance.completeWork(attendanceId: widget.attendanceId ?? _attendanceId);
                       final nowTime = DateTime.now();
                       final timeStr = DateFormat('hh:mm a').format(nowTime);
 

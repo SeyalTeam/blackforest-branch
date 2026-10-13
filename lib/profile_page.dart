@@ -2516,7 +2516,10 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isStartingWork = true);
 
     try {
-      final res = await ApiService.instance.startWork();
+      if (_attendanceDocId == null) {
+        await _fetchAttendance();
+      }
+      final res = await ApiService.instance.startWork(attendanceId: _attendanceDocId);
       if (res['success'] == true) {
         final now = DateTime.now();
         setState(() {
@@ -2540,7 +2543,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const DailyTasksPage()),
+            MaterialPageRoute(builder: (context) => DailyTasksPage(attendanceId: _attendanceDocId)),
           ).then((_) {
             _fetchAttendance();
             _fetchDailyTasks();
@@ -2669,7 +2672,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const DailyTasksPage(),
+                      builder: (context) => DailyTasksPage(attendanceId: _attendanceDocId),
                     ),
                   ).then((_) {
                     _fetchAttendance();
