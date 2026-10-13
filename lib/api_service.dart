@@ -2137,7 +2137,8 @@ Future<List<dynamic>> fetchEmployees() async {
             'isDaily': (t['frequency'] ?? (t['isDaily'] == false ? 'weekly' : 'daily')) == 'daily',
             'assignedRole': t['assignedRole'] ?? (t['column'] is Map ? t['column']['title'] : null),
             'requiresPhoto': t['requiresPhoto'] == true,
-            'completed': comp != null ? (comp['completed'] == true) : false,
+            'completed': comp != null ? (comp['completed'] == true || comp['status'] == 'yes' || comp['status'] == 'no_complaint') : false,
+            'status': comp?['status'] ?? (comp != null ? (comp['completed'] == true ? 'yes' : (comp['completedAt'] != null ? 'no' : null)) : null),
             'completedAt': comp?['completedAt'],
             'completionId': comp?['id'],
             'photo': comp?['photo'],
@@ -2197,6 +2198,7 @@ Future<List<dynamic>> fetchEmployees() async {
   Future<Map<String, dynamic>> toggleDailyTask({
     required String taskId,
     bool? completed,
+    String? status,
     String? dateString,
     String? notes,
     String? photoId,
@@ -2223,6 +2225,7 @@ Future<List<dynamic>> fetchEmployees() async {
           body: jsonEncode({
             'taskId': taskId,
             if (completed != null) 'completed': completed,
+            if (status != null) 'status': status,
             'dateString': today,
             if (notes != null) 'notes': notes,
             if (photoId != null) 'photo': photoId,
@@ -2273,6 +2276,8 @@ Future<List<dynamic>> fetchEmployees() async {
           }
         }
 
+        final String? resolvedStatus = status ?? (completed != null ? (completed ? 'yes' : 'no') : null);
+
         if (existingDoc != null) {
           final docId = existingDoc['id'];
           final currentTasks = List<Map<String, dynamic>>.from(
@@ -2287,23 +2292,33 @@ Future<List<dynamic>> fetchEmployees() async {
           final bool isComp;
           final String? compAt;
           if (taskIdx != -1) {
-            isComp = completed ?? !(currentTasks[taskIdx]['completed'] == true);
-            compAt = isComp ? (currentTasks[taskIdx]['completedAt'] ?? DateTime.now().toIso8601String()) : null;
+            if (status == 'yes' || status == 'no_complaint') {
+              isComp = true;
+            } else if (status == 'no') {
+              isComp = false;
+            } else if (completed != null) {
+              isComp = completed;
+            } else {
+              isComp = !(currentTasks[taskIdx]['completed'] == true);
+            }
+            compAt = isComp || status == 'no' ? (currentTasks[taskIdx]['completedAt'] ?? DateTime.now().toIso8601String()) : null;
             currentTasks[taskIdx] = {
               ...currentTasks[taskIdx],
               'task': taskId,
               'completed': isComp,
+              if (resolvedStatus != null) 'status': resolvedStatus,
               'completedAt': compAt,
               if (photoId != null) 'photo': photoId,
               if (photoUrl != null) 'photoUrl': photoUrl,
               if (notes != null) 'notes': notes,
             };
           } else {
-            isComp = completed ?? true;
-            compAt = isComp ? DateTime.now().toIso8601String() : null;
+            isComp = status == 'yes' || status == 'no_complaint' ? true : (status == 'no' ? false : (completed ?? true));
+            compAt = isComp || status == 'no' ? DateTime.now().toIso8601String() : null;
             currentTasks.add({
               'task': taskId,
               'completed': isComp,
+              if (resolvedStatus != null) 'status': resolvedStatus,
               'completedAt': compAt,
               if (photoId != null) 'photo': photoId,
               if (photoUrl != null) 'photoUrl': photoUrl,
@@ -2323,11 +2338,11 @@ Future<List<dynamic>> fetchEmployees() async {
             }),
           );
           if (patchRes.statusCode == 200) {
-            return {'success': true, 'completed': isComp, 'completedAt': compAt, 'doc': jsonDecode(patchRes.body)};
+            return {'success': true, 'completed': isComp, 'status': resolvedStatus, 'completedAt': compAt, 'doc': jsonDecode(patchRes.body)};
           }
         } else {
-          final isComp = completed ?? true;
-          final compAt = isComp ? DateTime.now().toIso8601String() : null;
+          final isComp = status == 'yes' || status == 'no_complaint' ? true : (status == 'no' ? false : (completed ?? true));
+          final compAt = isComp || status == 'no' ? DateTime.now().toIso8601String() : null;
           final postRes = await http.post(
             Uri.parse('$_baseUrl/task-completions'),
             headers: {
@@ -2344,6 +2359,7 @@ Future<List<dynamic>> fetchEmployees() async {
                 {
                   'task': taskId,
                   'completed': isComp,
+                  if (resolvedStatus != null) 'status': resolvedStatus,
                   'completedAt': compAt,
                   if (photoId != null) 'photo': photoId,
                   if (photoUrl != null) 'photoUrl': photoUrl,
@@ -2353,7 +2369,7 @@ Future<List<dynamic>> fetchEmployees() async {
             }),
           );
           if (postRes.statusCode == 200 || postRes.statusCode == 201) {
-            return {'success': true, 'completed': isComp, 'completedAt': compAt, 'doc': jsonDecode(postRes.body)};
+            return {'success': true, 'completed': isComp, 'status': resolvedStatus, 'completedAt': compAt, 'doc': jsonDecode(postRes.body)};
           }
         }
       }

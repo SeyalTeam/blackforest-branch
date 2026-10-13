@@ -2485,8 +2485,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildDailyTasksSection() {
-    final completedCount =
-        _dailyTasks.where((t) => t['completed'] == true).length;
+    final answeredCount = _dailyTasks.where((t) {
+      final s = t['status']?.toString();
+      return (s != null && s.isNotEmpty) || t['completed'] == true;
+    }).length;
+    final yesCount = _dailyTasks.where((t) {
+      final s = t['status']?.toString();
+      return s == 'yes' || s == 'no_complaint' || (s == null && t['completed'] == true);
+    }).length;
     final totalCount = _dailyTasks.length;
 
     return GestureDetector(
@@ -2543,7 +2549,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   Text(
                     totalCount == 0
                         ? 'View and manage your daily tasks'
-                        : '$completedCount of $totalCount tasks completed today',
+                        : '$answeredCount of $totalCount answered ($yesCount Yes)',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey[600],
@@ -2557,19 +2563,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: completedCount == totalCount
+                  color: answeredCount == totalCount
                       ? Colors.green.withValues(alpha: 0.15)
                       : Colors.amber.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  completedCount == totalCount
+                  answeredCount == totalCount
                       ? 'Done ✓'
-                      : '$completedCount / $totalCount',
+                      : '$answeredCount / $totalCount',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: completedCount == totalCount
+                    color: answeredCount == totalCount
                         ? Colors.green[800]
                         : Colors.amber[900],
                   ),

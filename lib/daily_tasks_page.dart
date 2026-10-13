@@ -53,85 +53,166 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
     }
   }
 
-  void _handleTaskAction(Map<String, dynamic> task) {
+  bool _isTaskYes(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    if (status == 'yes') return true;
+    if (status == null && task['completed'] == true) return true;
+    return false;
+  }
+
+  bool _isTaskNo(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    return status == 'no';
+  }
+
+  bool _isTaskNoComplaint(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    return status == 'no_complaint';
+  }
+
+  bool _isTaskAnswered(Map<String, dynamic> task) {
+    final status = task['status']?.toString().toLowerCase().trim();
+    if (status != null && status.isNotEmpty) return true;
+    if (task['completed'] == true) return true;
+    return false;
+  }
+
+  IconData _getTaskIcon(String title, String desc) {
+    final lower = '$title $desc'.toLowerCase();
+    if (lower.contains('complaint') || lower.contains('புகார்') || lower.contains('customer') || lower.contains('வாடிக்கையாளர்')) {
+      return Icons.chat_bubble_rounded;
+    }
+    if (lower.contains('equipment') || lower.contains('machine') || lower.contains('clean & maintain') || lower.contains('கருவி')) {
+      return Icons.settings_rounded;
+    }
+    if (lower.contains('clean') || lower.contains('neat') || lower.contains('sweep') || lower.contains('தூய்மை') || lower.contains('சுத்தம்')) {
+      return Icons.cleaning_services_rounded;
+    }
+    if (lower.contains('team') || lower.contains('support') || lower.contains('cooperate') || lower.contains('குழு') || lower.contains('உதவி')) {
+      return Icons.groups_rounded;
+    }
+    if (lower.contains('stock') || lower.contains('order') || lower.contains('inventory') || lower.contains('பொருட்கள்')) {
+      return Icons.inventory_2_rounded;
+    }
+    if (lower.contains('cash') || lower.contains('bill') || lower.contains('money') || lower.contains('பணம்')) {
+      return Icons.payments_rounded;
+    }
+    if (lower.contains('kitchen') || lower.contains('food') || lower.contains('cake') || lower.contains('bake') || lower.contains('சமையல்')) {
+      return Icons.restaurant_rounded;
+    }
+    return Icons.task_alt_rounded;
+  }
+
+  Color _getTaskIconColor(String title, String desc) {
+    final lower = '$title $desc'.toLowerCase();
+    if (lower.contains('complaint') || lower.contains('புகார்') || lower.contains('customer')) {
+      return const Color(0xFFF59E0B);
+    }
+    if (lower.contains('equipment') || lower.contains('machine') || lower.contains('clean & maintain') || lower.contains('கருவி')) {
+      return const Color(0xFF334155);
+    }
+    if (lower.contains('clean') || lower.contains('neat') || lower.contains('sweep') || lower.contains('தூய்மை') || lower.contains('சுத்தம்')) {
+      return const Color(0xFFEA580C);
+    }
+    if (lower.contains('team') || lower.contains('support') || lower.contains('cooperate') || lower.contains('குழு') || lower.contains('உதவி')) {
+      return const Color(0xFF2563EB);
+    }
+    return const Color(0xFF2E3192);
+  }
+
+  Future<void> _handleTaskAction(Map<String, dynamic> task, String targetStatus) async {
     final taskId = task['id']?.toString() ?? '';
-    final isCompleted = task['completed'] == true;
+    final currentStatus = task['status']?.toString();
     final requiresPhoto = task['requiresPhoto'] == true;
 
-    if (isCompleted) {
-      // Confirm unmark if task is completed
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Mark as Incomplete?'),
-          content: Text('Are you sure you want to mark "${task['title']}" as not completed?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _toggleTask(taskId, isCompleted);
-              },
-              child: const Text('Unmark', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Completing task: check if photo proof required
+    if (currentStatus == targetStatus) {
+      return;
+    }
+
+    if (targetStatus == 'yes') {
       if (requiresPhoto) {
         _showPhotoProofSheet(task);
       } else {
-        _toggleTask(taskId, isCompleted);
+        await _updateTaskStatus(taskId, 'yes');
       }
+    } else if (targetStatus == 'no') {
+      // Direct update to 'no' - no photo required!
+      await _updateTaskStatus(taskId, 'no');
+    } else if (targetStatus == 'no_complaint') {
+      await _updateTaskStatus(taskId, 'no_complaint');
     }
   }
 
-  Future<void> _toggleTask(String taskId, bool currentCompleted) async {
+  Future<void> _updateTaskStatus(
+    String taskId,
+    String targetStatus, {
+    String? photoId,
+    String? photoUrl,
+    String? notes,
+  }) async {
     if (_togglingTaskIds.contains(taskId)) return;
 
-    final targetCompleted = !currentCompleted;
+    final index = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
+    if (index == -1) return;
+
+    final previousStatus = _tasks[index]['status']?.toString();
+    final previousCompleted = _tasks[index]['completed'] == true;
+    final previousCompletedAt = _tasks[index]['completedAt'];
+    final previousPhotoUrl = _tasks[index]['photoUrl'];
+
+    final bool targetCompleted = targetStatus == 'yes' || targetStatus == 'no_complaint';
 
     // Optimistic UI update
     setState(() {
       _togglingTaskIds.add(taskId);
-      final index = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
-      if (index != -1) {
-        _tasks[index]['completed'] = targetCompleted;
-        if (targetCompleted) {
-          _tasks[index]['completedAt'] = DateTime.now().toIso8601String();
-        } else {
-          _tasks[index]['completedAt'] = null;
-        }
-      }
+      _tasks[index]['status'] = targetStatus;
+      _tasks[index]['completed'] = targetCompleted;
+      _tasks[index]['completedAt'] = DateTime.now().toIso8601String();
+      if (photoId != null) _tasks[index]['photo'] = photoId;
+      if (photoUrl != null) _tasks[index]['photoUrl'] = photoUrl;
+      if (notes != null) _tasks[index]['notes'] = notes;
     });
 
     try {
       final res = await ApiService.instance.toggleDailyTask(
         taskId: taskId,
+        status: targetStatus,
         completed: targetCompleted,
+        photoId: photoId,
+        photoUrl: photoUrl,
+        notes: notes,
       );
+
       if (res['success'] != true) {
         // Revert on failure
         if (mounted) {
           setState(() {
-            final index = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
-            if (index != -1) {
-              _tasks[index]['completed'] = currentCompleted;
+            final idx = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
+            if (idx != -1) {
+              _tasks[idx]['status'] = previousStatus;
+              _tasks[idx]['completed'] = previousCompleted;
+              _tasks[idx]['completedAt'] = previousCompletedAt;
+              _tasks[idx]['photoUrl'] = previousPhotoUrl;
             }
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update task status in database.'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
     } catch (e) {
-      debugPrint('Error toggling task: $e');
+      debugPrint('Error updating task: $e');
       if (mounted) {
         setState(() {
-          final index = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
-          if (index != -1) {
-            _tasks[index]['completed'] = currentCompleted;
+          final idx = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
+          if (idx != -1) {
+            _tasks[idx]['status'] = previousStatus;
+            _tasks[idx]['completed'] = previousCompleted;
+            _tasks[idx]['completedAt'] = previousCompletedAt;
+            _tasks[idx]['photoUrl'] = previousPhotoUrl;
           }
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -211,6 +292,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                 // 2. Toggle task complete with photo proof
                 final res = await ApiService.instance.toggleDailyTask(
                   taskId: taskId,
+                  status: 'yes',
                   completed: true,
                   photoId: photoId,
                   photoUrl: photoUrl,
@@ -222,6 +304,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                     setState(() {
                       final idx = _tasks.indexWhere((t) => t['id']?.toString() == taskId);
                       if (idx != -1) {
+                        _tasks[idx]['status'] = 'yes';
                         _tasks[idx]['completed'] = true;
                         _tasks[idx]['completedAt'] = DateTime.now().toIso8601String();
                         _tasks[idx]['photo'] = photoId;
@@ -608,15 +691,19 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
 
   @override
   Widget build(BuildContext context) {
-    final completedCount = _tasks.where((t) => t['completed'] == true).length;
     final totalCount = _tasks.length;
-    final pendingCount = totalCount - completedCount;
+    final answeredCount = _tasks.where(_isTaskAnswered).length;
+    final yesCount = _tasks.where(_isTaskYes).length;
+    final noCount = _tasks.where(_isTaskNo).length;
+    final pendingCount = totalCount - answeredCount;
 
     List<Map<String, dynamic>> displayedTasks = _tasks;
     if (_filter == 'pending') {
-      displayedTasks = displayedTasks.where((t) => t['completed'] != true).toList();
-    } else if (_filter == 'completed') {
-      displayedTasks = displayedTasks.where((t) => t['completed'] == true).toList();
+      displayedTasks = displayedTasks.where((t) => !_isTaskAnswered(t)).toList();
+    } else if (_filter == 'yes' || _filter == 'completed') {
+      displayedTasks = displayedTasks.where(_isTaskYes).toList();
+    } else if (_filter == 'no') {
+      displayedTasks = displayedTasks.where(_isTaskNo).toList();
     }
 
     if (_frequencyFilter != 'all') {
@@ -653,11 +740,12 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
           ),
         ],
       ),
+      bottomNavigationBar: _buildCompleteWorkBottomBar(totalCount, answeredCount),
       body: RefreshIndicator(
         onRefresh: _fetchTasks,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -702,25 +790,31 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Task Progress',
-                              style: TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              totalCount == 0
-                                  ? '0 Tasks'
-                                  : '$completedCount / $totalCount Completed',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                totalCount == 0
+                                    ? 'Daily Tasks'
+                                    : '$yesCount Yes • $noCount No • $pendingCount Pending',
+                                style: const TextStyle(color: Colors.white70, fontSize: 13),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              Text(
+                                totalCount == 0
+                                    ? '0 Tasks'
+                                    : (answeredCount == totalCount
+                                        ? 'All $totalCount Answered ✓'
+                                        : '$answeredCount / $totalCount Answered'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -731,7 +825,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                           child: Text(
                             totalCount == 0
                                 ? '0%'
-                                : '${((completedCount / totalCount) * 100).round()}%',
+                                : '${((answeredCount / totalCount) * 100).round()}%',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -745,7 +839,7 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: LinearProgressIndicator(
-                        value: totalCount > 0 ? (completedCount / totalCount) : 0.0,
+                        value: totalCount > 0 ? (answeredCount / totalCount) : 0.0,
                         minHeight: 8,
                         backgroundColor: Colors.white.withValues(alpha: 0.25),
                         valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
@@ -755,18 +849,23 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
 
-              // 2. FILTER TABS (All | Pending | Completed)
+              // 2. FILTER TABS (All | Pending | Yes | No)
               if (totalCount > 0) ...[
-                Row(
-                  children: [
-                    _buildFilterChip('All', 'all', totalCount),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Pending', 'pending', pendingCount),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Completed', 'completed', completedCount),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip('All', 'all', totalCount),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Pending', 'pending', pendingCount),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Yes', 'yes', yesCount),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('No', 'no', noCount),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 SingleChildScrollView(
@@ -854,7 +953,10 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                   itemBuilder: (context, index) {
                     final task = displayedTasks[index];
                     final taskId = task['id']?.toString() ?? '';
-                    final isCompleted = task['completed'] == true;
+                    final isYes = _isTaskYes(task);
+                    final isNo = _isTaskNo(task);
+                    final isNoComplaint = _isTaskNoComplaint(task);
+                    final isAnswered = _isTaskAnswered(task);
                     final isToggling = _togglingTaskIds.contains(taskId);
                     final title = task['title']?.toString() ?? 'Task';
                     final desc = task['description']?.toString() ?? '';
@@ -862,8 +964,14 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                         task['priority']?.toString().toLowerCase() ?? 'medium';
                     final assignedRole = task['assignedRole']?.toString() ?? '';
                     final completedAtStr = task['completedAt']?.toString();
+                    final requiresPhoto = task['requiresPhoto'] == true;
 
                     final frequency = task['frequency']?.toString().toLowerCase().trim() ?? 'daily';
+
+                    final hasComplaintOption = title.toLowerCase().contains('complaint') ||
+                        title.contains('புகார்') ||
+                        desc.toLowerCase().contains('complaint') ||
+                        desc.contains('புகார்');
 
                     Color freqBg = Colors.blue.withValues(alpha: 0.08);
                     Color freqFg = Colors.blue[800]!;
@@ -899,21 +1007,13 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                         final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
                         final timeStr = DateFormat('hh:mm a').format(dt);
                         if (frequency == 'hourly') {
-                          completionStatusText = 'Done this hour • $timeStr';
+                          completionStatusText = 'Done • $timeStr';
                         } else if (frequency == 'weekly') {
-                          if (isToday) {
-                            completionStatusText = 'Done this week • Today $timeStr';
-                          } else {
-                            completionStatusText = 'Done this week • ${DateFormat('EEE, MMM d').format(dt)}';
-                          }
+                          completionStatusText = isToday ? 'Done • Today $timeStr' : 'Done • ${DateFormat('EEE, MMM d').format(dt)}';
                         } else if (frequency == 'monthly') {
-                          if (isToday) {
-                            completionStatusText = 'Done this month • Today $timeStr';
-                          } else {
-                            completionStatusText = 'Done this month • ${DateFormat('MMM d').format(dt)}';
-                          }
+                          completionStatusText = isToday ? 'Done • Today $timeStr' : 'Done • ${DateFormat('MMM d').format(dt)}';
                         } else {
-                          completionStatusText = 'Done today at $timeStr';
+                          completionStatusText = 'Done • $timeStr';
                         }
                       } catch (_) {
                         completionStatusText = 'Done';
@@ -933,222 +1033,172 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                       priorityFg = Colors.blue[700]!;
                     }
 
-                    return InkWell(
-                      onTap: isToggling ? null : () => _handleTaskAction(task),
-                      borderRadius: BorderRadius.circular(14),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isCompleted
-                              ? Colors.green.withValues(alpha: 0.04)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: isCompleted
-                                ? Colors.green.withValues(alpha: 0.35)
-                                : Colors.grey[200]!,
-                            width: isCompleted ? 1.5 : 1,
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: isYes
+                            ? const Color(0xFFF0FDF4)
+                            : (isNo
+                                ? const Color(0xFFFEF2F2)
+                                : (isNoComplaint ? const Color(0xFFF0F9FF) : Colors.white)),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
+                        ],
+                        border: Border.all(
+                          color: isYes
+                              ? const Color(0xFF86EFAC)
+                              : (isNo
+                                  ? const Color(0xFFFECACA)
+                                  : (isNoComplaint ? const Color(0xFFBAE6FD) : Colors.grey[200]!)),
+                          width: isAnswered ? 1.5 : 1,
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: isToggling
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Checkbox(
-                                        value: isCompleted,
-                                        activeColor: Colors.green,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        onChanged: isToggling
-                                            ? null
-                                            : (_) => _handleTaskAction(task),
-                                      ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Number Badge (matches user screenshot)
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+                          ),
+                          const SizedBox(width: 8),
+
+                          // 2. Icon (matches user screenshot)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              _getTaskIcon(title, desc),
+                              color: _getTaskIconColor(title, desc),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+
+                          // 3. Title, description & tags
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isYes
+                                        ? const Color(0xFF15803D)
+                                        : (isNo ? const Color(0xFF991B1B) : const Color(0xFF1E293B)),
+                                    height: 1.25,
+                                  ),
+                                ),
+                                if (desc.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
                                   Text(
-                                    title,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: isCompleted
-                                          ? Colors.grey[500]
-                                          : Colors.black87,
-                                      decoration: isCompleted
-                                          ? TextDecoration.lineThrough
-                                          : TextDecoration.none,
+                                    desc,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                      height: 1.25,
                                     ),
                                   ),
-                                  if (desc.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      desc,
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        color: Colors.grey[600],
-                                        height: 1.3,
+                                ],
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 5,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    // Priority pill
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: priorityBg,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        priority.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: priorityFg,
+                                        ),
                                       ),
                                     ),
-                                  ],
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: priorityBg,
-                                          borderRadius: BorderRadius.circular(5),
-                                        ),
-                                        child: Text(
-                                          priority.toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: priorityFg,
-                                          ),
-                                        ),
+                                    // Recurrence pill
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: freqBg,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: freqBorder, width: 0.8),
                                       ),
-                                      // Recurrence frequency badge (HOURLY, DAILY, WEEKLY, MONTHLY)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: freqBg,
-                                          borderRadius: BorderRadius.circular(5),
-                                          border: Border.all(
-                                            color: freqBorder,
-                                            width: 0.8,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              freqIcon,
-                                              size: 10.5,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(freqIcon, size: 9.5, color: freqFg),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            freqLabel,
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.bold,
                                               color: freqFg,
                                             ),
-                                            const SizedBox(width: 3.5),
-                                            Text(
-                                              freqLabel,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: freqFg,
-                                              ),
-                                            ),
-                                          ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (assignedRole.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          assignedRole.toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.purple[700],
+                                          ),
                                         ),
                                       ),
-                                      if (assignedRole.isNotEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 3,
-                                          ),
+                                    // Photo proof requirement / preview pill
+                                    if (requiresPhoto)
+                                      GestureDetector(
+                                        onTap: isYes && (task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty)
+                                            ? () => _showImagePreviewDialog(task['photoUrl'].toString(), title)
+                                            : (isToggling ? null : () => _handleTaskAction(task, 'yes')),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: Colors.purple.withValues(alpha: 0.08),
-                                            borderRadius: BorderRadius.circular(5),
-                                          ),
-                                          child: Text(
-                                            assignedRole.toUpperCase(),
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.purple[700],
-                                            ),
-                                          ),
-                                        ),
-                                      if (task['requiresPhoto'] == true)
-                                        GestureDetector(
-                                          onTap: isCompleted && (task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty)
-                                              ? () => _showImagePreviewDialog(task['photoUrl'].toString(), title)
-                                              : (isToggling ? null : () => _handleTaskAction(task)),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 7,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isCompleted
-                                                  ? Colors.teal.withValues(alpha: 0.12)
-                                                  : Colors.amber.withValues(alpha: 0.16),
-                                              borderRadius: BorderRadius.circular(5),
-                                              border: Border.all(
-                                                color: isCompleted
-                                                    ? Colors.teal.withValues(alpha: 0.35)
-                                                    : Colors.amber.withValues(alpha: 0.45),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  isCompleted ? Icons.camera_alt : Icons.add_a_photo,
-                                                  size: 11,
-                                                  color: isCompleted ? Colors.teal[800] : Colors.amber[900],
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  isCompleted ? 'PHOTO PROOF' : 'PHOTO REQUIRED',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isCompleted ? Colors.teal[800] : Colors.amber[900],
-                                                  ),
-                                                ),
-                                                if (isCompleted && task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty) ...[
-                                                  const SizedBox(width: 3),
-                                                  Icon(Icons.open_in_new, size: 10, color: Colors.teal[800]),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      if (isCompleted)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 3,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(5),
+                                            color: isYes
+                                                ? Colors.teal.withValues(alpha: 0.12)
+                                                : Colors.amber.withValues(alpha: 0.16),
+                                            borderRadius: BorderRadius.circular(4),
                                             border: Border.all(
-                                              color: Colors.green.withValues(alpha: 0.3),
+                                              color: isYes
+                                                  ? Colors.teal.withValues(alpha: 0.35)
+                                                  : Colors.amber.withValues(alpha: 0.45),
                                               width: 0.8,
                                             ),
                                           ),
@@ -1156,56 +1206,297 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
-                                                Icons.check_circle_rounded,
-                                                size: 11,
-                                                color: Colors.green[800],
+                                                isYes ? Icons.camera_alt : Icons.add_a_photo,
+                                                size: 10.5,
+                                                color: isYes ? Colors.teal[800] : Colors.amber[900],
                                               ),
-                                              const SizedBox(width: 4),
+                                              const SizedBox(width: 3),
                                               Text(
-                                                completionStatusText,
+                                                isYes ? 'PHOTO PROOF' : 'PHOTO REQ',
                                                 style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.green[800],
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isYes ? Colors.teal[800] : Colors.amber[900],
                                                 ),
                                               ),
+                                              if (isYes && task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty) ...[
+                                                const SizedBox(width: 2),
+                                                Icon(Icons.open_in_new, size: 9.5, color: Colors.teal[800]),
+                                              ],
                                             ],
                                           ),
                                         ),
-                                    ],
+                                      ),
+                                    // Status tag
+                                    if (isAnswered)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isYes
+                                              ? Colors.green.withValues(alpha: 0.1)
+                                              : (isNo ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1)),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: isYes
+                                                ? Colors.green.withValues(alpha: 0.3)
+                                                : (isNo ? Colors.red.withValues(alpha: 0.3) : Colors.blue.withValues(alpha: 0.3)),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isYes ? Icons.check_circle_rounded : (isNo ? Icons.cancel_rounded : Icons.info_rounded),
+                                              size: 10.5,
+                                              color: isYes ? Colors.green[800] : (isNo ? Colors.red[800] : Colors.blue[800]),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              isYes ? completionStatusText : (isNo ? 'No (Incomplete)' : 'No Complaint'),
+                                              style: TextStyle(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: isYes ? Colors.green[800] : (isNo ? Colors.red[800] : Colors.blue[800]),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+
+                          // 4. Action Buttons (Yes & No, matches user screenshot)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // YES BUTTON
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: isToggling ? null : () => _handleTaskAction(task, 'yes'),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        constraints: const BoxConstraints(minWidth: 48, minHeight: 32),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: isYes ? const Color(0xFF00C853) : const Color(0xFFDCFCE7),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: isYes ? null : Border.all(color: const Color(0xFF86EFAC), width: 1),
+                                          boxShadow: isYes
+                                              ? [
+                                                  BoxShadow(
+                                                    color: const Color(0xFF00C853).withValues(alpha: 0.25),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 2),
+                                                  )
+                                                ]
+                                              : null,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: isToggling && isYes
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                              )
+                                            : Text(
+                                                'Yes',
+                                                style: TextStyle(
+                                                  color: isYes ? Colors.white : const Color(0xFF15803D),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // NO BUTTON
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: isToggling ? null : () => _handleTaskAction(task, 'no'),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        constraints: const BoxConstraints(minWidth: 48, minHeight: 32),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: isNo ? const Color(0xFFDC2626) : const Color(0xFFFEE2E2),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: isNo ? null : Border.all(color: const Color(0xFFFECACA), width: 1),
+                                          boxShadow: isNo
+                                              ? [
+                                                  BoxShadow(
+                                                    color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 2),
+                                                  )
+                                                ]
+                                              : null,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: isToggling && isNo
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                              )
+                                            : Text(
+                                                'No',
+                                                style: TextStyle(
+                                                  color: isNo ? Colors.white : const Color(0xFFDC2626),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            if (isCompleted && task['photoUrl'] != null && task['photoUrl'].toString().isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              GestureDetector(
-                                onTap: () => _showImagePreviewDialog(task['photoUrl'].toString(), title),
-                                child: Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.grey[300]!),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(7),
-                                    child: Image.network(
-                                      task['photoUrl'].toString(),
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
+                              if (hasComplaintOption) ...[
+                                const SizedBox(height: 6),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: isToggling ? null : () => _handleTaskAction(task, 'no_complaint'),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isNoComplaint ? const Color(0xFF0284C7) : const Color(0xFFE0F2FE),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: isNoComplaint ? null : Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
+                                      ),
+                                      child: Text(
+                                        'No Complaint',
+                                        style: TextStyle(
+                                          color: isNoComplaint ? Colors.white : const Color(0xFF0284C7),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompleteWorkBottomBar(int totalCount, int answeredCount) {
+    if (totalCount == 0) return const SizedBox.shrink();
+
+    final allAnswered = answeredCount == totalCount;
+    final remainingCount = totalCount - answeredCount;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 4),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (!allAnswered) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Please answer all questions ($remainingCount remaining).'),
+                    backgroundColor: Colors.orange[800],
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 8),
+                        Expanded(child: Text('All tasks completed and recorded!')),
+                      ],
+                    ),
+                    backgroundColor: Color(0xFF15803D),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                Future.delayed(const Duration(milliseconds: 600), () {
+                  if (mounted) Navigator.pop(context);
+                });
+              }
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+              decoration: BoxDecoration(
+                color: allAnswered ? const Color(0xFF2E3192) : const Color(0xFF78909C),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'COMPLETE MY WORK',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        allAnswered
+                            ? '(All $totalCount questions answered ✓)'
+                            : '(Please answer all questions)',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
