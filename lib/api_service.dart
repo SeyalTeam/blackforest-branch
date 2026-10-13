@@ -2389,7 +2389,10 @@ Future<List<dynamic>> fetchEmployees() async {
     final endpoints = [
       '$_baseUrl/attendance/start-work',
       '$_baseUrl/start-work',
+      '$_baseUrl/daily-tasks/start-work',
     ];
+
+    String? lastErrorMessage;
 
     for (final url in endpoints) {
       try {
@@ -2398,6 +2401,8 @@ Future<List<dynamic>> fetchEmployees() async {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'x-app-secret': 'bf_pos_9f8d7e6c5b4a3210',
+            'x-app-key': 'bf_pos_9f8d7e6c5b4a3210',
             if (token != null) 'Authorization': 'Bearer $token',
           },
           body: jsonEncode({
@@ -2407,11 +2412,20 @@ Future<List<dynamic>> fetchEmployees() async {
         if (res.statusCode == 200) {
           return jsonDecode(res.body) as Map<String, dynamic>;
         }
+        if (res.statusCode != 404) {
+          try {
+            final data = jsonDecode(res.body);
+            if (data is Map && data['message'] != null) {
+              lastErrorMessage = data['message'].toString();
+            }
+          } catch (_) {}
+          break;
+        }
       } catch (e) {
         debugPrint('startWork endpoint error ($url): $e');
       }
     }
-    return {'success': false, 'message': 'Failed to record work start time'};
+    return {'success': false, 'message': lastErrorMessage ?? 'Failed to record work start time'};
   }
 
   Future<Map<String, dynamic>> completeWork({String? dateString}) async {
@@ -2421,7 +2435,10 @@ Future<List<dynamic>> fetchEmployees() async {
     final endpoints = [
       '$_baseUrl/attendance/complete-work',
       '$_baseUrl/complete-work',
+      '$_baseUrl/daily-tasks/complete-work',
     ];
+
+    String? lastErrorMessage;
 
     for (final url in endpoints) {
       try {
@@ -2430,6 +2447,8 @@ Future<List<dynamic>> fetchEmployees() async {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'x-app-secret': 'bf_pos_9f8d7e6c5b4a3210',
+            'x-app-key': 'bf_pos_9f8d7e6c5b4a3210',
             if (token != null) 'Authorization': 'Bearer $token',
           },
           body: jsonEncode({
@@ -2439,11 +2458,20 @@ Future<List<dynamic>> fetchEmployees() async {
         if (res.statusCode == 200) {
           return jsonDecode(res.body) as Map<String, dynamic>;
         }
+        if (res.statusCode != 404) {
+          try {
+            final data = jsonDecode(res.body);
+            if (data is Map && data['message'] != null) {
+              lastErrorMessage = data['message'].toString();
+            }
+          } catch (_) {}
+          break;
+        }
       } catch (e) {
         debugPrint('completeWork endpoint error ($url): $e');
       }
     }
-    return {'success': false, 'message': 'Failed to record work completion time'};
+    return {'success': false, 'message': lastErrorMessage ?? 'Failed to record work completion time'};
   }
 }
 
