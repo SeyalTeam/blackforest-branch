@@ -2132,6 +2132,8 @@ Future<List<dynamic>> fetchEmployees() async {
             'id': id,
             'title': t['title'] ?? 'Task',
             'description': t['description'] ?? '',
+            'icon': (t['icon'] == 'custom' && t['customIcon'] != null ? t['customIcon'] : t['icon']) ?? '',
+            'yesText': t['yesText'],
             'priority': t['priority'] ?? 'medium',
             'frequency': t['frequency'] ?? (t['isDaily'] == false ? 'weekly' : 'daily'),
             'isDaily': (t['frequency'] ?? (t['isDaily'] == false ? 'weekly' : 'daily')) == 'daily',
