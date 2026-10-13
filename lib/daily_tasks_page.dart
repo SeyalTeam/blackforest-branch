@@ -85,7 +85,10 @@ class _DailyTasksPageState extends State<DailyTasksPage> {
     if (iconField.isNotEmpty) {
       switch (iconField) {
         case 'smile':
-          emoji = '😊';
+          final lowerCase = '$title $desc'.toLowerCase();
+          if (lowerCase.contains('தயாரா') || lowerCase.contains('ready') || lowerCase.contains('smile') || lowerCase.contains('மனநிலை')) {
+            emoji = '😊';
+          }
           break;
         case 'brain':
           emoji = '🧠';
