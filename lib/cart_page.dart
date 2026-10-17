@@ -135,7 +135,135 @@ class _CartPageState extends State<CartPage> {
   String? _companyName;
   bool _addCustomerDetails = false;
   String? _selectedPaymentMethod;
+  bool _isComplementary = false;
   bool _isBillingInProgress = false; // Prevent duplicate bill taps
+
+  void _toggleComplementary() {
+    setState(() {
+      _isComplementary = !_isComplementary;
+      if (_isComplementary) {
+        _selectedPaymentMethod = null;
+      }
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isComplementary
+                ? 'Complementary bill mode activated'
+                : 'Complementary bill mode deactivated',
+          ),
+          backgroundColor:
+              _isComplementary ? const Color(0xFF8B5CF6) : Colors.grey[800],
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _onComplementarySingleTap() {
+    if (!_isComplementary && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Double tap to activate complementary bill'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else if (_isComplementary) {
+      _toggleComplementary();
+    }
+  }
+
+  Widget _buildComplementaryLockButton() {
+    const double height = 54;
+    const double width = 50;
+    const double radius = 10;
+    final Color bgColor = _isComplementary
+        ? const Color(0xFF8B5CF6).withOpacity(0.22)
+        : _chipBg;
+    final Color borderColor = _isComplementary
+        ? const Color(0xFF8B5CF6)
+        : Colors.white.withOpacity(0.18);
+    final Color mainIconColor =
+        _isComplementary ? const Color(0xFF8B5CF6) : Colors.white70;
+    final IconData lockIconData =
+        _isComplementary ? Icons.lock_open_rounded : Icons.lock_rounded;
+    const Color lockIconColor =
+        Color(0xFFEF4444);
+
+    return Tooltip(
+      message: _isComplementary
+          ? 'Complementary Bill (Active - double tap to deactivate)'
+          : 'Double tap to activate complementary bill',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _onComplementarySingleTap,
+          onDoubleTap: _toggleComplementary,
+          borderRadius: BorderRadius.circular(radius),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: borderColor,
+                width: _isComplementary ? 1.8 : 1.0,
+              ),
+              boxShadow: _isComplementary
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.35),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  Icons.card_giftcard_rounded,
+                  size: 22,
+                  color: mainIconColor,
+                ),
+                Positioned(
+                  right: 5,
+                  bottom: 5,
+                  child: Container(
+                    padding: const EdgeInsets.all(1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF18181B),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _isComplementary
+                            ? const Color(0xFF8B5CF6)
+                            : Colors.black54,
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      lockIconData,
+                      size: 11,
+                      color: _isComplementary
+                          ? const Color(0xFF10B981)
+                          : lockIconColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -411,7 +539,7 @@ class _CartPageState extends State<CartPage> {
     }
 
     // Only require payment method for completed bills
-    if (status == 'completed' && _selectedPaymentMethod == null) {
+    if (status == 'completed' && !_isComplementary && _selectedPaymentMethod == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a payment method')),
       );
@@ -588,6 +716,10 @@ class _CartPageState extends State<CartPage> {
           prefs.getString('user_name') ??
           prefs.getString('username');
 
+      final effectivePaymentMethod = _isComplementary
+          ? 'cfree'
+          : _selectedPaymentMethod;
+
       final billingData = {
         'items': cartProvider.cartItems
             .map(
@@ -611,9 +743,14 @@ class _CartPageState extends State<CartPage> {
         },
         'paymentMethod': status == 'pending'
             ? 'Unpaid'
-            : _selectedPaymentMethod,
+            : effectivePaymentMethod,
         'notes': '',
         'status': status,
+        if (_isComplementary) ...{
+          'isComplementary': true,
+          'complementary': true,
+          'cfree': true,
+        },
       };
 
       final response = await http.post(
@@ -631,10 +768,15 @@ class _CartPageState extends State<CartPage> {
             cartProvider,
             billingResponse,
             customerDetails,
-            _selectedPaymentMethod!,
+            effectivePaymentMethod ?? 'cfree',
           );
         }
         cartProvider.clearCart();
+        if (mounted) {
+          setState(() {
+            _isComplementary = false;
+          });
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -850,7 +992,10 @@ class _CartPageState extends State<CartPage> {
             styles: const PosStyles(align: PosAlign.right, bold: true),
           ),
         ]);
-        printer.text('Paid by: ${paymentMethod.toUpperCase()}');
+        final displayPayMethod = paymentMethod.toLowerCase() == 'cfree'
+            ? 'COMPLEMENTARY'
+            : paymentMethod.toUpperCase();
+        printer.text('Paid by: $displayPayMethod');
 
         if (customerDetails['name']?.isNotEmpty == true ||
             customerDetails['phone']?.isNotEmpty == true) {
@@ -932,7 +1077,10 @@ class _CartPageState extends State<CartPage> {
           label: 'Cash',
           icon: Icons.money,
           selected: _selectedPaymentMethod == 'cash',
-          onTap: () => setState(() => _selectedPaymentMethod = 'cash'),
+          onTap: () => setState(() {
+            _selectedPaymentMethod = 'cash';
+            _isComplementary = false;
+          }),
           accent: _accent,
           chipBg: _chipBg,
           width: 95, // increase width
@@ -941,7 +1089,10 @@ class _CartPageState extends State<CartPage> {
           label: 'UPI',
           icon: Icons.qr_code,
           selected: _selectedPaymentMethod == 'upi',
-          onTap: () => setState(() => _selectedPaymentMethod = 'upi'),
+          onTap: () => setState(() {
+            _selectedPaymentMethod = 'upi';
+            _isComplementary = false;
+          }),
           accent: _accent,
           chipBg: _chipBg,
           width: 95,
@@ -950,7 +1101,10 @@ class _CartPageState extends State<CartPage> {
           label: 'Card',
           icon: Icons.credit_card,
           selected: _selectedPaymentMethod == 'card',
-          onTap: () => setState(() => _selectedPaymentMethod = 'card'),
+          onTap: () => setState(() {
+            _selectedPaymentMethod = 'card';
+            _isComplementary = false;
+          }),
           accent: _accent,
           chipBg: _chipBg,
           width: 95,
@@ -1132,6 +1286,8 @@ class _CartPageState extends State<CartPage> {
                                 ),
                               ),
                               const SizedBox(width: 12),
+                              _buildComplementaryLockButton(),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: SizedBox(
                                   height: 54,
