@@ -1070,12 +1070,14 @@ class _CartPageState extends State<CartPage> {
   }
 
   Widget _buildPaymentChips() {
+    final bool isPaymentDisabled = _isComplementary;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _PaymentChip(
           label: 'Cash',
           icon: Icons.money,
+          enabled: !isPaymentDisabled,
           selected: _selectedPaymentMethod == 'cash',
           onTap: () => setState(() {
             _selectedPaymentMethod = 'cash';
@@ -1088,6 +1090,7 @@ class _CartPageState extends State<CartPage> {
         _PaymentChip(
           label: 'UPI',
           icon: Icons.qr_code,
+          enabled: !isPaymentDisabled,
           selected: _selectedPaymentMethod == 'upi',
           onTap: () => setState(() {
             _selectedPaymentMethod = 'upi';
@@ -1100,6 +1103,7 @@ class _CartPageState extends State<CartPage> {
         _PaymentChip(
           label: 'Card',
           icon: Icons.credit_card,
+          enabled: !isPaymentDisabled,
           selected: _selectedPaymentMethod == 'card',
           onTap: () => setState(() {
             _selectedPaymentMethod = 'card';
@@ -2573,6 +2577,7 @@ class _PaymentChip extends StatelessWidget {
   final Color accent;
   final Color chipBg;
   final double width;
+  final bool enabled;
 
   const _PaymentChip({
     required this.label,
@@ -2582,41 +2587,49 @@ class _PaymentChip extends StatelessWidget {
     required this.accent,
     required this.chipBg,
     required this.width,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: width,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? accent : chipBg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? accent : Colors.white12,
-            width: 1,
+    final effectiveColor = enabled
+        ? (selected ? Colors.white : Colors.white70)
+        : Colors.white.withOpacity(0.35);
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.42,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          width: width,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: (enabled && selected) ? accent : chipBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: (enabled && selected) ? accent : Colors.white12,
+              width: 1,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: selected ? Colors.white : Colors.white70,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: effectiveColor,
+                size: 20,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: effectiveColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
