@@ -414,66 +414,6 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
     );
 
     try {
-      // Find other chefs to update first (removing swapped categories)
-      final otherChefsToUpdate = <String, Map<String, dynamic>>{};
-      final otherChefsNames = <String, String>{};
-      for (final otherChef in _chefs) {
-        final otherChefId = _extractId(otherChef);
-        if (otherChefId != chefId && otherChefId.isNotEmpty) {
-          if (otherChef is Map && otherChef['categories'] is List) {
-            final otherChefCategories = otherChef['categories'] as List;
-            final updatedCategoryIds = <String>[];
-            bool modified = false;
-
-            for (final cat in otherChefCategories) {
-              final catId = _extractId(cat);
-              if (catId.isNotEmpty) {
-                if (categoryIds.contains(catId)) {
-                  modified = true;
-                } else {
-                  updatedCategoryIds.add(catId);
-                }
-              }
-            }
-
-            if (modified) {
-              final otherKitchenIds = <String>[];
-              if (otherChef['kitchen'] is List) {
-                for (final k in otherChef['kitchen'] as List) {
-                  final kId = _extractId(k);
-                  if (kId.isNotEmpty) otherKitchenIds.add(kId);
-                }
-              }
-              otherChefsToUpdate[otherChefId] = {
-                'kitchen': otherKitchenIds,
-                'categories': updatedCategoryIds,
-              };
-              otherChefsNames[otherChefId] = _extractName(otherChef);
-            }
-          }
-        }
-      }
-
-      // Perform updates for other chefs first
-      for (final entry in otherChefsToUpdate.entries) {
-        final otherChefId = entry.key;
-        final payload = entry.value;
-        final nameOfOtherChef = otherChefsNames[otherChefId] ?? 'other chef';
-
-        final otherRes = await http.patch(
-          Uri.parse('${ApiConfig.baseUrl}/users/$otherChefId'),
-          headers: ApiConfig.getHeaders(token),
-          body: jsonEncode(payload),
-        );
-
-        if (otherRes.statusCode != 200) {
-          throw Exception(
-            'Failed to update assignments for $nameOfOtherChef: '
-            '${_extractErrorMessage(otherRes.body, otherRes.statusCode)}',
-          );
-        }
-      }
-
       final body = {'kitchen': kitchenIds, 'categories': categoryIds};
 
       final res = await http.patch(
@@ -909,17 +849,21 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
       }
     }
 
-    // Build a map of categoryId -> assigned chef's name
-    final categoryToChefMap = <String, String>{};
+    // Build a map of categoryId -> list of other assigned chefs' names
+    final categoryToOtherChefsMap = <String, List<String>>{};
     for (final otherChef in _chefs) {
       final otherChefId = _extractId(otherChef);
       if (otherChefId != chefId) {
         final otherChefName = _extractName(otherChef);
-        if (otherChef is Map && otherChef['categories'] is List) {
+        if (otherChefName.isNotEmpty &&
+            otherChef is Map &&
+            otherChef['categories'] is List) {
           for (final category in otherChef['categories'] as List) {
             final catId = _extractId(category);
             if (catId.isNotEmpty) {
-              categoryToChefMap[catId] = otherChefName;
+              categoryToOtherChefsMap
+                  .putIfAbsent(catId, () => [])
+                  .add(otherChefName);
             }
           }
         }
@@ -935,15 +879,15 @@ class _KitchenChefPageState extends State<KitchenChefPage> {
               selectedKitchenIds,
             );
 
-            // Map all categories, appending currently assigned chef's name if applicable
+            // Map all categories, appending shared chefs' names if applicable
             final availableCategories = allAvailableCategories.map((c) {
               if (c is Map) {
                 final catId = _extractId(c);
-                final assignedChefName = categoryToChefMap[catId];
-                if (assignedChefName != null && assignedChefName.isNotEmpty) {
+                final assignedChefs = categoryToOtherChefsMap[catId];
+                if (assignedChefs != null && assignedChefs.isNotEmpty) {
                   final cloned = Map<String, dynamic>.from(c);
                   final originalName = _extractName(c);
-                  cloned['name'] = '$originalName ($assignedChefName)';
+                  cloned['name'] = '$originalName (Shared: ${assignedChefs.join(', ')})';
                   return cloned;
                 }
               }

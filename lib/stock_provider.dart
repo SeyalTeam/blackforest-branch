@@ -96,6 +96,11 @@ class StockProvider extends ChangeNotifier {
   String? get branchId =>
       _overrideBranchId ?? _branchId; // UPDATED: Return override if set
 
+  bool _isChef = false;
+  bool get isChef => _isChef;
+  final Set<String> _assignedChefCategoryIds = {};
+  Set<String> get assignedChefCategoryIds => _assignedChefCategoryIds;
+
   // ========== SUPERADMIN BRANCH SELECTION ==========
   List<dynamic> _availableBranches = [];
   String? _overrideBranchId;
@@ -189,6 +194,29 @@ class StockProvider extends ChangeNotifier {
       final user = data["user"] ?? data;
 
       _userRole = user["role"];
+      final roleLower = _userRole?.toLowerCase() ?? '';
+      _isChef = roleLower == 'chef';
+
+      _assignedChefCategoryIds.clear();
+      final userCats = user["categories"];
+      if (userCats is List) {
+        for (var c in userCats) {
+          final cId = (c is Map ? (c['id'] ?? c['_id'] ?? c[r'$oid']) : c)?.toString().trim() ?? '';
+          if (cId.isNotEmpty) _assignedChefCategoryIds.add(cId);
+        }
+      } else if (userCats is Map) {
+        final cId = (userCats['id'] ?? userCats['_id'] ?? userCats[r'$oid'])?.toString().trim() ?? '';
+        if (cId.isNotEmpty) _assignedChefCategoryIds.add(cId);
+      }
+      if (roleLower == 'kitchen' && _assignedChefCategoryIds.isNotEmpty) {
+        _isChef = true;
+      }
+
+      if (_isChef) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('chef_assigned_category_ids', _assignedChefCategoryIds.toList());
+        await prefs.setString('chef_assigned_category_ids_csv', _assignedChefCategoryIds.join(','));
+      }
 
       if (_userRole == "company") {
         _companyId = user["company"] is Map
@@ -307,6 +335,24 @@ class StockProvider extends ChangeNotifier {
 
     if (_userRole == null) await _loadUserData(token);
 
+    final bool isChefUser = _isChef || _userRole?.toLowerCase() == 'chef';
+    if (isChefUser) {
+      if (_assignedChefCategoryIds.isEmpty) {
+        final cached = prefs.getStringList('chef_assigned_category_ids');
+        if (cached != null && cached.isNotEmpty) {
+          _assignedChefCategoryIds.addAll(cached);
+        }
+      }
+
+      if (_assignedChefCategoryIds.isEmpty) {
+        // If no category assigned to chef, don't show any orders/categories
+        _categories = [];
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+    }
+
     String query = "where[isStock][equals]=true";
 
     if (_userRole != "superadmin") {
@@ -337,7 +383,18 @@ class StockProvider extends ChangeNotifier {
     }
 
     if (res.statusCode == 200) {
-      _categories = jsonDecode(res.body)["docs"] ?? [];
+      final allDocs = jsonDecode(res.body)["docs"] ?? [];
+      if (isChefUser) {
+        _categories = (allDocs as List).where((cat) {
+          final cId = (cat is Map ? (cat['id'] ?? cat['_id'] ?? cat[r'$oid']) : cat)
+                  ?.toString()
+                  .trim() ??
+              '';
+          return cId.isNotEmpty && _assignedChefCategoryIds.contains(cId);
+        }).toList();
+      } else {
+        _categories = allDocs;
+      }
     }
 
     _isLoading = false;
@@ -755,6 +812,8 @@ class StockProvider extends ChangeNotifier {
 
   // Clear all data on logout
   void clearData() {
+    _isChef = false;
+    _assignedChefCategoryIds.clear();
     _branchId = null;
     _companyId = null;
     _userRole = null;
