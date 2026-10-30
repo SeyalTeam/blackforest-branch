@@ -64,23 +64,30 @@ class GeofenceUtil {
 
     Position? position = existingPosition;
     if (position == null) {
+      // 1. Instant check: Use warm cached position if fresh (< 2 mins old and accurate)
       try {
-        // First try high accuracy GPS fix
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-          ),
-        ).timeout(const Duration(seconds: 8));
-      } catch (e) {
-        debugPrint('GeofenceUtil getCurrentPosition high accuracy failed/timeout: $e. Trying medium...');
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) {
+          final age = DateTime.now().difference(lastKnown.timestamp);
+          if (age.inMinutes < 2 && lastKnown.accuracy <= 45.0) {
+            position = lastKnown;
+            debugPrint('GeofenceUtil: Using fresh lastKnownPosition (${lastKnown.accuracy}m, ${age.inSeconds}s old)');
+          }
+        }
+      } catch (_) {}
+
+      // 2. If no fresh cached position, acquire assisted medium fix (instant indoor fix via WiFi/cell)
+      if (position == null) {
         try {
           position = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.medium,
             ),
-          ).timeout(const Duration(seconds: 4));
-        } catch (_) {
+          ).timeout(const Duration(milliseconds: 3500));
+        } catch (e) {
+          debugPrint('GeofenceUtil medium accuracy fix failed/timeout: $e');
           try {
+            // 3. Fallback to any last known position before failing
             position = await Geolocator.getLastKnownPosition();
           } catch (_) {}
         }
