@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'api_config.dart';
@@ -74,8 +74,18 @@ class AttendanceManager {
         return;
       }
 
-      // 1. Check GPS position & Geofence
-      final geo = await GeofenceUtil.checkLocationAndGeofence();
+      final lockedBranchId = prefs.getString('lockedBranchId') ??
+          prefs.getString('userBranchId') ??
+          prefs.getString('branchId');
+      final lockedBranchName = prefs.getString('lockedBranchName') ??
+          prefs.getString('userBranchName') ??
+          prefs.getString('branchName');
+
+      // 1. Check GPS position & Geofence (locked to assigned branch)
+      final geo = await GeofenceUtil.checkLocationAndGeofence(
+        targetBranchId: lockedBranchId,
+        targetBranchName: lockedBranchName,
+      );
       final position = geo.position;
 
       if (position == null) {
@@ -84,6 +94,9 @@ class AttendanceManager {
         );
         return;
       }
+
+      // Stream periodic telemetry breadcrumb without modifying duty/attendance assignment
+      unawaited(sendMovementTelemetry(position: position));
 
       final isInside = geo.isInside;
 
@@ -228,10 +241,14 @@ class AttendanceManager {
 
       // ── 5. AUTO PUNCH OUT EVALUATION ──────────────────────────────────────
       if (activeSession != null) {
-        if (!isInside) {
+        // Require trustworthy accuracy (< 45m) to avoid false exits from indoor drift
+        final bool isAccurateFix = position.accuracy <= 45.0;
+
+        if (!isInside && isAccurateFix) {
           _consecutiveOutsideTicks++;
 
-          if (_consecutiveOutsideTicks >= 1) {
+          // Multi-tick exit detection: requires 2 confirmed consecutive outside readings
+          if (_consecutiveOutsideTicks >= 2) {
             // Punch out
             final punchInStr = activeSession['punchIn']?.toString() ?? '';
             final punchInTime = DateTime.tryParse(punchInStr)?.toLocal() ?? now;
@@ -280,7 +297,7 @@ class AttendanceManager {
               );
             }
           }
-        } else {
+        } else if (isInside) {
           // Inside branch
           _consecutiveOutsideTicks = 0;
         }
@@ -310,6 +327,7 @@ class AttendanceManager {
             'punchInType': 'auto',
             'latitude': position.latitude,
             'longitude': position.longitude,
+            'accuracy': position.accuracy,
           };
 
           if (docId != null) {
@@ -363,6 +381,8 @@ class AttendanceManager {
                 'date': localMidnight.toUtc().toIso8601String(),
                 'dateString': queryDateStr,
                 'activities': [newActivity],
+                if (lockedBranchId != null && lockedBranchId.isNotEmpty)
+                  'loginBranch': lockedBranchId,
               }),
             );
 
@@ -454,6 +474,38 @@ class AttendanceManager {
       );
     } catch (e) {
       debugPrint('AttendanceManager notification error: $e');
+    }
+  }
+
+  /// Sends periodic GPS telemetry breadcrumbs without altering attendance branch assignment
+  static Future<void> sendMovementTelemetry({required Position position}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final userId = prefs.getString('userId');
+      final lockedBranchId = prefs.getString('lockedBranchId') ?? prefs.getString('branchId');
+
+      if (token == null || token.isEmpty || userId == null || userId.isEmpty) return;
+
+      final payload = {
+        'user': userId,
+        if (lockedBranchId != null && lockedBranchId.isNotEmpty) 'branch': lockedBranchId,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/staff-movement-history'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {
+      // Telemetry failures are non-critical and fail silently
     }
   }
 }

@@ -103,7 +103,9 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _branchController = TextEditingController();
+  final TextEditingController _branchPinController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  List<dynamic> _cachedBranchesList = [];
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isCheckingSession = true;
@@ -170,6 +172,7 @@ class _LoginPageState extends State<LoginPage> {
         final data = jsonDecode(res.body);
         final docs = data['docs'] as List?;
         if (docs != null) {
+          _cachedBranchesList = docs;
           final ranges = docs
               .map((d) => d['ipAddress']?.toString().trim() ?? '')
               .where((ip) => ip.isNotEmpty)
@@ -184,6 +187,25 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       debugPrint('Failed to fetch dynamic ranges: $e');
     }
+  }
+
+  Map<String, dynamic>? _findBranchForPin(String pin) {
+    if (pin.isEmpty) return null;
+    for (final b in _cachedBranchesList) {
+      if (b is! Map) continue;
+      final bPin = (b['pin'] ??
+              b['branchPin'] ??
+              b['loginPin'] ??
+              b['code'] ??
+              b['branchCode'] ??
+              b['pincode'])
+          ?.toString()
+          .trim();
+      if (bPin != null && bPin.isNotEmpty && bPin == pin) {
+        return Map<String, dynamic>.from(b);
+      }
+    }
+    return null;
   }
 
   int _ipToLong(String ip) {
@@ -282,14 +304,21 @@ class _LoginPageState extends State<LoginPage> {
 
       try {
         final rawInput = _branchController.text.trim();
+        final branchPin = _branchPinController.text.trim();
+        final matchedBranchFromPin = _findBranchForPin(branchPin);
         final emailToUse = rawInput.contains('@') ? rawInput : '$rawInput@bf.com';
 
         final headers = {
           'Content-Type': 'application/json',
           'x-private-ip': _privateIp ?? '',
+          if (branchPin.isNotEmpty) ...{
+            'x-branch-pin': branchPin,
+            'x-branch-code': branchPin,
+          },
           if (loginPosition != null) ...{
             'x-latitude': loginPosition.latitude.toString(),
             'x-longitude': loginPosition.longitude.toString(),
+            'x-accuracy': loginPosition.accuracy.toString(),
           },
         };
 
@@ -300,6 +329,7 @@ class _LoginPageState extends State<LoginPage> {
             'email': emailToUse,
             'password': _passwordController.text,
             'privateIp': _privateIp,
+            if (branchPin.isNotEmpty) 'branchPin': branchPin,
           }),
         );
 
@@ -312,6 +342,7 @@ class _LoginPageState extends State<LoginPage> {
               'email': rawInput,
               'password': _passwordController.text,
               'privateIp': _privateIp,
+              if (branchPin.isNotEmpty) 'branchPin': branchPin,
             }),
           );
           if (fallbackRes.statusCode == 200) {
@@ -367,6 +398,14 @@ class _LoginPageState extends State<LoginPage> {
             branchId = branchObj;
           }
 
+          // Authoritative PIN override: The branch verified by PIN is authoritative
+          if (matchedBranchFromPin != null) {
+            final mId = (matchedBranchFromPin['id'] ?? matchedBranchFromPin['_id'])?.toString() ?? '';
+            final mName = matchedBranchFromPin['name']?.toString() ?? '';
+            if (mId.isNotEmpty) branchId = mId;
+            if (mName.isNotEmpty) branchName = mName;
+          }
+
           // Strict GPS Geofence Check (matching tracker app behavior)
           // Watcher, admin, and superadmin do not require branch geofence circle to login
           final isExemptFromGeofence = userRole == 'watcher' ||
@@ -378,8 +417,8 @@ class _LoginPageState extends State<LoginPage> {
 
             final geoResult = await GeofenceUtil.checkLocationAndGeofence(
               existingPosition: loginPosition,
-              targetBranchId: (userRole == 'manager' || branchId.isEmpty) ? null : branchId,
-              targetBranchName: (userRole == 'manager' || branchName.isEmpty) ? null : branchName,
+              targetBranchId: (userRole == 'manager' && branchPin.isEmpty) ? null : branchId,
+              targetBranchName: (userRole == 'manager' && branchPin.isEmpty) ? null : branchName,
             );
 
             if (!geoResult.isInside) {
@@ -409,15 +448,16 @@ class _LoginPageState extends State<LoginPage> {
               return; // STRICTLY BLOCK LOGIN! Do not save session or navigate.
             }
 
-            // If user is manager or account had no branch pre-assigned, bind to current physical branch
-            if ((branchId.isEmpty || userRole == 'manager') &&
+            // Only bind to GPS if user is manager with NO branch pre-assigned or PIN specified
+            if (branchId.isEmpty &&
+                userRole == 'manager' &&
                 geoResult.branchId != null &&
                 geoResult.branchId!.isNotEmpty) {
               branchId = geoResult.branchId!;
               if (geoResult.branchName != null && geoResult.branchName!.isNotEmpty) {
                 branchName = geoResult.branchName!;
               }
-              debugPrint('Active branch resolved from GPS: $branchName ($branchId)');
+              debugPrint('Active branch resolved from GPS for manager: $branchName ($branchId)');
             }
           }
 
@@ -444,7 +484,16 @@ class _LoginPageState extends State<LoginPage> {
           await storage.write(key: 'userName', value: userName);
           await storage.write(key: 'userIsKitchen', value: isKitchen.toString());
           await storage.write(key: 'userIsStock', value: isStock.toString());
-          if (branchId.isNotEmpty) await storage.write(key: 'userBranchId', value: branchId);
+          if (branchId.isNotEmpty) {
+            await storage.write(key: 'userBranchId', value: branchId);
+            await storage.write(key: 'userBranchName', value: branchName);
+            await storage.write(key: 'isBranchLocked', value: 'true');
+            await storage.write(key: 'lockedBranchId', value: branchId);
+            await storage.write(key: 'lockedBranchName', value: branchName);
+            if (branchPin.isNotEmpty) {
+              await storage.write(key: 'branchPin', value: branchPin);
+            }
+          }
 
           // Save to SharedPreferences for full compatibility with existing branch modules
           final prefs = await SharedPreferences.getInstance();
@@ -461,9 +510,17 @@ class _LoginPageState extends State<LoginPage> {
           if (branchId.isNotEmpty) {
             await prefs.setString('branchId', branchId);
             await prefs.setString('branch', branchId);
+            await prefs.setString('userBranchId', branchId);
+            await prefs.setBool('isBranchLocked', true);
+            await prefs.setString('lockedBranchId', branchId);
+            await prefs.setString('lockedBranchName', branchName);
+            if (branchPin.isNotEmpty) {
+              await prefs.setString('branchPin', branchPin);
+            }
           }
           if (branchName.isNotEmpty) {
             await prefs.setString('branchName', branchName);
+            await prefs.setString('userBranchName', branchName);
           }
           if (photoUrl != null && photoUrl.isNotEmpty) {
             await prefs.setString('employee_photo_url', photoUrl);
@@ -617,6 +674,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _branchController.dispose();
+    _branchPinController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -748,6 +806,25 @@ class _LoginPageState extends State<LoginPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Branch PIN Field
+                        TextFormField(
+                          controller: _branchPinController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 4,
+                          decoration: InputDecoration(
+                            labelText: 'Branch PIN (Optional)',
+                            hintText: 'Enter 4-digit branch PIN (e.g. 2222, 1111)',
+                            prefixIcon: const Icon(Icons.pin_outlined),
+                            counterText: '',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF9FAFB),
+                          ),
                         ),
                         const SizedBox(height: 18),
 
