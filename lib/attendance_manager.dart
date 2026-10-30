@@ -97,12 +97,6 @@ class AttendanceManager {
 
       final isInside = geo.isInside;
 
-      // Transmit movement telemetry ONLY when the staff member is OUTSIDE the branch boundary.
-      // While safely inside the branch, indoor movement is paused to prevent GPS drift spam and conserve battery.
-      if (!isInside) {
-        unawaited(sendMovementTelemetry(position: position));
-      }
-
       // 2. Fetch today's attendance document for this user
       final now = DateTime.now();
       final localMidnight = DateTime(now.year, now.month, now.day);
@@ -477,38 +471,6 @@ class AttendanceManager {
       );
     } catch (e) {
       debugPrint('AttendanceManager notification error: $e');
-    }
-  }
-
-  /// Sends periodic GPS telemetry breadcrumbs without altering attendance branch assignment
-  static Future<void> sendMovementTelemetry({required Position position}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final userId = prefs.getString('userId');
-      final lockedBranchId = prefs.getString('lockedBranchId') ?? prefs.getString('branchId');
-
-      if (token == null || token.isEmpty || userId == null || userId.isEmpty) return;
-
-      final payload = {
-        'user': userId,
-        if (lockedBranchId != null && lockedBranchId.isNotEmpty) 'branch': lockedBranchId,
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'accuracy': position.accuracy,
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-      };
-
-      await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/staff-movement-history'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(payload),
-      ).timeout(const Duration(seconds: 4));
-    } catch (_) {
-      // Telemetry failures are non-critical and fail silently
     }
   }
 }
