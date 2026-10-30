@@ -95,10 +95,13 @@ class AttendanceManager {
         return;
       }
 
-      // Stream periodic telemetry breadcrumb without modifying duty/attendance assignment
-      unawaited(sendMovementTelemetry(position: position));
-
       final isInside = geo.isInside;
+
+      // Transmit movement telemetry ONLY when the staff member is OUTSIDE the branch boundary.
+      // While safely inside the branch, indoor movement is paused to prevent GPS drift spam and conserve battery.
+      if (!isInside) {
+        unawaited(sendMovementTelemetry(position: position));
+      }
 
       // 2. Fetch today's attendance document for this user
       final now = DateTime.now();
