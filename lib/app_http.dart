@@ -19,12 +19,17 @@ export 'package:http/http.dart'
 
 bool _isUnauthorized(int statusCode) => statusCode == 401 || statusCode == 403;
 
+const String skipUnauthorizedLogoutHeaderName = 'x-bf-skip-unauthorized-logout';
+
 bool _isLoginEndpoint(Uri url) {
   if (!isKnownApiHost(url.host)) return false;
   return url.path == '/api/users/login' || url.path == '/api/v1/users/login';
 }
 
 bool _shouldHandleUnauthorized(Uri url, Map<String, String>? headers) {
+  if (headers != null && headers[skipUnauthorizedLogoutHeaderName] == 'true') {
+    return false;
+  }
   if (_isLoginEndpoint(url)) return false;
   return true;
 }

@@ -32,6 +32,8 @@ class GeofenceUtil {
     Position? existingPosition,
     String? targetBranchId,
     String? targetBranchName,
+    List<dynamic>? customBranches,
+    Map<String, dynamic>? customGeoSettings,
   }) async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -107,16 +109,55 @@ class GeofenceUtil {
     );
 
     try {
-      Map<String, dynamic> data = {};
-      try {
-        data = await ApiService.instance.fetchBranchGeoSettings();
-      } catch (_) {
-        final prefs = await SharedPreferences.getInstance();
-        data = await ApiConfig.fetchBranchGeoSettings(prefs.getString('token') ?? '');
+      Map<String, dynamic> data = customGeoSettings ?? {};
+      if (data.isEmpty) {
+        try {
+          data = await ApiService.instance.fetchBranchGeoSettings();
+        } catch (_) {
+          final prefs = await SharedPreferences.getInstance();
+          data = await ApiConfig.fetchBranchGeoSettings(prefs.getString('token') ?? '');
+        }
       }
 
-      final locations = data['locations'] as List?;
-      if (locations != null && locations.isNotEmpty) {
+      final List<Map<String, dynamic>> allLocations = [];
+      final rawLocations = data['locations'] as List?;
+      if (rawLocations != null) {
+        for (final loc in rawLocations) {
+          if (loc is Map) allLocations.add(Map<String, dynamic>.from(loc));
+        }
+      }
+
+      if (customBranches != null && customBranches.isNotEmpty) {
+        for (final b in customBranches) {
+          if (b is! Map) continue;
+          final bId = (b['id'] ?? b['_id'])?.toString() ?? '';
+          final bName = b['name']?.toString() ?? '';
+          final lat = b['latitude'] ?? (b['location'] is Map ? b['location']['latitude'] : null);
+          final lng = b['longitude'] ?? (b['location'] is Map ? b['location']['longitude'] : null);
+          final radius = b['radius'] ?? (b['location'] is Map ? b['location']['radius'] : 100.0);
+          if (lat != null && lng != null) {
+            final exists = allLocations.any((loc) {
+              final locB = loc['branch'];
+              final locBId = (locB is Map ? (locB['id'] ?? locB['_id']) : locB)?.toString() ?? loc['branchId']?.toString();
+              return locBId == bId;
+            });
+            if (!exists) {
+              allLocations.add({
+                'branch': b,
+                'branchId': bId,
+                'name': bName,
+                'branchName': bName,
+                'latitude': lat,
+                'longitude': lng,
+                'radius': radius,
+              });
+            }
+          }
+        }
+      }
+
+      final locations = allLocations;
+      if (locations.isNotEmpty) {
         double nearestDistance = double.infinity;
         double nearestRadius = 100.0;
         String? nearestBranchName;

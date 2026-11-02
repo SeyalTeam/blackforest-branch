@@ -220,7 +220,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ? normalizedInput
         : '/$normalizedInput';
 
-    return 'https://blackforest.vseyal.com$relative';
+    return 'https://blackforest-api.vseyal.com$relative';
   }
 
   Future<void> _fetchEmployeeProfile() async {

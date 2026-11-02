@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 class ApiConfig {
-  static const String domain = "https://blackforest.vseyal.com";
+  static const String domain = "https://blackforest-api.vseyal.com";
   static const String baseUrl = "$domain/api";
   static const String appKey = "bf_branch_3a2b1c4d5e6f7a8b";
 

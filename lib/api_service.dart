@@ -15,7 +15,7 @@ class ApiService {
   ApiService._internal();
   static ApiService get instance => _instance;
 
-  static const String _baseUrl = 'https://blackforest.vseyal.com/api';
+  static const String _baseUrl = 'https://blackforest-api.vseyal.com/api';
   static String get baseUrl => _baseUrl;
   static const storage = FlutterSecureStorage();
 
